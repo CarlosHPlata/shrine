@@ -88,6 +88,25 @@ func TestValidate_InvalidResource(t *testing.T) {
 	}
 }
 
+func TestValidate_InvalidKind(t *testing.T) {
+	m := &Manifest{
+		TypeMeta: TypeMeta{
+			Kind:       "Deployment",
+			APIVersion: "shrine/v1",
+		},
+	}
+
+	err := Validate(m)
+	if err == nil {
+		t.Fatal("expected validation error, got nil")
+	}
+
+	msg := err.Error()
+	if !strings.Contains(msg, "kind must be one of: Team, Resource, Application") {
+		t.Errorf("error missing kind validation, got: %s", msg)
+	}
+}
+
 func TestValidate_InvalidTeam(t *testing.T) {
 	m, err := Parse(testdataPath("invalid-team.yml"))
 	if err != nil {

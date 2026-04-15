@@ -22,6 +22,8 @@ func validateTypeMeta(meta TypeMeta) []string {
 	var errs []string
 	if meta.Kind == "" {
 		errs = append(errs, "kind is required")
+	} else if meta.Kind != "Team" && meta.Kind != "Resource" && meta.Kind != "Application" {
+		errs = append(errs, "kind must be one of: Team, Resource, Application")
 	}
 	if meta.APIVersion == "" {
 		errs = append(errs, "apiVersion is required")
