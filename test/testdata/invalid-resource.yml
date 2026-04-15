@@ -1,0 +1,8 @@
+apiVersion: shrine/v1
+kind: Resource
+metadata:
+  name: ""
+  owner: ""
+spec:
+  type: ""
+  version: ""

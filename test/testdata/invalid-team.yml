@@ -1,0 +1,7 @@
+apiVersion: shrine/v1
+kind: Team
+metadata:
+  name: ""
+spec:
+  displayName: ""
+  contact: ""

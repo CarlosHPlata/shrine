@@ -1,0 +1,23 @@
+apiVersion: shrine/v1
+kind: Application
+metadata:
+  name: hello-api
+  owner: team-a
+spec:
+  image: hello-api
+  port: 8080
+  replicas: 1
+  routing:
+    domain: hello-api.home.lab
+    pathPrefix: /hello-api
+  dependencies:
+    - kind: Resource
+      name: hello-db
+      owner: team-a
+  env:
+    - name: DATABASE_URL
+      valueFrom: dependency.hello-db.url
+    - name: NODE_ENV
+      value: production
+  networking:
+    exposeToplatform: false

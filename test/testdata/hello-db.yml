@@ -1,0 +1,12 @@
+apiVersion: shrine/v1
+kind: Resource
+metadata:
+  name: hello-db
+  owner: team-a
+  access:
+    - team-b
+spec:
+  type: postgres
+  version: "16"
+  networking:
+    exposeToplatform: false

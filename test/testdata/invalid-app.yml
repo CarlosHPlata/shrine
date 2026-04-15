@@ -1,0 +1,8 @@
+apiVersion: shrine/v1
+kind: Application
+metadata:
+  name: ""
+  owner: ""
+spec:
+  image: ""
+  port: 0

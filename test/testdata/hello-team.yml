@@ -1,0 +1,14 @@
+apiVersion: shrine/v1
+kind: Team
+metadata:
+  name: team-a
+spec:
+  displayName: "Team Alpha"
+  contact: alice@example.com
+  quotas:
+    maxApps: 3
+    maxResources: 5
+    allowedResourceTypes:
+      - postgres
+      - rabbitmq
+  registryUser: alice
