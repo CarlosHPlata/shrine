@@ -77,7 +77,7 @@ Shrine uses three manifest types, all following a familiar `apiVersion` / `kind`
 A deployable container with routing and dependency injection:
 
 ```yaml
-apiVersion: homelab/v1
+apiVersion: shrine/v1
 kind: Application
 metadata:
   name: hello-api
@@ -105,7 +105,7 @@ spec:
 A managed dependency (Postgres, RabbitMQ, Redis, etc.) with access control:
 
 ```yaml
-apiVersion: homelab/v1
+apiVersion: shrine/v1
 kind: Resource
 metadata:
   name: hello-db
@@ -115,7 +115,8 @@ metadata:
 spec:
   type: postgres
   version: "16"
-  exposeToplatform: false
+  networking:
+    exposeToplatform: false
 ```
 
 ### Team
@@ -123,7 +124,7 @@ spec:
 A registered team space with quotas and permissions:
 
 ```yaml
-apiVersion: homelab/v1
+apiVersion: shrine/v1
 kind: Team
 metadata:
   name: team-a
