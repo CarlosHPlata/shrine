@@ -8,5 +8,15 @@ metadata:
 spec:
   type: postgres
   version: "16"
+  outputs:
+    - name: host
+    - name: port
+      value: "5432"
+    - name: password
+      generated: true
+    - name: database
+      value: "hello"
+    - name: url
+      generated: true
   networking:
     exposeToplatform: false

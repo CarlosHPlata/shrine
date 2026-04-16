@@ -11,12 +11,14 @@ var statusCmd = &cobra.Command{
 	Short: "Show deployment status",
 	Long:  `Show the current deployment status for all teams, or for a specific team if provided.`,
 	Args:  cobra.MaximumNArgs(1),
-	Run: func(cmd *cobra.Command, args []string) {
+	RunE: func(cmd *cobra.Command, args []string) error {
 		if len(args) == 0 {
-			fmt.Println("Showing all status")
+			fmt.Println("[shrine] Showing platform status...")
 		} else {
-			fmt.Printf("Status of team: %s\n", args[0])
+			fmt.Printf("[shrine] Showing status for team: %s\n", args[0])
 		}
+		fmt.Println("[shrine] Status is not yet implemented. See: shrine status --help")
+		return nil
 	},
 }
 

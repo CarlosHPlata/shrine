@@ -62,10 +62,12 @@ shrine status
 shrine status team-a
 
 # Manage teams
-shrine team add team-a
-shrine team list
-shrine team show team-a
-shrine team sync
+shrine generate team team-a                  # scaffold a manifest YAML
+shrine create team -f teams/team-a.yml       # register a single team in state
+shrine apply teams                           # sync all teams/*.yml to state
+shrine get teams                             # list all teams from state
+shrine describe team team-a                  # show team details
+shrine delete team team-a                    # remove from state
 ```
 
 ## Manifests
@@ -170,20 +172,27 @@ Add `--verbose` to see exact Docker API calls, SSH commands, and HTTP requests.
 
 ```
 shrine/
-├── cmd/                   # CLI commands (cobra)
-│   ├── root.go
-│   ├── deploy.go
-│   ├── teardown.go
-│   ├── status.go
-│   └── team.go
+├── cmd/                   # CLI verb commands (cobra)
+│   ├── root.go            # Root command, global flags
+│   ├── generate.go        # shrine generate <resource> <name>
+│   ├── create.go          # shrine create <resource> -f <path>
+│   ├── apply.go           # shrine apply <resource>
+│   ├── get.go             # shrine get <resource>
+│   ├── describe.go        # shrine describe <resource> <name>
+│   ├── delete.go          # shrine delete <resource> <name>
+│   ├── deploy.go          # shrine deploy <path>
+│   ├── teardown.go        # shrine teardown <team>
+│   └── status.go          # shrine status [team]
 ├── internal/
+│   ├── handler/           # Resource-specific business logic
 │   ├── manifest/          # YAML parsing, validation, schema types
+│   ├── config/            # Path resolution (XDG, FHS, .env)
 │   ├── planner/           # Dependency graph, access checks, ordering
-│   ├── executor/          # Executor interface (real + dry-run implementations)
+│   ├── executor/          # Executor interface (real + dry-run)
 │   ├── docker/            # Docker SDK wrapper
 │   ├── traefik/           # Traefik route config generation + deployment
 │   ├── dns/               # AdGuard HTTP API client
-│   └── state/             # Subnet allocation, secrets, deployment tracking
+│   └── state/             # Store interface, FileStore, subnet allocation
 ├── teams/                 # Team manifests (Git is source of truth)
 ├── main.go
 ├── go.mod
@@ -192,15 +201,14 @@ shrine/
 
 ## Configuration
 
-Shrine reads its configuration from `/opt/shrine/config/`:
+Shrine resolves configuration and state directories dynamically:
 
-| File | Purpose |
-|---|---|
-| `config.yml` | Core settings — registry, gateway, app server addresses |
-| `traefik.yml` | Traefik-specific connection and template config |
-| `adguard.yml` | AdGuard DNS API connection settings |
+| Directory | User (XDG) | Root (System) | Env Var | Flag |
+|---|---|---|---|---|
+| **Config** | `~/.config/shrine/` | `/etc/shrine/` | `SHRINE_CONFIG_DIR` | `--config-dir` |
+| **State** | `~/.local/share/shrine/` | `/var/lib/shrine/` | `SHRINE_STATE_DIR` | `--state-dir` |
 
-State is stored in `/opt/shrine/state/` and tracks subnet allocations, team cache, generated secrets, and deployed resources.
+State tracks subnet allocations, team cache, generated secrets, and deployed resources.
 
 ## Contributing
 
