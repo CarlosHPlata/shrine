@@ -92,6 +92,20 @@ func validateResourceSpec(spec ResourceSpec) []string {
 	if spec.Version == "" {
 		errs = append(errs, "spec.version is required")
 	}
+
+	// Validate outputs: each must have a name, and names must be unique
+	seen := make(map[string]bool)
+	for i, o := range spec.Outputs {
+		if o.Name == "" {
+			errs = append(errs, fmt.Sprintf("spec.outputs[%d].name is required", i))
+			continue
+		}
+		if seen[o.Name] {
+			errs = append(errs, fmt.Sprintf("spec.outputs has duplicate name %q", o.Name))
+		}
+		seen[o.Name] = true
+	}
+
 	return errs
 }
 

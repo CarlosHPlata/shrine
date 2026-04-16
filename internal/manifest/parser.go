@@ -51,6 +51,10 @@ func parseManifest(meta *Manifest, data []byte) (*Manifest, error) {
 		if err := yaml.Unmarshal(data, &res); err != nil {
 			return nil, fmt.Errorf("parsing Resource manifest: %w", err)
 		}
+		// Default image to type:version when not explicitly set
+		if res.Spec.Image == "" && res.Spec.Type != "" && res.Spec.Version != "" {
+			res.Spec.Image = res.Spec.Type + ":" + res.Spec.Version
+		}
 		meta.Resource = &res
 	case "Team":
 		var team TeamManifest

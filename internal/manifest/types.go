@@ -2,9 +2,10 @@ package manifest
 
 // Metadata holds fields shared by all manifest kinds.
 type Metadata struct {
-	Name   string   `yaml:"name"`
-	Owner  string   `yaml:"owner"`
-	Access []string `yaml:"access,omitempty"`
+	ResourceID string   `yaml:"resourceId,omitempty" json:"resourceId,omitempty"`
+	Name       string   `yaml:"name"`
+	Owner      string   `yaml:"owner"`
+	Access     []string `yaml:"access,omitempty"`
 }
 
 // Used in Application spec
@@ -42,9 +43,20 @@ type ApplicationSpec struct {
 	Networking   Networking   `yaml:"networking,omitempty"`
 }
 
+// Output declares a named value that a Resource exposes to consumers.
+// If Generated is true, the value is created at deploy time (e.g. passwords).
+// If Value is set, it's a static default (e.g. a port number).
+type Output struct {
+	Name      string `yaml:"name" json:"name"`
+	Value     string `yaml:"value,omitempty" json:"value,omitempty"`
+	Generated bool   `yaml:"generated,omitempty" json:"generated,omitempty"`
+}
+
 type ResourceSpec struct {
 	Type       string     `yaml:"type"`
 	Version    string     `yaml:"version"`
+	Image      string     `yaml:"image,omitempty"`
+	Outputs    []Output   `yaml:"outputs,omitempty"`
 	Networking Networking `yaml:"networking,omitempty"`
 }
 

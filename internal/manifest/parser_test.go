@@ -71,8 +71,8 @@ func TestParse_ApplicationManifest(t *testing.T) {
 	if app.Spec.Env[0].Name != "DATABASE_URL" {
 		t.Errorf("Env[0].Name = %q, want %q", app.Spec.Env[0].Name, "DATABASE_URL")
 	}
-	if app.Spec.Env[0].ValueFrom != "dependency.hello-db.url" {
-		t.Errorf("Env[0].ValueFrom = %q, want %q", app.Spec.Env[0].ValueFrom, "dependency.hello-db.url")
+	if app.Spec.Env[0].ValueFrom != "resource.hello-db.url" {
+		t.Errorf("Env[0].ValueFrom = %q, want %q", app.Spec.Env[0].ValueFrom, "resource.hello-db.url")
 	}
 	if app.Spec.Env[1].Name != "NODE_ENV" {
 		t.Errorf("Env[1].Name = %q, want %q", app.Spec.Env[1].Name, "NODE_ENV")
@@ -161,5 +161,22 @@ func TestParse_ResourceManifest(t *testing.T) {
 	}
 	if res.Spec.Version != "16" {
 		t.Errorf("Spec.Version = %q, want %q", res.Spec.Version, "16")
+	}
+	// Image should default to type:version when not set in YAML
+	if res.Spec.Image != "postgres:16" {
+		t.Errorf("Spec.Image = %q, want %q (defaulted from type:version)", res.Spec.Image, "postgres:16")
+	}
+	// Outputs
+	if len(res.Spec.Outputs) != 5 {
+		t.Fatalf("Outputs count = %d, want 5", len(res.Spec.Outputs))
+	}
+	if res.Spec.Outputs[0].Name != "host" {
+		t.Errorf("Outputs[0].Name = %q, want %q", res.Spec.Outputs[0].Name, "host")
+	}
+	if res.Spec.Outputs[1].Value != "5432" {
+		t.Errorf("Outputs[1].Value = %q, want %q", res.Spec.Outputs[1].Value, "5432")
+	}
+	if !res.Spec.Outputs[2].Generated {
+		t.Error("Outputs[2].Generated = false, want true (password)")
 	}
 }
