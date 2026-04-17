@@ -32,4 +32,7 @@ go.work.sum
 .vscode/
 
 AGENTS.md
-./agents/*
+agents/
+dryrundata/
+
+shrine
