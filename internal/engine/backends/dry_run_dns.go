@@ -1,14 +1,13 @@
-package dryrun
+package backends
 
 import (
 	"fmt"
-	"github.com/CarlosHPlata/shrine/internal/engine"
 )
 
 // DryRunDNSBackend implements DNSBackend by printing AdGuard DNS operations.
 type DryRunDNSBackend struct{}
 
-func (d *DryRunDNSBackend) WriteRecord(op engine.WriteRecordOp) error {
+func (d *DryRunDNSBackend) WriteRecord(op WriteRecordOp) error {
 	fmt.Printf("[DNS]    AddRecord: %s → %s\n", op.Name, op.Value)
 	return nil
 }

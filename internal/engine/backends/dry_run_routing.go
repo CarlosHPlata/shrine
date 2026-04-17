@@ -1,14 +1,13 @@
-package dryrun
+package backends
 
 import (
 	"fmt"
-	"github.com/CarlosHPlata/shrine/internal/engine"
 )
 
 // DryRunRoutingBackend implements RoutingBackend by printing Traefik route operations.
 type DryRunRoutingBackend struct{}
 
-func (d *DryRunRoutingBackend) WriteRoute(op engine.WriteRouteOp) error {
+func (d *DryRunRoutingBackend) WriteRoute(op WriteRouteOp) error {
 	fmt.Printf("[ROUTE]  WriteRoute: domain=%s → %s:%d\n", op.Domain, op.ServiceName, op.ServicePort)
 	return nil
 }

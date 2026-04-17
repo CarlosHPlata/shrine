@@ -4,6 +4,7 @@ import "github.com/CarlosHPlata/shrine/internal/state"
 
 type PlanResult struct {
 	Steps         []PlannedStep
+	ManifestSet   *ManifestSet
 	Error         error
 	ValidationErr []error
 }
@@ -18,5 +19,5 @@ func Plan(dir string, store state.Store) PlanResult {
 		return PlanResult{ValidationErr: errs}
 	}
 
-	return PlanResult{Steps: Order(set)}
+	return PlanResult{Steps: Order(set), ManifestSet: set}
 }

@@ -43,6 +43,16 @@ type ApplicationSpec struct {
 	Networking   Networking   `yaml:"networking,omitempty"`
 }
 
+func (s ApplicationSpec) StaticEnv() []string {
+	var env []string
+	for _, e := range s.Env {
+		if e.Value != "" {
+			env = append(env, e.Name+"="+e.Value)
+		}
+	}
+	return env
+}
+
 // Output declares a named value that a Resource exposes to consumers.
 // If Generated is true, the value is created at deploy time (e.g. passwords).
 // If Value is set, it's a static default (e.g. a port number).
@@ -58,6 +68,19 @@ type ResourceSpec struct {
 	Image      string     `yaml:"image,omitempty"`
 	Outputs    []Output   `yaml:"outputs,omitempty"`
 	Networking Networking `yaml:"networking,omitempty"`
+}
+
+// StaticEnv returns a list of environment variables (KEY=VALUE) for this resource.
+// Only outputs with a non-empty Value are included. Generated values are skipped
+// as they are resolved at runtime.
+func (s ResourceSpec) StaticEnv() []string {
+	var env []string
+	for _, o := range s.Outputs {
+		if o.Value != "" {
+			env = append(env, o.Name+"="+o.Value)
+		}
+	}
+	return env
 }
 
 type Quotas struct {
