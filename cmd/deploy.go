@@ -1,8 +1,6 @@
 package cmd
 
 import (
-	"fmt"
-
 	"github.com/CarlosHPlata/shrine/internal/handler"
 	"github.com/spf13/cobra"
 )
@@ -15,9 +13,9 @@ var deployCmd = &cobra.Command{
 	Long:  `Parse YAML manifests from the given path, resolve dependencies, and deploy containers, routes, and DNS entries.`,
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		fmt.Printf("[shrine] Planning deployment from: %s\n", args[0])
+		cmd.Printf("[shrine] Planning deployment from: %s\n", args[0])
 		if dryRun {
-			return handler.DryRun(args[0], store.Teams)
+			return handler.DryRun(cmd.OutOrStdout(), args[0], store.Teams)
 		}
 		return nil
 	},

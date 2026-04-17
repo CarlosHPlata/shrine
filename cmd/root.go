@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"io"
 
 	"github.com/CarlosHPlata/shrine/internal/config"
 	"github.com/CarlosHPlata/shrine/internal/state"
@@ -38,6 +39,17 @@ var rootCmd = &cobra.Command{
 
 func Execute() error {
 	return rootCmd.Execute()
+}
+
+// SetArgs sets the arguments for the root command. Used for testing.
+func SetArgs(args []string) {
+	rootCmd.SetArgs(args)
+}
+
+// SetOutput sets the output and error writers for the root command. Used for testing.
+func SetOutput(w io.Writer) {
+	rootCmd.SetOut(w)
+	rootCmd.SetErr(w)
 }
 
 func init() {

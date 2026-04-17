@@ -2,15 +2,18 @@ package backends
 
 import (
 	"fmt"
+	"io"
 )
 
 // DryRunContainerBackend implements ContainerBackend by printing Docker operations.
 type DryRunContainerBackend struct {
+	Out      io.Writer
 	Networks map[string]bool
 }
 
-func NewDryRunContainerBackend() *DryRunContainerBackend {
+func NewDryRunContainerBackend(out io.Writer) *DryRunContainerBackend {
 	return &DryRunContainerBackend{
+		Out:      out,
 		Networks: make(map[string]bool),
 	}
 }
@@ -21,21 +24,21 @@ func (d *DryRunContainerBackend) CreateNetwork(name string) error {
 	}
 
 	d.Networks[name] = true
-	fmt.Printf("[DOCKER] NetworkCreate: name=%s\n", name)
+	fmt.Fprintf(d.Out, "[DOCKER] NetworkCreate: name=%s\n", name)
 	return nil
 }
 
 func (d *DryRunContainerBackend) RemoveNetwork(name string) error {
-	fmt.Printf("[DOCKER] NetworkRemove: name=%s\n", name)
+	fmt.Fprintf(d.Out, "[DOCKER] NetworkRemove: name=%s\n", name)
 	return nil
 }
 
 func (d *DryRunContainerBackend) CreateContainer(op CreateContainerOp) error {
-	fmt.Printf("[DOCKER] ContainerCreate: name=%s image=%s\n", op.Name, op.Image)
+	fmt.Fprintf(d.Out, "[DOCKER] ContainerCreate: name=%s image=%s\n", op.Name, op.Image)
 	return nil
 }
 
 func (d *DryRunContainerBackend) RemoveContainer(name string) error {
-	fmt.Printf("[DOCKER] ContainerRemove: name=%s\n", name)
+	fmt.Fprintf(d.Out, "[DOCKER] ContainerRemove: name=%s\n", name)
 	return nil
 }

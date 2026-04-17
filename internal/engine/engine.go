@@ -2,6 +2,7 @@ package engine
 
 import (
 	"fmt"
+	"io"
 
 	"github.com/CarlosHPlata/shrine/internal/engine/backends"
 	"github.com/CarlosHPlata/shrine/internal/planner"
@@ -13,11 +14,11 @@ type Engine struct {
 	DNS       backends.DNSBackend
 }
 
-func NewDryRunEngine() *Engine {
+func NewDryRunEngine(out io.Writer) *Engine {
 	return &Engine{
-		Container: backends.NewDryRunContainerBackend(),
-		Routing:   &backends.DryRunRoutingBackend{},
-		DNS:       &backends.DryRunDNSBackend{},
+		Container: backends.NewDryRunContainerBackend(out),
+		Routing:   &backends.DryRunRoutingBackend{Out: out},
+		DNS:       &backends.DryRunDNSBackend{Out: out},
 	}
 }
 
