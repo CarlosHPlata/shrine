@@ -17,7 +17,7 @@ var deployCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		fmt.Printf("[shrine] Planning deployment from: %s\n", args[0])
 		if dryRun {
-			return handler.DryRun(args[0], store)
+			return handler.DryRun(args[0], store.Teams)
 		}
 		return nil
 	},

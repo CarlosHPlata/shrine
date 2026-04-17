@@ -8,7 +8,7 @@ import (
 	"github.com/CarlosHPlata/shrine/internal/manifest"
 )
 
-// MockStore implements state.Store for testing
+// MockStore implements state.TeamStore for testing
 type MockStore struct {
 	Teams map[string]*manifest.TeamManifest
 }

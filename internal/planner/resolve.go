@@ -11,7 +11,7 @@ import (
 
 // Resolve performs dependency resolution, access control checks, and quota enforcement
 // for a set of manifests. It returns a slice of all validation errors found.
-func Resolve(set *ManifestSet, store state.Store) []error {
+func Resolve(set *ManifestSet, store state.TeamStore) []error {
 	var errs []error
 
 	// Track counts per owner for quota enforcement
@@ -74,7 +74,7 @@ func resolveDependencies(set *ManifestSet, app *manifest.ApplicationManifest) []
 
 // enforceQuota registers all involved owners, loads their team metadata, and checks
 // deployment counts against defined quotas. It returns a cache of loaded teams and any errors.
-func enforceQuota(store state.Store, appCounts, resCounts map[string]int) (map[string]*manifest.TeamManifest, []error) {
+func enforceQuota(store state.TeamStore, appCounts, resCounts map[string]int) (map[string]*manifest.TeamManifest, []error) {
 	var errs []error
 	teamCache := make(map[string]*manifest.TeamManifest)
 	owners := make(map[string]struct{})

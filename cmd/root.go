@@ -5,6 +5,7 @@ import (
 
 	"github.com/CarlosHPlata/shrine/internal/config"
 	"github.com/CarlosHPlata/shrine/internal/state"
+	"github.com/CarlosHPlata/shrine/internal/state/local"
 	"github.com/spf13/cobra"
 )
 
@@ -12,7 +13,7 @@ var (
 	configDir string
 	stateDir  string
 	paths     *config.Paths
-	store     state.Store
+	store     *state.Store
 )
 
 var rootCmd = &cobra.Command{
@@ -26,7 +27,7 @@ var rootCmd = &cobra.Command{
 			return fmt.Errorf("resolving paths: %w", err)
 		}
 
-		store, err = state.NewFileStore(paths.StateDir)
+		store, err = local.NewLocalStore(paths.StateDir)
 		if err != nil {
 			return fmt.Errorf("initializing state store: %w", err)
 		}

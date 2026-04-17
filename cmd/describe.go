@@ -17,7 +17,7 @@ var describeTeamCmd = &cobra.Command{
 	Long:  `Display the full configuration from state for a specific team.`,
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		return handler.DescribeTeam(args[0], store)
+		return handler.DescribeTeam(args[0], store.Teams)
 	},
 }
 

@@ -18,7 +18,7 @@ var createTeamCmd = &cobra.Command{
 	Short: "Create a team in state from a manifest file",
 	Long:  `Parse a team manifest YAML file and save it to the platform state.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		return handler.CreateTeam(createFilePath, store)
+		return handler.CreateTeam(createFilePath, store.Teams)
 	},
 }
 

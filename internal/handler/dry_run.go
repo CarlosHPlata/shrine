@@ -8,7 +8,7 @@ import (
 	"github.com/CarlosHPlata/shrine/internal/state"
 )
 
-func DryRun(manifestDir string, store state.Store) error {
+func DryRun(manifestDir string, store state.TeamStore) error {
 	result := planner.Plan(manifestDir, store)
 
 	if result.Error != nil {

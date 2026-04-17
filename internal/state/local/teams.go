@@ -1,4 +1,4 @@
-package state
+package local
 
 import (
 	"encoding/json"
@@ -8,32 +8,33 @@ import (
 	"strings"
 
 	"github.com/CarlosHPlata/shrine/internal/manifest"
+	"github.com/CarlosHPlata/shrine/internal/state"
 	"github.com/google/uuid"
 )
 
-type FileStore struct {
+type TeamStore struct {
 	baseDir string
 }
 
-// NewFileStore creates a new filesystem-based store in the target directory.
+// NewTeamStore creates a new filesystem-based store in the target directory.
 // It ensures that the required directory structure exists.
-func NewFileStore(baseDir string) (*FileStore, error) {
-	fs := &FileStore{baseDir: baseDir}
+func NewTeamStore(baseDir string) (state.TeamStore, error) {
+	fs := &TeamStore{baseDir: baseDir}
 	if err := os.MkdirAll(fs.teamsDir(), 0755); err != nil {
 		return nil, fmt.Errorf("creating teams directory: %w", err)
 	}
 	return fs, nil
 }
 
-func (fs *FileStore) teamsDir() string {
+func (fs *TeamStore) teamsDir() string {
 	return filepath.Join(fs.baseDir, "teams")
 }
 
-func (fs *FileStore) teamPath(name string) string {
+func (fs *TeamStore) teamPath(name string) string {
 	return filepath.Join(fs.teamsDir(), strings.ToLower(name)+".json")
 }
 
-func (fs *FileStore) SaveTeam(team *manifest.TeamManifest) error {
+func (fs *TeamStore) SaveTeam(team *manifest.TeamManifest) error {
 	if team.Metadata.ResourceID == "" {
 		team.Metadata.ResourceID = uuid.New().String()
 	}
@@ -65,7 +66,7 @@ func (fs *FileStore) SaveTeam(team *manifest.TeamManifest) error {
 	return nil
 }
 
-func (fs *FileStore) LoadTeam(name string) (*manifest.TeamManifest, error) {
+func (fs *TeamStore) LoadTeam(name string) (*manifest.TeamManifest, error) {
 	path := fs.teamPath(name)
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -83,7 +84,7 @@ func (fs *FileStore) LoadTeam(name string) (*manifest.TeamManifest, error) {
 	return &team, nil
 }
 
-func (fs *FileStore) ListTeams() ([]*manifest.TeamManifest, error) {
+func (fs *TeamStore) ListTeams() ([]*manifest.TeamManifest, error) {
 	entries, err := os.ReadDir(fs.teamsDir())
 	if err != nil {
 		return nil, fmt.Errorf("reading teams directory: %w", err)
@@ -107,7 +108,7 @@ func (fs *FileStore) ListTeams() ([]*manifest.TeamManifest, error) {
 	return teams, nil
 }
 
-func (fs *FileStore) DeleteTeam(name string) error {
+func (fs *TeamStore) DeleteTeam(name string) error {
 	path := fs.teamPath(name)
 	if err := os.Remove(path); err != nil {
 		if os.IsNotExist(err) {

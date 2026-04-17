@@ -9,7 +9,7 @@ type PlanResult struct {
 	ValidationErr []error
 }
 
-func Plan(dir string, store state.Store) PlanResult {
+func Plan(dir string, store state.TeamStore) PlanResult {
 	set, err := LoadDir(dir)
 	if err != nil {
 		return PlanResult{Error: err}

@@ -45,7 +45,7 @@ func GenerateTeam(name, outputDir string) error {
 }
 
 // CreateTeam parses a single team manifest file and saves it to state.
-func CreateTeam(filepath string, store state.Store) error {
+func CreateTeam(filepath string, store state.TeamStore) error {
 	m, err := manifest.Parse(filepath)
 	if err != nil {
 		return fmt.Errorf("parsing manifest %q: %w", filepath, err)
@@ -64,7 +64,7 @@ func CreateTeam(filepath string, store state.Store) error {
 }
 
 // ApplyTeams scans a directory for team manifests and syncs them all to state.
-func ApplyTeams(manifestDir string, store state.Store) error {
+func ApplyTeams(manifestDir string, store state.TeamStore) error {
 	files, err := filepath.Glob(filepath.Join(manifestDir, "*.yml"))
 	if err != nil {
 		return fmt.Errorf("searching for manifests: %w", err)
@@ -101,7 +101,7 @@ func ApplyTeams(manifestDir string, store state.Store) error {
 }
 
 // ListTeams displays all registered teams in a table format.
-func ListTeams(store state.Store) error {
+func ListTeams(store state.TeamStore) error {
 	teams, err := store.ListTeams()
 	if err != nil {
 		return fmt.Errorf("listing teams: %w", err)
@@ -127,7 +127,7 @@ func ListTeams(store state.Store) error {
 }
 
 // DescribeTeam displays detailed info about a single team from state.
-func DescribeTeam(name string, store state.Store) error {
+func DescribeTeam(name string, store state.TeamStore) error {
 	team, err := store.LoadTeam(name)
 	if err != nil {
 		return err
@@ -146,7 +146,7 @@ func DescribeTeam(name string, store state.Store) error {
 }
 
 // DeleteTeam removes a team from state.
-func DeleteTeam(name string, store state.Store) error {
+func DeleteTeam(name string, store state.TeamStore) error {
 	if err := store.DeleteTeam(name); err != nil {
 		return err
 	}

@@ -17,7 +17,7 @@ var getTeamsCmd = &cobra.Command{
 	Long:  `Display all teams currently registered in the platform state.`,
 	Args:  cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		return handler.ListTeams(store)
+		return handler.ListTeams(store.Teams)
 	},
 }
 
