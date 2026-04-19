@@ -16,8 +16,14 @@ func NewLocalStore(baseDir string) (*state.Store, error) {
 		return nil, err
 	}
 
+	secrets, err := NewSecretStore(baseDir)
+	if err != nil {
+		return nil, err
+	}
+
 	return &state.Store{
 		Teams:   teams,
 		Subnets: subnets,
+		Secrets: secrets,
 	}, nil
 }

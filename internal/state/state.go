@@ -4,4 +4,5 @@ package state
 type Store struct {
 	Teams   TeamStore
 	Subnets SubnetStore
+	Secrets SecretStore
 }
