@@ -1,8 +1,10 @@
 package engine
 
 type CreateContainerOp struct {
+	Team    string
 	Name    string
 	Image   string
+	Kind    string
 	Network string
 	Env     []string
 }

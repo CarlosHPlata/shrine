@@ -48,6 +48,8 @@ func (engine *Engine) ExecuteDeploy(steps []planner.PlannedStep, set *planner.Ma
 func (engine *Engine) deployApplication(set *planner.ManifestSet, step planner.PlannedStep, resolvedResources map[string]map[string]string) error {
 	application := set.Applications[step.Name]
 
+	fmt.Printf("🚀 Deploying Application: %s (owner: %s)\n", step.Name, application.Metadata.Owner)
+
 	// 1. Resolve env: static values and valueFrom references.
 	envMap, err := engine.Resolver.ResolveApplication(application, resolvedResources)
 	if err != nil {
@@ -56,13 +58,17 @@ func (engine *Engine) deployApplication(set *planner.ManifestSet, step planner.P
 	env := flattenEnv(envMap)
 
 	// 2. Orchestrate network creation IF IT DOESN'T EXIST
+	fmt.Printf("  🌐 Ensuring network: shrine.%s.private\n", application.Metadata.Owner)
 	if err := engine.Container.CreateNetwork(application.Metadata.Owner); err != nil {
 		return fmt.Errorf("application %q: %w", step.Name, err)
 	}
 
 	// 3. Create the container
+	fmt.Printf("  🏗️  Creating container: %s.%s\n", application.Metadata.Owner, application.Metadata.Name)
 	op := CreateContainerOp{
+		Team:    application.Metadata.Owner,
 		Name:    application.Metadata.Name,
+		Kind:    "Application",
 		Image:   application.Spec.Image,
 		Network: application.Metadata.Owner,
 		Env:     env,
@@ -73,6 +79,7 @@ func (engine *Engine) deployApplication(set *planner.ManifestSet, step planner.P
 
 	// 4. Write Router
 	if application.Spec.Routing.Domain != "" && engine.Routing != nil {
+		fmt.Printf("  🔗 Configuring routing: %s -> port %d\n", application.Spec.Routing.Domain, application.Spec.Port)
 		routingOp := WriteRouteOp{
 			Team:        application.Metadata.Owner,
 			Domain:      application.Spec.Routing.Domain,
@@ -88,6 +95,7 @@ func (engine *Engine) deployApplication(set *planner.ManifestSet, step planner.P
 
 	// 5. Write DNS
 	if application.Spec.Routing.Domain != "" && engine.DNS != nil {
+		fmt.Printf("  🌍 Registering DNS: %s\n", application.Spec.Routing.Domain)
 		dnsOp := WriteRecordOp{
 			Team:       application.Metadata.Owner,
 			Name:       application.Spec.Routing.Domain,
@@ -104,18 +112,24 @@ func (engine *Engine) deployApplication(set *planner.ManifestSet, step planner.P
 func (engine *Engine) deployResource(set *planner.ManifestSet, step planner.PlannedStep, resolvedValues map[string]string) error {
 	resource := set.Resources[step.Name]
 
+	fmt.Printf("📦 Deploying Resource: %s (type: %s)\n", step.Name, resource.Spec.Type)
+
 	// 1. Flatten the pre-resolved outputs into env. Built-ins (team/name) are
 	// dropped since they aren't meaningful as container env vars.
 	env := flattenOutputs(resolvedValues)
 
 	// 2. Orchestrate network creation
+	fmt.Printf("  🌐 Ensuring network: shrine.%s.private\n", resource.Metadata.Owner)
 	if err := engine.Container.CreateNetwork(resource.Metadata.Owner); err != nil {
 		return fmt.Errorf("resource %q: %w", step.Name, err)
 	}
 
 	// 3. Create the container
+	fmt.Printf("  🏗️  Creating container: %s.%s\n", resource.Metadata.Owner, resource.Metadata.Name)
 	op := CreateContainerOp{
+		Team:    resource.Metadata.Owner,
 		Name:    resource.Metadata.Name,
+		Kind:    "Resource",
 		Image:   resource.Spec.Image,
 		Network: resource.Metadata.Owner,
 		Env:     env,

@@ -67,7 +67,7 @@ func TestDeployDryRun(t *testing.T) {
 	got := out.String()
 	expectedSteps := []string{
 		"[DOCKER] NetworkCreate: name=team-a",
-		"[DOCKER] ContainerCreate: name=test-app image=nginx:latest",
+		"[DOCKER] ContainerCreate: name=team-a.test-app image=nginx:latest",
 		"[ROUTE]  WriteRoute: domain=test.home.lab → test-app:80",
 		"[DNS]    AddRecord: test.home.lab → [IP_ADDRESS]",
 	}

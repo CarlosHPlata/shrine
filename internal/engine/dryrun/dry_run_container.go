@@ -36,7 +36,7 @@ func (d *DryRunContainerBackend) RemoveNetwork(name string) error {
 }
 
 func (d *DryRunContainerBackend) CreateContainer(op engine.CreateContainerOp) error {
-	fmt.Fprintf(d.Out, "[DOCKER] ContainerCreate: name=%s image=%s\n", op.Name, op.Image)
+	fmt.Fprintf(d.Out, "[DOCKER] ContainerCreate: name=%s.%s image=%s\n", op.Team, op.Name, op.Image)
 	return nil
 }
 
