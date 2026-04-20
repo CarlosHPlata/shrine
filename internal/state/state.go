@@ -2,7 +2,8 @@ package state
 
 // Store aggregates all resource-specific storage interfaces.
 type Store struct {
-	Teams   TeamStore
-	Subnets SubnetStore
-	Secrets SecretStore
+	Teams       TeamStore
+	Subnets     SubnetStore
+	Secrets     SecretStore
+	Deployments DeploymentStore
 }

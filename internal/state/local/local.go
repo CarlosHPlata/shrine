@@ -21,9 +21,15 @@ func NewLocalStore(baseDir string) (*state.Store, error) {
 		return nil, err
 	}
 
+	deployments, err := NewDeploymentStore(baseDir)
+	if err != nil {
+		return nil, err
+	}
+
 	return &state.Store{
-		Teams:   teams,
-		Subnets: subnets,
-		Secrets: secrets,
+		Teams:       teams,
+		Subnets:     subnets,
+		Secrets:     secrets,
+		Deployments: deployments,
 	}, nil
 }
