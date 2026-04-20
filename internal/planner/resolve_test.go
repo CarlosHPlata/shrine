@@ -269,26 +269,25 @@ func TestResolve(t *testing.T) {
 		}
 	})
 
-	t.Run("env var mutual exclusivity and presence", func(t *testing.T) {
+	t.Run("template variable validation", func(t *testing.T) {
 		set := &ManifestSet{
-			Applications: map[string]*manifest.ApplicationManifest{
-				"app1": {
-					Metadata: manifest.Metadata{Name: "app1", Owner: "team-a"},
-					Spec: manifest.ApplicationSpec{
-						Env: []manifest.EnvVar{
-							{Name: "BOTH", Value: "foo", ValueFrom: "resource.db1.url"}, // Error
-							{Name: "NEITHER"},                                            // Error
-							{Name: "VALUE_ONLY", Value: "bar"},                          // Valid
-						},
-					},
-				},
-			},
 			Resources: map[string]*manifest.ResourceManifest{
 				"db1": {
 					Metadata: manifest.Metadata{Name: "db1", Owner: "team-a"},
 					Spec: manifest.ResourceSpec{
 						Type:    "postgres",
-						Outputs: []manifest.Output{{Name: "url"}},
+						Version: "16",
+						Outputs: []manifest.Output{
+							{Name: "host"},
+							{Name: "port", Value: "5432"},
+							{Name: "password", Generated: true},
+							// Valid: references siblings + built-ins.
+							{Name: "url", Template: "{{.team}}/{{.name}}://{{.host}}:{{.port}}:{{.password}}"},
+							// Invalid: references unknown variable.
+							{Name: "bad", Template: "{{.missing}}"},
+							// Invalid: syntax error.
+							{Name: "broken", Template: "{{.host"},
+						},
 					},
 				},
 			},
@@ -297,10 +296,9 @@ func TestResolve(t *testing.T) {
 		errs := Resolve(set, store)
 
 		expectedErrors := []string{
-			"has both value and valueFrom set",
-			"must have either value or valueFrom set",
+			"template output \"bad\" references unknown variable \"missing\"",
+			"template output \"broken\" has invalid syntax",
 		}
-
 		for _, expected := range expectedErrors {
 			found := false
 			for _, err := range errs {
@@ -310,14 +308,9 @@ func TestResolve(t *testing.T) {
 				}
 			}
 			if !found {
-				t.Errorf("expected error containing %q, but not found in: %v", expected, errs)
+				t.Errorf("expected error containing %q, got: %v", expected, errs)
 			}
 		}
-
-		// Ensure VALUE_ONLY didn't cause an error, and the previous valueFrom sub-test errors aren't counted here
-		// Actually, since we're calling Resolve(set, store) locally in this t.Run, it's fine.
-		if len(errs) != len(expectedErrors) {
-			t.Errorf("expected exactly %d errors, got %d: %v", len(expectedErrors), len(errs), errs)
-		}
 	})
+
 }

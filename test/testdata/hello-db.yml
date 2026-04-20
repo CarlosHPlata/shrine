@@ -12,11 +12,11 @@ spec:
     - name: host
     - name: port
       value: "5432"
-    - name: password
-      generated: true
     - name: database
       value: "hello"
-    - name: url
+    - name: password
       generated: true
+    - name: url
+      template: "postgres://postgres:{{.password}}@{{.host}}:{{.port}}/{{.database}}"
   networking:
     exposeToplatform: false

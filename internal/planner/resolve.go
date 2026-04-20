@@ -25,9 +25,10 @@ func Resolve(set *ManifestSet, store state.TeamStore) []error {
 		errs = append(errs, validateValueFrom(set, app)...)
 	}
 
-	// 2. Resource-specific checks (counts and types)
+	// 2. Resource-specific checks (counts, template refs)
 	for _, res := range set.Resources {
 		resCounts[res.Metadata.Owner]++
+		errs = append(errs, validateTemplates(res)...)
 	}
 
 	// 3. Quota enforcement
@@ -138,20 +139,11 @@ func hasAccess(consumer string, res *manifest.ResourceManifest) bool {
 }
 
 // validateValueFrom ensures all environment variables using valueFrom reference valid
-// resource outputs in the format 'resource.<name>.<output>'.
+// resource outputs in the format 'resource.<name>.<output>'. Presence and mutual
+// exclusivity of value/valueFrom are enforced earlier by manifest.Validate.
 func validateValueFrom(set *ManifestSet, app *manifest.ApplicationManifest) []error {
 	var errs []error
 	for _, env := range app.Spec.Env {
-		// Env vars must have either value or valueFrom, but not both.
-		if env.Value != "" && env.ValueFrom != "" {
-			errs = append(errs, fmt.Errorf("app %q: env %q has both value and valueFrom set", app.Metadata.Name, env.Name))
-			continue
-		}
-		if env.Value == "" && env.ValueFrom == "" {
-			errs = append(errs, fmt.Errorf("app %q: env %q must have either value or valueFrom set", app.Metadata.Name, env.Name))
-			continue
-		}
-
 		if env.ValueFrom == "" {
 			continue
 		}

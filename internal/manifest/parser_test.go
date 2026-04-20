@@ -176,7 +176,11 @@ func TestParse_ResourceManifest(t *testing.T) {
 	if res.Spec.Outputs[1].Value != "5432" {
 		t.Errorf("Outputs[1].Value = %q, want %q", res.Spec.Outputs[1].Value, "5432")
 	}
-	if !res.Spec.Outputs[2].Generated {
-		t.Error("Outputs[2].Generated = false, want true (password)")
+	if !res.Spec.Outputs[3].Generated {
+		t.Error("Outputs[3].Generated = false, want true (password)")
+	}
+	wantTemplate := "postgres://postgres:{{.password}}@{{.host}}:{{.port}}/{{.database}}"
+	if res.Spec.Outputs[4].Template != wantTemplate {
+		t.Errorf("Outputs[4].Template = %q, want %q", res.Spec.Outputs[4].Template, wantTemplate)
 	}
 }

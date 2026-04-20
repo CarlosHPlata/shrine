@@ -4,13 +4,13 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/CarlosHPlata/shrine/internal/engine"
+	"github.com/CarlosHPlata/shrine/internal/engine/dryrun"
 	"github.com/CarlosHPlata/shrine/internal/planner"
 	"github.com/CarlosHPlata/shrine/internal/state"
 )
 
-func DryRun(out io.Writer, manifestDir string, store state.TeamStore) error {
-	result := planner.Plan(manifestDir, store)
+func DryRun(out io.Writer, manifestDir string, store *state.Store) error {
+	result := planner.Plan(manifestDir, store.Teams)
 
 	if result.Error != nil {
 		return result.Error
@@ -29,7 +29,7 @@ func DryRun(out io.Writer, manifestDir string, store state.TeamStore) error {
 		return nil
 	}
 
-	engine := engine.NewDryRunEngine(out)
+	engine := dryrun.NewDryRunEngine(out)
 
 	if err := engine.ExecuteDeploy(result.Steps, result.ManifestSet); err != nil {
 		return err

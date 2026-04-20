@@ -15,6 +15,7 @@ Shrine brings a Kubernetes-inspired declarative workflow to homelabs without the
 - **DNS management** — AdGuard DNS entries created and cleaned up automatically
 - **Team-based access control** — Resources declare who can consume them; Shrine enforces it at deploy time
 - **Quotas** — Limit apps, resources, and allowed resource types per team
+- **Typed resource outputs** — Literals, random-generated secrets, and Go `text/template` compositions, resolved in topological order
 - **Idempotent deploys** — Re-run `deploy` safely; Shrine reconciles state instead of duplicating containers
 - **Dry-run mode** — Preview the full execution plan before touching anything
 - **Local state management** — Subnet allocation, secret generation, and deployment tracking
@@ -97,14 +98,14 @@ spec:
       owner: team-a
   env:
     - name: DATABASE_URL
-      valueFrom: dependency.hello-db.url
+      valueFrom: resource.hello-db.url
     - name: NODE_ENV
       value: production
 ```
 
 ### Resource
 
-A managed dependency (Postgres, RabbitMQ, Redis, etc.) with access control:
+A managed dependency (Postgres, RabbitMQ, Redis, etc.) with access control. Resources declare `outputs` — named values that other manifests can reference via `valueFrom: resource.<name>.<output>`:
 
 ```yaml
 apiVersion: shrine/v1
@@ -117,9 +118,21 @@ metadata:
 spec:
   type: postgres
   version: "16"
+  outputs:
+    - name: host                # infrastructure-synthesized (container name on the team network)
+    - name: port
+      value: "5432"             # literal
+    - name: database
+      value: "hello"
+    - name: password
+      generated: true           # random secret, persisted across redeploys
+    - name: url
+      template: "postgres://postgres:{{.password}}@{{.host}}:{{.port}}/{{.database}}"
   networking:
     exposeToplatform: false
 ```
+
+Each output is one of four kinds: a `value` literal, a `generated` random secret, a Go `text/template` composing sibling outputs and built-ins (`{{.team}}`, `{{.name}}`), or bare (no marker) for infrastructure-synthesized values like `host`.
 
 ### Team
 
@@ -188,11 +201,10 @@ shrine/
 │   ├── manifest/          # YAML parsing, validation, schema types
 │   ├── config/            # Path resolution (XDG, FHS, .env)
 │   ├── planner/           # Dependency graph, access checks, ordering
-│   ├── executor/          # Executor interface (real + dry-run)
-│   ├── docker/            # Docker SDK wrapper
-│   ├── traefik/           # Traefik route config generation + deployment
-│   ├── dns/               # AdGuard HTTP API client
-│   └── state/             # Store interface, FileStore, subnet allocation
+│   ├── engine/            # Orchestrator + pluggable backend interfaces
+│   │   └── backends/      # ContainerBackend, RoutingBackend, DNSBackend (real + dry-run)
+│   └── state/             # Store interfaces (Teams, Subnets, Secrets, Deployments)
+│       └── local/         # Filesystem-backed implementations
 ├── teams/                 # Team manifests (Git is source of truth)
 ├── main.go
 ├── go.mod
@@ -208,7 +220,7 @@ Shrine resolves configuration and state directories dynamically:
 | **Config** | `~/.config/shrine/` | `/etc/shrine/` | `SHRINE_CONFIG_DIR` | `--config-dir` |
 | **State** | `~/.local/share/shrine/` | `/var/lib/shrine/` | `SHRINE_STATE_DIR` | `--state-dir` |
 
-State tracks subnet allocations, team cache, generated secrets, and deployed resources.
+State tracks team registry, per-team subnet allocations, generated secrets, and deployment records (for teardown and idempotent redeploys).
 
 ## Contributing
 

@@ -107,6 +107,86 @@ func TestValidate_InvalidKind(t *testing.T) {
 	}
 }
 
+func TestValidate_ResourceOutputRules(t *testing.T) {
+	cases := []struct {
+		name    string
+		outputs []Output
+		wantErr string
+	}{
+		{
+			name:    "host with value is rejected",
+			outputs: []Output{{Name: "host", Value: "x"}},
+			wantErr: "is a CLI built-in and must not set value/generated/template",
+		},
+		{
+			name:    "host with template is rejected",
+			outputs: []Output{{Name: "host", Template: "{{.name}}"}},
+			wantErr: "is a CLI built-in and must not set value/generated/template",
+		},
+		{
+			name:    "non-host bare output is rejected",
+			outputs: []Output{{Name: "mystery"}},
+			wantErr: "must set one of value/generated/template",
+		},
+		{
+			name:    "conflicting kinds are rejected",
+			outputs: []Output{{Name: "url", Value: "x", Template: "{{.name}}"}},
+			wantErr: "value/generated/template are mutually exclusive",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			m := &Manifest{
+				TypeMeta: TypeMeta{Kind: "Resource", APIVersion: "shrine/v1"},
+				Resource: &ResourceManifest{
+					Metadata: Metadata{Name: "r", Owner: "team-a"},
+					Spec:     ResourceSpec{Type: "postgres", Version: "16", Outputs: tc.outputs},
+				},
+			}
+			err := Validate(m)
+			if err == nil || !strings.Contains(err.Error(), tc.wantErr) {
+				t.Errorf("expected error containing %q, got: %v", tc.wantErr, err)
+			}
+		})
+	}
+}
+
+func TestValidate_ApplicationEnvRules(t *testing.T) {
+	cases := []struct {
+		name    string
+		env     []EnvVar
+		wantErr string
+	}{
+		{
+			name:    "missing value and valueFrom is rejected",
+			env:     []EnvVar{{Name: "X"}},
+			wantErr: "must set one of value or valueFrom",
+		},
+		{
+			name:    "both value and valueFrom is rejected",
+			env:     []EnvVar{{Name: "X", Value: "a", ValueFrom: "resource.db.url"}},
+			wantErr: "value and valueFrom are mutually exclusive",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			m := &Manifest{
+				TypeMeta: TypeMeta{Kind: "Application", APIVersion: "shrine/v1"},
+				Application: &ApplicationManifest{
+					Metadata: Metadata{Name: "a", Owner: "team-a"},
+					Spec:     ApplicationSpec{Image: "img", Port: 80, Env: tc.env},
+				},
+			}
+			err := Validate(m)
+			if err == nil || !strings.Contains(err.Error(), tc.wantErr) {
+				t.Errorf("expected error containing %q, got: %v", tc.wantErr, err)
+			}
+		})
+	}
+}
+
 func TestValidate_InvalidTeam(t *testing.T) {
 	m, err := Parse(testdataPath("invalid-team.yml"))
 	if err != nil {

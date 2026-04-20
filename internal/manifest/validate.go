@@ -81,6 +81,18 @@ func validateApplicationSpec(spec ApplicationSpec) []string {
 	if spec.Port <= 0 {
 		errs = append(errs, "spec.port must be greater than 0")
 	}
+	for i, e := range spec.Env {
+		if e.Name == "" {
+			errs = append(errs, fmt.Sprintf("spec.env[%d].name is required", i))
+			continue
+		}
+		switch {
+		case e.Value != "" && e.ValueFrom != "":
+			errs = append(errs, fmt.Sprintf("spec.env[%d] %q: value and valueFrom are mutually exclusive", i, e.Name))
+		case e.Value == "" && e.ValueFrom == "":
+			errs = append(errs, fmt.Sprintf("spec.env[%d] %q: must set one of value or valueFrom", i, e.Name))
+		}
+	}
 	return errs
 }
 
@@ -93,7 +105,9 @@ func validateResourceSpec(spec ResourceSpec) []string {
 		errs = append(errs, "spec.version is required")
 	}
 
-	// Validate outputs: each must have a name, and names must be unique
+	// Validate outputs: each must have a name, names must be unique. Every
+	// output must declare exactly one of value/generated/template, except the
+	// built-in `host` which must declare none (the CLI fills it in).
 	seen := make(map[string]bool)
 	for i, o := range spec.Outputs {
 		if o.Name == "" {
@@ -104,6 +118,31 @@ func validateResourceSpec(spec ResourceSpec) []string {
 			errs = append(errs, fmt.Sprintf("spec.outputs has duplicate name %q", o.Name))
 		}
 		seen[o.Name] = true
+
+		kinds := 0
+		if o.Value != "" {
+			kinds++
+		}
+		if o.Generated {
+			kinds++
+		}
+		if o.Template != "" {
+			kinds++
+		}
+
+		if o.Name == "host" {
+			if kinds > 0 {
+				errs = append(errs, fmt.Sprintf("spec.outputs[%d]: %q is a CLI built-in and must not set value/generated/template", i, o.Name))
+			}
+			continue
+		}
+
+		switch {
+		case kinds == 0:
+			errs = append(errs, fmt.Sprintf("spec.outputs[%d] %q: must set one of value/generated/template", i, o.Name))
+		case kinds > 1:
+			errs = append(errs, fmt.Sprintf("spec.outputs[%d] %q: value/generated/template are mutually exclusive", i, o.Name))
+		}
 	}
 
 	return errs
