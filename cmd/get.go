@@ -21,7 +21,31 @@ var getTeamsCmd = &cobra.Command{
 	},
 }
 
+var getConfigDir = &cobra.Command{
+	Use:   "config-dir",
+	Short: "Display the configuration directory",
+	Long:  `Display the configuration directory.`,
+	Args:  cobra.NoArgs,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		cmd.Printf("%s\n", paths.ConfigDir)
+		return nil
+	},
+}
+
+var getStateDir = &cobra.Command{
+	Use:   "state-dir",
+	Short: "Display the state directory",
+	Long:  `Display the state directory.`,
+	Args:  cobra.NoArgs,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		cmd.Printf("%s\n", paths.StateDir)
+		return nil
+	},
+}
+
 func init() {
 	rootCmd.AddCommand(getCmd)
 	getCmd.AddCommand(getTeamsCmd)
+	getCmd.AddCommand(getConfigDir)
+	getCmd.AddCommand(getStateDir)
 }

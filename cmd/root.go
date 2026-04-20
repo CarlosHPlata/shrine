@@ -11,10 +11,11 @@ import (
 )
 
 var (
-	configDir string
-	stateDir  string
-	paths     *config.Paths
-	store     *state.Store
+	configDirFlag string
+	stateDirFlag  string
+	paths         *config.Paths
+	store         *state.Store
+	cfg           *config.Config
 )
 
 var rootCmd = &cobra.Command{
@@ -23,9 +24,14 @@ var rootCmd = &cobra.Command{
 	Long:  `shrine is a CLI tool that interprets declarative YAML manifests and orchestrates Docker containers.`,
 	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 		var err error
-		paths, err = config.ResolvePaths(configDir, stateDir)
+		paths, err = config.ResolvePaths(configDirFlag, stateDirFlag)
 		if err != nil {
 			return fmt.Errorf("resolving paths: %w", err)
+		}
+
+		cfg, err = config.Load(paths.ConfigDir)
+		if err != nil {
+			return fmt.Errorf("loading config: %w", err)
 		}
 
 		store, err = local.NewLocalStore(paths.StateDir)
@@ -53,6 +59,6 @@ func SetOutput(w io.Writer) {
 }
 
 func init() {
-	rootCmd.PersistentFlags().StringVar(&configDir, "config-dir", "", "Configuration directory (default is ~/.config/shrine or /etc/shrine)")
-	rootCmd.PersistentFlags().StringVar(&stateDir, "state-dir", "", "State directory (default is ~/.local/share/shrine or /var/lib/shrine)")
+	rootCmd.PersistentFlags().StringVar(&configDirFlag, "config-dir", "", "Configuration directory (default is ~/.config/shrine or /etc/shrine)")
+	rootCmd.PersistentFlags().StringVar(&stateDirFlag, "state-dir", "", "State directory (default is ~/.local/share/shrine or /var/lib/shrine)")
 }

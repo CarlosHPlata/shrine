@@ -24,7 +24,7 @@ var applyTeamsCmd = &cobra.Command{
 }
 
 func init() {
-	applyCmd.PersistentFlags().StringVarP(&applyPath, "path", "p", "teams", "Directory containing manifest files")
+	applyCmd.PersistentFlags().StringVarP(&applyPath, "path", "p", ".", "Directory containing manifest files")
 
 	rootCmd.AddCommand(applyCmd)
 	applyCmd.AddCommand(applyTeamsCmd)

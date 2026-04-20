@@ -27,7 +27,7 @@ type LiveResolver struct {
 	Secrets state.SecretStore
 }
 
-func NewLiveResolver(secrets state.SecretStore) *LiveResolver {
+func NewLiveResolver(secrets state.SecretStore) Resolver {
 	return &LiveResolver{Secrets: secrets}
 }
 

@@ -17,7 +17,7 @@ var deployCmd = &cobra.Command{
 		if dryRun {
 			return handler.DryRun(cmd.OutOrStdout(), args[0], store)
 		}
-		return nil
+		return handler.Deploy(cmd.OutOrStdout(), args[0], store, cfg)
 	},
 }
 
