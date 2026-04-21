@@ -17,7 +17,13 @@ var deployCmd = &cobra.Command{
 		if dryRun {
 			return handler.DryRun(cmd.OutOrStdout(), args[0], store)
 		}
-		return handler.Deploy(cmd.OutOrStdout(), args[0], store, cfg)
+		return handler.Deploy(handler.DeployOptions{
+			Out:         cmd.OutOrStdout(),
+			ManifestDir: args[0],
+			Store:       store,
+			Config:      cfg,
+			Paths:       paths,
+		})
 	},
 }
 

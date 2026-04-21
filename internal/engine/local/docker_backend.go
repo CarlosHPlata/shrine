@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"time"
 
 	"github.com/CarlosHPlata/shrine/internal/config"
 	"github.com/CarlosHPlata/shrine/internal/engine"
@@ -21,9 +20,10 @@ type DockerBackend struct {
 	client     *client.Client
 	state      *state.Store
 	registries []config.RegistryConfig
+	observer   engine.Observer
 }
 
-func NewDockerBackend(s *state.Store, registries []config.RegistryConfig) (*DockerBackend, error) {
+func NewDockerBackend(s *state.Store, registries []config.RegistryConfig, observer engine.Observer) (*DockerBackend, error) {
 	cli, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
 	if err != nil {
 		return nil, fmt.Errorf("failed to create docker client: %w", err)
@@ -33,7 +33,17 @@ func NewDockerBackend(s *state.Store, registries []config.RegistryConfig) (*Dock
 		client:     cli,
 		state:      s,
 		registries: registries,
+		observer:   observer,
 	}, nil
+}
+
+func (backend *DockerBackend) emitErr(name string, fields map[string]string, err error) error {
+	if fields == nil {
+		fields = map[string]string{}
+	}
+	fields["error"] = err.Error()
+	backend.observer.OnEvent(engine.Event{Name: name, Status: engine.StatusError, Fields: fields})
+	return err
 }
 
 func (backend *DockerBackend) CreateNetwork(team string) error {
@@ -43,7 +53,8 @@ func (backend *DockerBackend) CreateNetwork(team string) error {
 	// Get (or allocate) the team's CIDR. AllocateSubnet will be idempotent
 	cidr, err := backend.state.Subnets.AllocateSubnet(team)
 	if err != nil {
-		return fmt.Errorf("Allocating subnet for %q: %w", team, err)
+		return backend.emitErr("subnet.allocate", map[string]string{"team": team},
+			fmt.Errorf("Allocating subnet for %q: %w", team, err))
 	}
 
 	// Check if network already exists
@@ -51,18 +62,24 @@ func (backend *DockerBackend) CreateNetwork(team string) error {
 	if err == nil {
 		// If network exists verify that the subnets matches what we expect.
 		if len(existing.IPAM.Config) == 0 || existing.IPAM.Config[0].Subnet != cidr {
-			return fmt.Errorf("Network %q exists with wrong subnet: want %s, have %+v", name, cidr, existing.IPAM.Config)
+			return backend.emitErr("network.inspect", map[string]string{"name": name, "want": cidr},
+				fmt.Errorf("Network %q exists with wrong subnet: want %s, have %+v", name, cidr, existing.IPAM.Config))
 		}
 		return nil
 	}
 
 	// If the error is not "not found", return it.
 	if !errdefs.IsNotFound(err) {
-		return fmt.Errorf("inspecting network %q: %w", name, err)
+		return backend.emitErr("network.inspect", map[string]string{"name": name},
+			fmt.Errorf("inspecting network %q: %w", name, err))
 	}
 
 	// If not found, create it.
-	fmt.Printf("    🔨 Creating Docker network: %s (%s)\n", name, cidr)
+	backend.observer.OnEvent(engine.Event{
+		Name:   "network.create",
+		Status: engine.StatusInfo,
+		Fields: map[string]string{"name": name, "cidr": cidr},
+	})
 	_, err = backend.client.NetworkCreate(ctx, name, network.CreateOptions{
 		Driver: "bridge",
 		IPAM: &network.IPAM{
@@ -71,7 +88,8 @@ func (backend *DockerBackend) CreateNetwork(team string) error {
 		},
 	})
 	if err != nil {
-		return fmt.Errorf("creating network %q: %w", name, err)
+		return backend.emitErr("network.create", map[string]string{"name": name},
+			fmt.Errorf("creating network %q: %w", name, err))
 	}
 
 	return nil
@@ -89,7 +107,8 @@ func (backend *DockerBackend) CreateContainer(op engine.CreateContainerOp) error
 	// Ensure image locally -- check with ImageList; pull if missing, using per-registry auth.
 	// filter
 	if err := backend.ensureImage(ctx, op.Image); err != nil {
-		return fmt.Errorf("ensuring image %q: %w", op.Image, err)
+		return backend.emitErr("image.ensure", map[string]string{"ref": op.Image},
+			fmt.Errorf("ensuring image %q: %w", op.Image, err))
 	}
 
 	// Inspect existing container (reconcile by name) 3 cases
@@ -100,26 +119,41 @@ func (backend *DockerBackend) CreateContainer(op engine.CreateContainerOp) error
 	switch {
 	case err == nil && existing.Config.Image == op.Image:
 		if !existing.State.Running {
-			fmt.Printf("    ▶️  Starting existing container: %s\n", cName)
+			backend.observer.OnEvent(engine.Event{
+				Name:   "container.start",
+				Status: engine.StatusInfo,
+				Fields: map[string]string{"name": cName},
+			})
 			if err := backend.client.ContainerStart(ctx, existing.ID, container.StartOptions{}); err != nil {
-				return fmt.Errorf("starting container %q: %w", cName, err)
+				return backend.emitErr("container.start", map[string]string{"name": cName},
+					fmt.Errorf("starting container %q: %w", cName, err))
 			}
 		}
 		return backend.recordDeployment(op, existing.ID)
 
 	case err == nil:
 		// Image drift: remove old container
-		fmt.Printf("    🔄 Image changed for %s, replacing container...\n", cName)
+		backend.observer.OnEvent(engine.Event{
+			Name:   "container.recreate",
+			Status: engine.StatusInfo,
+			Fields: map[string]string{"name": cName},
+		})
 		if err := backend.client.ContainerRemove(ctx, existing.ID, container.RemoveOptions{Force: true}); err != nil {
-			return fmt.Errorf("removing stale container %q: %w", cName, err)
+			return backend.emitErr("container.remove", map[string]string{"name": cName},
+				fmt.Errorf("removing stale container %q: %w", cName, err))
 		}
 
 	case !errdefs.IsNotFound(err):
-		return fmt.Errorf("inspecting container %q: %w", cName, err)
+		return backend.emitErr("container.inspect", map[string]string{"name": cName},
+			fmt.Errorf("inspecting container %q: %w", cName, err))
 	}
 
 	// Create + start - with labels, env, network attachment.
-	fmt.Printf("    ✨ Creating fresh container: %s\n", cName)
+	backend.observer.OnEvent(engine.Event{
+		Name:   "container.fresh",
+		Status: engine.StatusInfo,
+		Fields: map[string]string{"name": cName},
+	})
 	labels := map[string]string{
 		"shrine.team":     op.Team,
 		"shrine.resource": op.Name,
@@ -142,15 +176,21 @@ func (backend *DockerBackend) CreateContainer(op engine.CreateContainerOp) error
 		cName,
 	)
 	if err != nil {
-		return fmt.Errorf("creating container %q: %w", cName, err)
+		return backend.emitErr("container.create", map[string]string{"name": cName},
+			fmt.Errorf("creating container %q: %w", cName, err))
 	}
 
 	// start
 	if err := backend.client.ContainerStart(ctx, created.ID, container.StartOptions{}); err != nil {
-		return fmt.Errorf("starting container %q: %w", cName, err)
+		return backend.emitErr("container.start", map[string]string{"name": cName},
+			fmt.Errorf("starting container %q: %w", cName, err))
 	}
 
-	fmt.Printf("    ✅ Container %s is running\n", cName)
+	backend.observer.OnEvent(engine.Event{
+		Name:   "container.created",
+		Status: engine.StatusFinished,
+		Fields: map[string]string{"name": cName},
+	})
 
 	// record, best-effort; failure here shouldn't tear down a running container
 	return backend.recordDeployment(op, created.ID)
@@ -173,7 +213,8 @@ func (backend *DockerBackend) ensureImage(ctx context.Context, ref string) error
 	args.Add("reference", ref)
 	existing, err := backend.client.ImageList(ctx, image.ListOptions{Filters: args})
 	if err != nil {
-		return fmt.Errorf("listing images: %w", err)
+		return backend.emitErr("image.list", map[string]string{"ref": ref},
+			fmt.Errorf("listing images: %w", err))
 	}
 
 	if len(existing) > 0 {
@@ -182,57 +223,37 @@ func (backend *DockerBackend) ensureImage(ctx context.Context, ref string) error
 
 	authB64, err := backend.registryAuthFor(ref)
 	if err != nil {
-		return err
+		return backend.emitErr("registry.auth", map[string]string{"ref": ref}, err)
 	}
 
-	// Loading animation for image pull
-	stopSpinner := startSpinner(fmt.Sprintf("Pulling image %s...", ref))
-	defer stopSpinner()
+	backend.observer.OnEvent(engine.Event{
+		Name:   "image.pull",
+		Status: engine.StatusStarted,
+		Fields: map[string]string{"ref": ref},
+	})
 
 	reader, err := backend.client.ImagePull(ctx, ref, image.PullOptions{
 		RegistryAuth: authB64,
 	})
 	if err != nil {
-		return fmt.Errorf("pulling image %q: %w", ref, err)
+		return backend.emitErr("image.pull", map[string]string{"ref": ref},
+			fmt.Errorf("pulling image %q: %w", ref, err))
 	}
 	defer reader.Close()
 
 	// ImagePull returns a streaming reader; the pull only happens as we read.
 	// Drain the EOF so the pull actually completes.
 	if _, err = io.Copy(io.Discard, reader); err != nil {
-		return fmt.Errorf("reading image stream for %q: %w", ref, err)
+		return backend.emitErr("image.pull", map[string]string{"ref": ref},
+			fmt.Errorf("reading image stream for %q: %w", ref, err))
 	}
+
+	backend.observer.OnEvent(engine.Event{
+		Name:   "image.pull",
+		Status: engine.StatusFinished,
+		Fields: map[string]string{"ref": ref},
+	})
 	return nil
-}
-
-// startSpinner runs a simple terminal animation in a goroutine.
-// Returns a stop function.
-func startSpinner(msg string) func() {
-	stop := make(chan struct{})
-	done := make(chan struct{})
-
-	go func() {
-		// Braille patterns for a "premium" feel
-		frames := []string{"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"}
-		i := 0
-		for {
-			select {
-			case <-stop:
-				fmt.Print("\r\033[K") // Clear the line
-				close(done)
-				return
-			default:
-				fmt.Printf("\r    %s %s", frames[i%len(frames)], msg)
-				i++
-				time.Sleep(100 * time.Millisecond)
-			}
-		}
-	}()
-
-	return func() {
-		close(stop)
-		<-done
-	}
 }
 
 func networkName(team string) string {

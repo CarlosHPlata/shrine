@@ -7,10 +7,10 @@ import (
 	"github.com/CarlosHPlata/shrine/internal/state"
 )
 
-func NewLocalEngine(store *state.Store, registries []config.RegistryConfig) (*engine.Engine, error) {
+func NewLocalEngine(store *state.Store, registries []config.RegistryConfig, observer engine.Observer) (*engine.Engine, error) {
 	resolver := resolver.NewLiveResolver(store.Secrets)
 
-	containerBackend, err := NewDockerBackend(store, registries)
+	containerBackend, err := NewDockerBackend(store, registries, observer)
 	if err != nil {
 		return nil, err
 	}
@@ -20,5 +20,6 @@ func NewLocalEngine(store *state.Store, registries []config.RegistryConfig) (*en
 		Routing:   nil,
 		DNS:       nil,
 		Resolver:  resolver,
+		Observer:  observer,
 	}, nil
 }
