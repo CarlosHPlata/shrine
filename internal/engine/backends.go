@@ -1,5 +1,10 @@
 package engine
 
+type VolumeMount struct {
+	Name      string
+	MountPath string
+}
+
 type CreateContainerOp struct {
 	Team    string
 	Name    string
@@ -7,6 +12,7 @@ type CreateContainerOp struct {
 	Kind    string
 	Network string
 	Env     []string
+	Volumes []VolumeMount
 }
 
 type ContainerBackend interface {

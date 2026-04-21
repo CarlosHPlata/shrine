@@ -93,6 +93,11 @@ func validateApplicationSpec(spec ApplicationSpec) []string {
 			errs = append(errs, fmt.Sprintf("spec.env[%d] %q: must set one of value or valueFrom", i, e.Name))
 		}
 	}
+
+	// validate volumes
+	if spec.Volumes != nil {
+		errs = append(errs, validateVolumeMounts(spec.Volumes)...)
+	}
 	return errs
 }
 
@@ -145,6 +150,37 @@ func validateResourceSpec(spec ResourceSpec) []string {
 		}
 	}
 
+	// validate volumes
+	if spec.Volumes != nil {
+		errs = append(errs, validateVolumeMounts(spec.Volumes)...)
+	}
+
+	return errs
+}
+
+func validateVolumeMounts(mounts []VolumeMount) []string {
+	var errs []string
+	names := make(map[string]bool)
+	paths := make(map[string]bool)
+
+	for i, m := range mounts {
+		if m.Name == "" {
+			errs = append(errs, fmt.Sprintf("spec.volumes[%d].name is required", i))
+			continue
+		} else if names[m.Name] {
+			errs = append(errs, fmt.Sprintf("spec.volumes has duplicate name %q", m.Name))
+		}
+		names[m.Name] = true
+
+		if m.MountPath == "" {
+			errs = append(errs, fmt.Sprintf("spec.volumes[%d].mountPath is required", i))
+		} else if !strings.HasPrefix(m.MountPath, "/") {
+			errs = append(errs, fmt.Sprintf("spec.volumes[%d].mountPath %q must be absolute (starts with /)", i, m.MountPath))
+		} else if paths[m.MountPath] {
+			errs = append(errs, fmt.Sprintf("spec.volumes has duplicate mountPath %q", m.MountPath))
+		}
+		paths[m.MountPath] = true
+	}
 	return errs
 }
 

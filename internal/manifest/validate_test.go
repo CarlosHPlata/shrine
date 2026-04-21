@@ -210,3 +210,53 @@ func TestValidate_InvalidTeam(t *testing.T) {
 		}
 	}
 }
+
+func TestValidate_VolumeMountRules(t *testing.T) {
+	cases := []struct {
+		name    string
+		mounts  []VolumeMount
+		wantErr string
+	}{
+		{
+			name:    "missing name is rejected",
+			mounts:  []VolumeMount{{MountPath: "/data"}},
+			wantErr: "spec.volumes[0].name is required",
+		},
+		{
+			name:    "missing mountPath is rejected",
+			mounts:  []VolumeMount{{Name: "data"}},
+			wantErr: "spec.volumes[0].mountPath is required",
+		},
+		{
+			name:    "non-absolute mountPath is rejected",
+			mounts:  []VolumeMount{{Name: "data", MountPath: "relative/path"}},
+			wantErr: "must be absolute (starts with /)",
+		},
+		{
+			name:    "duplicate name is rejected",
+			mounts:  []VolumeMount{{Name: "data", MountPath: "/a"}, {Name: "data", MountPath: "/b"}},
+			wantErr: "spec.volumes has duplicate name \"data\"",
+		},
+		{
+			name:    "duplicate mountPath is rejected",
+			mounts:  []VolumeMount{{Name: "a", MountPath: "/data"}, {Name: "b", MountPath: "/data"}},
+			wantErr: "spec.volumes has duplicate mountPath \"/data\"",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			m := &Manifest{
+				TypeMeta: TypeMeta{Kind: "Application", APIVersion: "shrine/v1"},
+				Application: &ApplicationManifest{
+					Metadata: Metadata{Name: "a", Owner: "team-a"},
+					Spec:     ApplicationSpec{Image: "img", Port: 80, Volumes: tc.mounts},
+				},
+			}
+			err := Validate(m)
+			if err == nil || !strings.Contains(err.Error(), tc.wantErr) {
+				t.Errorf("expected error containing %q, got: %v", tc.wantErr, err)
+			}
+		})
+	}
+}

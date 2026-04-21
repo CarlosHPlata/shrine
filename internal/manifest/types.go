@@ -28,19 +28,25 @@ type Routing struct {
 	PathPrefix string `yaml:"pathPrefix,omitempty"`
 }
 
-// Used in Application spec
+// Used in App and Res spec
 type Networking struct {
 	ExposeToPlatform bool `yaml:"exposeToPlatform,omitempty"`
 }
 
+type VolumeMount struct {
+	Name      string `yaml:"name"`
+	MountPath string `yaml:"mountPath"`
+}
+
 type ApplicationSpec struct {
-	Image        string       `yaml:"image"`
-	Port         int          `yaml:"port,omitempty"`
-	Replicas     int          `yaml:"replicas,omitempty"`
-	Routing      Routing      `yaml:"routing,omitempty"`
-	Dependencies []Dependency `yaml:"dependencies,omitempty"`
-	Env          []EnvVar     `yaml:"env,omitempty"`
-	Networking   Networking   `yaml:"networking,omitempty"`
+	Image        string        `yaml:"image"`
+	Port         int           `yaml:"port,omitempty"`
+	Replicas     int           `yaml:"replicas,omitempty"`
+	Routing      Routing       `yaml:"routing,omitempty"`
+	Dependencies []Dependency  `yaml:"dependencies,omitempty"`
+	Env          []EnvVar      `yaml:"env,omitempty"`
+	Networking   Networking    `yaml:"networking,omitempty"`
+	Volumes      []VolumeMount `yaml:"volumes,omitempty"`
 }
 
 // Output declares a named value that a Resource exposes to consumers.
@@ -54,11 +60,12 @@ type Output struct {
 }
 
 type ResourceSpec struct {
-	Type       string     `yaml:"type"`
-	Version    string     `yaml:"version"`
-	Image      string     `yaml:"image,omitempty"`
-	Outputs    []Output   `yaml:"outputs,omitempty"`
-	Networking Networking `yaml:"networking,omitempty"`
+	Type       string        `yaml:"type"`
+	Version    string        `yaml:"version"`
+	Image      string        `yaml:"image,omitempty"`
+	Outputs    []Output      `yaml:"outputs,omitempty"`
+	Networking Networking    `yaml:"networking,omitempty"`
+	Volumes    []VolumeMount `yaml:"volumes,omitempty"`
 }
 
 type Quotas struct {

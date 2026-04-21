@@ -89,6 +89,14 @@ func (engine *Engine) deployApplication(set *planner.ManifestSet, step planner.P
 	}
 
 	// 3. Create the container
+	volumes := make([]VolumeMount, len(application.Spec.Volumes))
+	for i, v := range application.Spec.Volumes {
+		volumes[i] = VolumeMount{
+			Name:      v.Name,
+			MountPath: v.MountPath,
+		}
+	}
+
 	engine.Observer.OnEvent(Event{
 		Name:   "container.create",
 		Status: StatusInfo,
@@ -101,6 +109,7 @@ func (engine *Engine) deployApplication(set *planner.ManifestSet, step planner.P
 		Image:   application.Spec.Image,
 		Network: application.Metadata.Owner,
 		Env:     env,
+		Volumes: volumes,
 	}
 	if err := engine.Container.CreateContainer(op); err != nil {
 		return engine.emitErr("container.create", map[string]string{"team": application.Metadata.Owner, "name": application.Metadata.Name},
@@ -177,6 +186,14 @@ func (engine *Engine) deployResource(set *planner.ManifestSet, step planner.Plan
 	}
 
 	// 3. Create the container
+	volumes := make([]VolumeMount, len(resource.Spec.Volumes))
+	for i, v := range resource.Spec.Volumes {
+		volumes[i] = VolumeMount{
+			Name:      v.Name,
+			MountPath: v.MountPath,
+		}
+	}
+
 	engine.Observer.OnEvent(Event{
 		Name:   "container.create",
 		Status: StatusInfo,
@@ -189,6 +206,7 @@ func (engine *Engine) deployResource(set *planner.ManifestSet, step planner.Plan
 		Image:   resource.Spec.Image,
 		Network: resource.Metadata.Owner,
 		Env:     env,
+		Volumes: volumes,
 	}
 	if err := engine.Container.CreateContainer(op); err != nil {
 		return engine.emitErr("container.create", map[string]string{"team": resource.Metadata.Owner, "name": resource.Metadata.Name},

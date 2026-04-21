@@ -12,7 +12,9 @@ import (
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/filters"
 	"github.com/docker/docker/api/types/image"
+	"github.com/docker/docker/api/types/mount"
 	"github.com/docker/docker/api/types/network"
+	"github.com/docker/docker/api/types/volume"
 	"github.com/docker/docker/client"
 )
 
@@ -160,13 +162,29 @@ func (backend *DockerBackend) CreateContainer(op engine.CreateContainerOp) error
 		"shrine.kind":     op.Kind,
 	}
 
+	// ensuring volumes are created
+	mounts := make([]mount.Mount, len(op.Volumes))
+	for i, v := range op.Volumes {
+		if err := backend.ensureVolume(ctx, op, v); err != nil {
+			return err // ensureVolume already emitted error event
+		}
+
+		mounts[i] = mount.Mount{
+			Type:   mount.TypeVolume,
+			Source: volumeName(op.Team, op.Name, v.Name),
+			Target: v.MountPath,
+		}
+	}
+
 	created, err := backend.client.ContainerCreate(ctx,
 		&container.Config{
 			Image:  op.Image,
 			Env:    op.Env,
 			Labels: labels,
 		},
-		&container.HostConfig{},
+		&container.HostConfig{
+			Mounts: mounts,
+		},
 		&network.NetworkingConfig{
 			EndpointsConfig: map[string]*network.EndpointSettings{
 				netName: {},
@@ -206,6 +224,48 @@ func (backend *DockerBackend) recordDeployment(op engine.CreateContainerOp, ID s
 		Name:        op.Name,
 		ContainerID: ID,
 	})
+}
+
+func (backend *DockerBackend) ensureVolume(ctx context.Context, op engine.CreateContainerOp, v engine.VolumeMount) error {
+	name := volumeName(op.Team, op.Name, v.Name)
+
+	_, err := backend.client.VolumeInspect(ctx, name)
+	if err == nil {
+		// Volume exists, trust it.
+		return nil
+	}
+
+	if !errdefs.IsNotFound(err) {
+		return backend.emitErr("volume.inspect", map[string]string{"name": name},
+			fmt.Errorf("inspecting volume %q: %w", name, err))
+	}
+
+	backend.observer.OnEvent(engine.Event{
+		Name:   "volume.create",
+		Status: engine.StatusInfo,
+		Fields: map[string]string{"name": name, "mount": v.MountPath},
+	})
+
+	_, err = backend.client.VolumeCreate(ctx, volume.CreateOptions{
+		Name: name,
+		Labels: map[string]string{
+			"shrine.team":     op.Team,
+			"shrine.resource": op.Name,
+			"shrine.kind":     op.Kind,
+			"shrine.volume":   v.Name,
+		},
+	})
+	if err != nil {
+		return backend.emitErr("volume.create", map[string]string{"name": name},
+			fmt.Errorf("creating volume %q: %w", name, err))
+	}
+
+	backend.observer.OnEvent(engine.Event{
+		Name:   "volume.created",
+		Status: engine.StatusFinished,
+		Fields: map[string]string{"name": name, "mount": v.MountPath},
+	})
+	return nil
 }
 
 func (backend *DockerBackend) ensureImage(ctx context.Context, ref string) error {
@@ -258,6 +318,10 @@ func (backend *DockerBackend) ensureImage(ctx context.Context, ref string) error
 
 func networkName(team string) string {
 	return fmt.Sprintf("shrine.%s.private", team)
+}
+
+func volumeName(team string, res string, name string) string {
+	return fmt.Sprintf("shrine.%s.%s.%s", team, res, name)
 }
 
 func containerName(team string, name string) string {

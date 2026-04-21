@@ -3,6 +3,7 @@ package dryrun
 import (
 	"fmt"
 	"io"
+	"strings"
 
 	"github.com/CarlosHPlata/shrine/internal/engine"
 )
@@ -36,7 +37,17 @@ func (d *DryRunContainerBackend) RemoveNetwork(name string) error {
 }
 
 func (d *DryRunContainerBackend) CreateContainer(op engine.CreateContainerOp) error {
-	fmt.Fprintf(d.Out, "[DOCKER] ContainerCreate: name=%s.%s image=%s\n", op.Team, op.Name, op.Image)
+	fmt.Fprintf(d.Out, "[DOCKER] ContainerCreate: name=%s.%s image=%s", op.Team, op.Name, op.Image)
+
+	if len(op.Volumes) > 0 {
+		parts := make([]string, len(op.Volumes))
+		for i, v := range op.Volumes {
+			parts[i] = fmt.Sprintf("%s:%s", v.Name, v.MountPath)
+		}
+		fmt.Fprintf(d.Out, " volumes=%s", strings.Join(parts, ", "))
+	}
+
+	fmt.Fprintln(d.Out)
 	return nil
 }
 

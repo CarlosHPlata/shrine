@@ -57,6 +57,12 @@ func (t *TerminalObserver) OnEvent(e engine.Event) {
 	case "container.created":
 		fmt.Fprintf(t.out, "    ✅ Container %s is running\n", e.Fields["name"])
 
+	case "volume.create":
+		fmt.Fprintf(t.out, "    📦 Creating volume: %s\n", e.Fields["name"])
+
+	case "volume.created":
+		fmt.Fprintf(t.out, "    ✅ Volume %s is created\n", e.Fields["name"])
+
 	case "image.pull":
 		t.handleImagePull(e)
 	}
