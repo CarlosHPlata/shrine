@@ -46,7 +46,7 @@ func resolveDependencies(set *ManifestSet, app *manifest.ApplicationManifest) []
 	var errs []error
 	for _, dep := range app.Spec.Dependencies {
 		// Currently we only support Resource dependencies
-		if dep.Kind != "Resource" {
+		if dep.Kind != manifest.ResourceKind {
 			errs = append(errs, fmt.Errorf("app %q: unsupported dependency kind %q (only Resource is supported)", app.Metadata.Name, dep.Kind))
 			continue
 		}

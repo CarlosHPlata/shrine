@@ -51,7 +51,7 @@ func TestResolve(t *testing.T) {
 					Metadata: manifest.Metadata{Name: "app1", Owner: "team-a"},
 					Spec: manifest.ApplicationSpec{
 						Dependencies: []manifest.Dependency{
-							{Kind: "Resource", Name: "db1", Owner: "team-a"},
+							{Kind: manifest.ResourceKind, Name: "db1", Owner: "team-a"},
 						},
 					},
 				},
@@ -77,7 +77,7 @@ func TestResolve(t *testing.T) {
 					Metadata: manifest.Metadata{Name: "app1", Owner: "team-a"},
 					Spec: manifest.ApplicationSpec{
 						Dependencies: []manifest.Dependency{
-							{Kind: "Resource", Name: "nonexistent", Owner: "team-a"},
+							{Kind: manifest.ResourceKind, Name: "nonexistent", Owner: "team-a"},
 						},
 					},
 				},
@@ -98,7 +98,7 @@ func TestResolve(t *testing.T) {
 					Metadata: manifest.Metadata{Name: "app1", Owner: "team-a"},
 					Spec: manifest.ApplicationSpec{
 						Dependencies: []manifest.Dependency{
-							{Kind: "Resource", Name: "db1", Owner: "team-b"},
+							{Kind: manifest.ResourceKind, Name: "db1", Owner: "team-b"},
 						},
 					},
 				},
@@ -124,7 +124,7 @@ func TestResolve(t *testing.T) {
 					Metadata: manifest.Metadata{Name: "app1", Owner: "team-a"},
 					Spec: manifest.ApplicationSpec{
 						Dependencies: []manifest.Dependency{
-							{Kind: "Resource", Name: "db1", Owner: "team-b"},
+							{Kind: manifest.ResourceKind, Name: "db1", Owner: "team-b"},
 						},
 					},
 				},
@@ -150,7 +150,7 @@ func TestResolve(t *testing.T) {
 					Metadata: manifest.Metadata{Name: "app1", Owner: "team-a"},
 					Spec: manifest.ApplicationSpec{
 						Dependencies: []manifest.Dependency{
-							{Kind: "Resource", Name: "db1", Owner: "team-a"}, // Specifies team-a
+							{Kind: manifest.ResourceKind, Name: "db1", Owner: "team-a"}, // Specifies team-a
 						},
 					},
 				},
@@ -229,7 +229,7 @@ func TestResolve(t *testing.T) {
 						Env: []manifest.EnvVar{
 							{Name: "DB_URL", ValueFrom: "resource.db1.url"},       // Valid
 							{Name: "INVALID_FMT", ValueFrom: "resource.db1"},      // Invalid format
-							{Name: "WRONG_PREFIX", ValueFrom: "config.db1.url"},  // Wrong prefix
+							{Name: "WRONG_PREFIX", ValueFrom: "config.db1.url"},   // Wrong prefix
 							{Name: "MISSING_RES", ValueFrom: "resource.db2.url"},  // Missing resource
 							{Name: "MISSING_OUT", ValueFrom: "resource.db1.host"}, // Missing output
 						},
@@ -247,7 +247,7 @@ func TestResolve(t *testing.T) {
 		}
 
 		errs := Resolve(set, store)
-		
+
 		expectedErrors := []string{
 			"invalid valueFrom format \"resource.db1\"",
 			"invalid valueFrom format \"config.db1.url\"",

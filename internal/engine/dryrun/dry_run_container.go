@@ -51,7 +51,7 @@ func (d *DryRunContainerBackend) CreateContainer(op engine.CreateContainerOp) er
 	return nil
 }
 
-func (d *DryRunContainerBackend) RemoveContainer(name string) error {
-	fmt.Fprintf(d.Out, "[DOCKER] ContainerRemove: name=%s\n", name)
+func (d *DryRunContainerBackend) RemoveContainer(op engine.RemoveContainerOp) error {
+	fmt.Fprintf(d.Out, "[DOCKER] ContainerRemove: name=%s.%s\n", op.Team, op.Name)
 	return nil
 }

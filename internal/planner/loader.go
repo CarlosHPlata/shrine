@@ -64,21 +64,21 @@ func getFiles(dir string) ([]string, error) {
 // mapKind routes a single manifest into the correct map within the set.
 func (set *ManifestSet) mapKind(m *manifest.Manifest, path string) error {
 	switch m.Kind {
-	case "Application":
+	case manifest.ApplicationKind:
 		name := m.Application.Metadata.Name
 		if _, exists := set.Applications[name]; exists {
 			return fmt.Errorf("duplicate Application name found: %s", name)
 		}
 		set.Applications[name] = m.Application
 
-	case "Resource":
+	case manifest.ResourceKind:
 		name := m.Resource.Metadata.Name
 		if _, exists := set.Resources[name]; exists {
 			return fmt.Errorf("duplicate Resource name found: %s", name)
 		}
 		set.Resources[name] = m.Resource
 
-	case "Team":
+	case manifest.TeamKind:
 		// Teams are "global" infra, handled by the platform sync process.
 		// The deployment planner focuses on project-specific apps and resources.
 		return nil

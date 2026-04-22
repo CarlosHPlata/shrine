@@ -16,7 +16,7 @@ func TestTeamStore_Operations(t *testing.T) {
 	team := &manifest.TeamManifest{
 		TypeMeta: manifest.TypeMeta{
 			APIVersion: "shrine/v1",
-			Kind:       "Team",
+			Kind:       manifest.TeamKind,
 		},
 		Metadata: manifest.Metadata{
 			Name: "team-a",
@@ -81,7 +81,7 @@ func TestTeamStore_LoadNonExistent(t *testing.T) {
 
 func TestTeamStore_ListPersistence(t *testing.T) {
 	tmpDir := t.TempDir()
-	
+
 	// Create two teams in first store instance
 	store1, _ := NewTeamStore(tmpDir)
 	store1.SaveTeam(&manifest.TeamManifest{Metadata: manifest.Metadata{Name: "team1"}})

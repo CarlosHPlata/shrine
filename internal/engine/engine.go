@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"sort"
 
+	"github.com/CarlosHPlata/shrine/internal/manifest"
 	"github.com/CarlosHPlata/shrine/internal/planner"
 	"github.com/CarlosHPlata/shrine/internal/resolver"
 )
@@ -43,19 +44,38 @@ func (engine *Engine) ExecuteDeploy(steps []planner.PlannedStep, set *planner.Ma
 	}
 
 	for _, step := range steps {
-		if step.Kind == "Resource" {
+		if step.Kind == manifest.ResourceKind {
 			err := engine.deployResource(set, step, resolvedResources[step.Name])
 			if err != nil {
 				return err
 			}
 		}
 
-		if step.Kind == "Application" {
+		if step.Kind == manifest.ApplicationKind {
 			err := engine.deployApplication(set, step, resolvedResources)
 			if err != nil {
 				return err
 			}
 		}
+	}
+	return nil
+}
+
+func (engine *Engine) ExecuteTeardown(team string, steps []planner.PlannedStep) error {
+	if engine.Observer == nil {
+		engine.Observer = NoopObserver{}
+	}
+
+	for _, step := range steps {
+		err := engine.teardownKind(step.Kind, team, step)
+		if err != nil {
+			return err
+		}
+	}
+
+	if err := engine.Container.RemoveNetwork(team); err != nil {
+		return engine.emitErr("network.remove", map[string]string{"team": team},
+			fmt.Errorf("removing network for team %q: %w", team, err))
 	}
 	return nil
 }
@@ -105,7 +125,7 @@ func (engine *Engine) deployApplication(set *planner.ManifestSet, step planner.P
 	op := CreateContainerOp{
 		Team:    application.Metadata.Owner,
 		Name:    application.Metadata.Name,
-		Kind:    "Application",
+		Kind:    manifest.ApplicationKind,
 		Image:   application.Spec.Image,
 		Network: application.Metadata.Owner,
 		Env:     env,
@@ -161,6 +181,25 @@ func (engine *Engine) deployApplication(set *planner.ManifestSet, step planner.P
 	return nil
 }
 
+func (engine *Engine) teardownKind(kind string, team string, step planner.PlannedStep) error {
+	engine.Observer.OnEvent(Event{
+		Name:   kind + ".teardown",
+		Status: StatusStarted,
+		Fields: map[string]string{"team": team, "name": step.Name},
+	})
+
+	op := RemoveContainerOp{
+		Team: team,
+		Name: step.Name,
+	}
+	if err := engine.Container.RemoveContainer(op); err != nil {
+		return engine.emitErr(kind+".remove", map[string]string{"team": team, "name": step.Name},
+			fmt.Errorf("%s %q: %w", kind, step.Name, err))
+	}
+
+	return nil
+}
+
 func (engine *Engine) deployResource(set *planner.ManifestSet, step planner.PlannedStep, resolvedValues map[string]string) error {
 	resource := set.Resources[step.Name]
 
@@ -202,7 +241,7 @@ func (engine *Engine) deployResource(set *planner.ManifestSet, step planner.Plan
 	op := CreateContainerOp{
 		Team:    resource.Metadata.Owner,
 		Name:    resource.Metadata.Name,
-		Kind:    "Resource",
+		Kind:    manifest.ResourceKind,
 		Image:   resource.Spec.Image,
 		Network: resource.Metadata.Owner,
 		Env:     env,

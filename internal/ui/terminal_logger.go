@@ -19,15 +19,29 @@ func NewTerminalObserver(out io.Writer) *TerminalObserver {
 }
 
 func (t *TerminalObserver) OnEvent(e engine.Event) {
+	if e.Status == engine.StatusError {
+		fmt.Fprintf(t.out, "  ❌ Error [%s]: %s\n", e.Name, e.Fields["error"])
+	}
+
 	switch e.Name {
 	case "application.deploy":
 		if e.Status == engine.StatusStarted {
 			fmt.Fprintf(t.out, "🚀 Deploying Application: %s (owner: %s)\n", e.Fields["name"], e.Fields["owner"])
 		}
 
+	case "application.teardown":
+		if e.Status == engine.StatusStarted {
+			fmt.Fprintf(t.out, "🗑️  Tearing down Application: %s (team: %s)\n", e.Fields["name"], e.Fields["team"])
+		}
+
 	case "resource.deploy":
 		if e.Status == engine.StatusStarted {
 			fmt.Fprintf(t.out, "📦 Deploying Resource: %s (type: %s)\n", e.Fields["name"], e.Fields["type"])
+		}
+
+	case "resource.teardown":
+		if e.Status == engine.StatusStarted {
+			fmt.Fprintf(t.out, "🗑️  Tearing down Resource: %s (team: %s)\n", e.Fields["name"], e.Fields["team"])
 		}
 
 	case "network.ensure":
@@ -43,7 +57,20 @@ func (t *TerminalObserver) OnEvent(e engine.Event) {
 		fmt.Fprintf(t.out, "  🌍 Registering DNS: %s\n", e.Fields["domain"])
 
 	case "network.create":
-		fmt.Fprintf(t.out, "    🔨 Creating Docker network: %s (%s)\n", e.Fields["name"], e.Fields["cidr"])
+		switch e.Status {
+		case engine.StatusStarted:
+			fmt.Fprintf(t.out, "    🔨 Creating Docker network: %s\n", e.Fields["name"])
+		case engine.StatusFinished:
+			fmt.Fprintf(t.out, "    ✅ Network created: %s (%s)\n", e.Fields["name"], e.Fields["cidr"])
+		}
+
+	case "network.remove":
+		switch e.Status {
+		case engine.StatusStarted:
+			fmt.Fprintf(t.out, "  🌐 Removing network: %s\n", e.Fields["name"])
+		case engine.StatusFinished:
+			fmt.Fprintf(t.out, "  ✅ Network removed: %s\n", e.Fields["name"])
+		}
 
 	case "container.start":
 		fmt.Fprintf(t.out, "    ▶️  Starting existing container: %s\n", e.Fields["name"])
@@ -56,6 +83,13 @@ func (t *TerminalObserver) OnEvent(e engine.Event) {
 
 	case "container.created":
 		fmt.Fprintf(t.out, "    ✅ Container %s is running\n", e.Fields["name"])
+
+	case "container.remove":
+		if e.Status == engine.StatusInfo && e.Fields["reason"] == "not found" {
+			fmt.Fprintf(t.out, "    ℹ️  Container %s not found, skipping removal\n", e.Fields["name"])
+		} else if e.Status == engine.StatusFinished {
+			fmt.Fprintf(t.out, "    ✅ Container %s removed\n", e.Fields["name"])
+		}
 
 	case "volume.create":
 		fmt.Fprintf(t.out, "    📦 Creating volume: %s\n", e.Fields["name"])

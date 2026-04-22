@@ -76,12 +76,13 @@ func (backend *DockerBackend) CreateNetwork(team string) error {
 			fmt.Errorf("inspecting network %q: %w", name, err))
 	}
 
-	// If not found, create it.
 	backend.observer.OnEvent(engine.Event{
 		Name:   "network.create",
-		Status: engine.StatusInfo,
-		Fields: map[string]string{"name": name, "cidr": cidr},
+		Status: engine.StatusStarted,
+		Fields: map[string]string{"name": name},
 	})
+
+	// If not found, create it.
 	_, err = backend.client.NetworkCreate(ctx, name, network.CreateOptions{
 		Driver: "bridge",
 		IPAM: &network.IPAM{
@@ -94,10 +95,50 @@ func (backend *DockerBackend) CreateNetwork(team string) error {
 			fmt.Errorf("creating network %q: %w", name, err))
 	}
 
+	backend.observer.OnEvent(engine.Event{
+		Name:   "network.create",
+		Status: engine.StatusFinished,
+		Fields: map[string]string{"name": name, "cidr": cidr},
+	})
 	return nil
 }
 
-func (backend *DockerBackend) RemoveNetwork(name string) error {
+func (backend *DockerBackend) RemoveNetwork(team string) error {
+	ctx := context.Background()
+	name := networkName(team)
+
+	existing, err := backend.client.NetworkInspect(ctx, name, network.InspectOptions{})
+	if errdefs.IsNotFound(err) {
+		// already removed
+		return nil
+	}
+
+	backend.observer.OnEvent(engine.Event{
+		Name:   "network.remove",
+		Status: engine.StatusStarted,
+		Fields: map[string]string{"name": name},
+	})
+	if err != nil {
+		return backend.emitErr("network.inspect", map[string]string{"name": name},
+			fmt.Errorf("inspecting network %q: %w", name, err))
+	}
+
+	if len(existing.Containers) > 0 {
+		return backend.emitErr("network.remove", map[string]string{"network": name},
+			fmt.Errorf("network %q is not empty: %d containers", name, len(existing.Containers)))
+	}
+
+	if err := backend.client.NetworkRemove(ctx, existing.ID); err != nil {
+		return backend.emitErr("network.remove", map[string]string{"id": existing.ID},
+			fmt.Errorf("removing network %q: %w", existing.ID, err))
+	}
+
+	backend.observer.OnEvent(engine.Event{
+		Name:   "network.remove",
+		Status: engine.StatusFinished,
+		Fields: map[string]string{"name": name},
+	})
+
 	return nil
 }
 
@@ -121,6 +162,7 @@ func (backend *DockerBackend) CreateContainer(op engine.CreateContainerOp) error
 	switch {
 	case err == nil && existing.Config.Image == op.Image:
 		if !existing.State.Running {
+			// container found, image match but is not running -> start
 			backend.observer.OnEvent(engine.Event{
 				Name:   "container.start",
 				Status: engine.StatusInfo,
@@ -214,7 +256,46 @@ func (backend *DockerBackend) CreateContainer(op engine.CreateContainerOp) error
 	return backend.recordDeployment(op, created.ID)
 }
 
-func (backend *DockerBackend) RemoveContainer(name string) error {
+func (backend *DockerBackend) RemoveContainer(op engine.RemoveContainerOp) error {
+	ctx := context.Background()
+	cName := containerName(op.Team, op.Name)
+
+	existing, err := backend.client.ContainerInspect(ctx, cName)
+	if err != nil && !errdefs.IsNotFound(err) {
+		return backend.emitErr("container.inspect", map[string]string{"name": cName},
+			fmt.Errorf("inspecting container %q: %w", cName, err))
+	}
+
+	if errdefs.IsNotFound(err) {
+		// container is not running, soft success
+		backend.observer.OnEvent(engine.Event{
+			Name:   "container.remove",
+			Status: engine.StatusInfo,
+			Fields: map[string]string{"name": cName, "reason": "not found"},
+		})
+	} else {
+		//removing container
+		if err = backend.client.ContainerRemove(
+			ctx,
+			existing.ID,
+			container.RemoveOptions{Force: true},
+		); err != nil {
+			return backend.emitErr("container.remove", map[string]string{"name": cName},
+				fmt.Errorf("removing container %q: %w", cName, err))
+		}
+	}
+
+	if err := backend.removeDeployment(op); err != nil {
+		return backend.emitErr("deployment.remove", map[string]string{"name": cName},
+			fmt.Errorf("removing deployment for %q: %w", cName, err))
+	}
+
+	backend.observer.OnEvent(engine.Event{
+		Name:   "container.remove",
+		Status: engine.StatusFinished,
+		Fields: map[string]string{"name": cName},
+	})
+
 	return nil
 }
 
@@ -224,6 +305,10 @@ func (backend *DockerBackend) recordDeployment(op engine.CreateContainerOp, ID s
 		Name:        op.Name,
 		ContainerID: ID,
 	})
+}
+
+func (backend *DockerBackend) removeDeployment(op engine.RemoveContainerOp) error {
+	return backend.state.Deployments.Remove(op.Team, op.Name)
 }
 
 func (backend *DockerBackend) ensureVolume(ctx context.Context, op engine.CreateContainerOp, v engine.VolumeMount) error {

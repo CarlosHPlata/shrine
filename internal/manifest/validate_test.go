@@ -138,7 +138,7 @@ func TestValidate_ResourceOutputRules(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			m := &Manifest{
-				TypeMeta: TypeMeta{Kind: "Resource", APIVersion: "shrine/v1"},
+				TypeMeta: TypeMeta{Kind: ResourceKind, APIVersion: "shrine/v1"},
 				Resource: &ResourceManifest{
 					Metadata: Metadata{Name: "r", Owner: "team-a"},
 					Spec:     ResourceSpec{Type: "postgres", Version: "16", Outputs: tc.outputs},
@@ -173,7 +173,7 @@ func TestValidate_ApplicationEnvRules(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			m := &Manifest{
-				TypeMeta: TypeMeta{Kind: "Application", APIVersion: "shrine/v1"},
+				TypeMeta: TypeMeta{Kind: ApplicationKind, APIVersion: "shrine/v1"},
 				Application: &ApplicationManifest{
 					Metadata: Metadata{Name: "a", Owner: "team-a"},
 					Spec:     ApplicationSpec{Image: "img", Port: 80, Env: tc.env},
@@ -247,7 +247,7 @@ func TestValidate_VolumeMountRules(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			m := &Manifest{
-				TypeMeta: TypeMeta{Kind: "Application", APIVersion: "shrine/v1"},
+				TypeMeta: TypeMeta{Kind: ApplicationKind, APIVersion: "shrine/v1"},
 				Application: &ApplicationManifest{
 					Metadata: Metadata{Name: "a", Owner: "team-a"},
 					Spec:     ApplicationSpec{Image: "img", Port: 80, Volumes: tc.mounts},

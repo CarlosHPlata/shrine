@@ -1,10 +1,14 @@
 package planner
 
-import "sort"
+import (
+	"sort"
+
+	"github.com/CarlosHPlata/shrine/internal/manifest"
+)
 
 // PlannedStep represents a single unit of execution in the deployment plan.
 type PlannedStep struct {
-	Kind string // "Resource" or "Application"
+	Kind string // Resource or Application
 	Name string
 }
 
@@ -26,7 +30,7 @@ func Order(set *ManifestSet) []PlannedStep {
 		resourceNames = append(resourceNames, name)
 	}
 	sort.Strings(resourceNames)
-	steps = appendSteps(steps, resourceNames, "Resource")
+	steps = appendSteps(steps, resourceNames, manifest.ResourceKind)
 
 	// 2. Applications Second
 	// We sort names alphabetically to ensure a deterministic deployment plan.
@@ -35,7 +39,7 @@ func Order(set *ManifestSet) []PlannedStep {
 		appNames = append(appNames, name)
 	}
 	sort.Strings(appNames)
-	steps = appendSteps(steps, appNames, "Application")
+	steps = appendSteps(steps, appNames, manifest.ApplicationKind)
 
 	return steps
 }

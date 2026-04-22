@@ -1,5 +1,11 @@
 package manifest
 
+const (
+	ApplicationKind = "Application"
+	ResourceKind    = "Resource"
+	TeamKind        = "Team"
+)
+
 // Metadata holds fields shared by all manifest kinds.
 type Metadata struct {
 	ResourceID string   `yaml:"resourceId,omitempty" json:"resourceId,omitempty"`

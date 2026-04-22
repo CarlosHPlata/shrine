@@ -15,11 +15,16 @@ type CreateContainerOp struct {
 	Volumes []VolumeMount
 }
 
+type RemoveContainerOp struct {
+	Team string
+	Name string
+}
+
 type ContainerBackend interface {
 	CreateNetwork(name string) error
 	RemoveNetwork(name string) error
 	CreateContainer(op CreateContainerOp) error
-	RemoveContainer(name string) error
+	RemoveContainer(op RemoveContainerOp) error
 }
 
 type WriteRouteOp struct {

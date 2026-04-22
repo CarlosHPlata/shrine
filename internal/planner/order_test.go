@@ -20,10 +20,10 @@ func TestOrder(t *testing.T) {
 	}
 
 	expected := []PlannedStep{
-		{Kind: "Resource", Name: "res-b"},
-		{Kind: "Resource", Name: "res-y"},
-		{Kind: "Application", Name: "app-a"},
-		{Kind: "Application", Name: "app-z"},
+		{Kind: manifest.ResourceKind, Name: "res-b"},
+		{Kind: manifest.ResourceKind, Name: "res-y"},
+		{Kind: manifest.ApplicationKind, Name: "app-a"},
+		{Kind: manifest.ApplicationKind, Name: "app-z"},
 	}
 
 	actual := Order(set)

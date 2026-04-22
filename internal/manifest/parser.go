@@ -40,13 +40,13 @@ func probeKind(data []byte) (*Manifest, error) {
 
 func parseManifest(meta *Manifest, data []byte) (*Manifest, error) {
 	switch meta.TypeMeta.Kind {
-	case "Application":
+	case ApplicationKind:
 		var app ApplicationManifest
 		if err := yaml.Unmarshal(data, &app); err != nil {
 			return nil, fmt.Errorf("parsing Application manifest: %w", err)
 		}
 		meta.Application = &app
-	case "Resource":
+	case ResourceKind:
 		var res ResourceManifest
 		if err := yaml.Unmarshal(data, &res); err != nil {
 			return nil, fmt.Errorf("parsing Resource manifest: %w", err)
@@ -56,7 +56,7 @@ func parseManifest(meta *Manifest, data []byte) (*Manifest, error) {
 			res.Spec.Image = res.Spec.Type + ":" + res.Spec.Version
 		}
 		meta.Resource = &res
-	case "Team":
+	case TeamKind:
 		var team TeamManifest
 		if err := yaml.Unmarshal(data, &team); err != nil {
 			return nil, fmt.Errorf("parsing Team manifest: %w", err)

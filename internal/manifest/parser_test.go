@@ -17,8 +17,8 @@ func TestParse_ApplicationManifest(t *testing.T) {
 		t.Fatalf("Parse returned error: %v", err)
 	}
 
-	if m.Kind != "Application" {
-		t.Errorf("Kind = %q, want %q", m.Kind, "Application")
+	if m.Kind != ApplicationKind {
+		t.Errorf("Kind = %q, want %q", m.Kind, ApplicationKind)
 	}
 	if m.APIVersion != "shrine/v1" {
 		t.Errorf("APIVersion = %q, want %q", m.APIVersion, "shrine/v1")
@@ -55,8 +55,8 @@ func TestParse_ApplicationManifest(t *testing.T) {
 		t.Fatalf("Dependencies count = %d, want 1", len(app.Spec.Dependencies))
 	}
 	dep := app.Spec.Dependencies[0]
-	if dep.Kind != "Resource" {
-		t.Errorf("Dependency.Kind = %q, want %q", dep.Kind, "Resource")
+	if dep.Kind != ResourceKind {
+		t.Errorf("Dependency.Kind = %q, want %q", dep.Kind, ResourceKind)
 	}
 	if dep.Name != "hello-db" {
 		t.Errorf("Dependency.Name = %q, want %q", dep.Name, "hello-db")
@@ -88,8 +88,8 @@ func TestParse_TeamManifest(t *testing.T) {
 		t.Fatalf("Parse returned error: %v", err)
 	}
 
-	if m.Kind != "Team" {
-		t.Errorf("Kind = %q, want %q", m.Kind, "Team")
+	if m.Kind != TeamKind {
+		t.Errorf("Kind = %q, want %q", m.Kind, TeamKind)
 	}
 	if m.APIVersion != "shrine/v1" {
 		t.Errorf("APIVersion = %q, want %q", m.APIVersion, "shrine/v1")
@@ -135,8 +135,8 @@ func TestParse_ResourceManifest(t *testing.T) {
 		t.Fatalf("Parse returned error: %v", err)
 	}
 
-	if m.Kind != "Resource" {
-		t.Errorf("Kind = %q, want %q", m.Kind, "Resource")
+	if m.Kind != ResourceKind {
+		t.Errorf("Kind = %q, want %q", m.Kind, ResourceKind)
 	}
 	if m.APIVersion != "shrine/v1" {
 		t.Errorf("APIVersion = %q, want %q", m.APIVersion, "shrine/v1")
