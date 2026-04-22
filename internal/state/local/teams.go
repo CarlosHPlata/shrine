@@ -71,7 +71,7 @@ func (fs *TeamStore) LoadTeam(name string) (*manifest.TeamManifest, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return nil, fmt.Errorf("team %q not found %w", name, err)
+			return nil, fmt.Errorf("\n  ❌  team %q not found, use 'shrine apply teams' to sync new team definitions\n", name)
 		}
 		return nil, fmt.Errorf("reading team file: %w", err)
 	}

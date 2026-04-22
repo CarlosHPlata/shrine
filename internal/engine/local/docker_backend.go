@@ -275,6 +275,11 @@ func (backend *DockerBackend) RemoveContainer(op engine.RemoveContainerOp) error
 		})
 	} else {
 		//removing container
+		backend.observer.OnEvent(engine.Event{
+			Name:   "container.remove",
+			Status: engine.StatusStarted,
+			Fields: map[string]string{"name": cName},
+		})
 		if err = backend.client.ContainerRemove(
 			ctx,
 			existing.ID,

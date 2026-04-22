@@ -57,20 +57,12 @@ func (t *TerminalObserver) OnEvent(e engine.Event) {
 		fmt.Fprintf(t.out, "  🌍 Registering DNS: %s\n", e.Fields["domain"])
 
 	case "network.create":
-		switch e.Status {
-		case engine.StatusStarted:
-			fmt.Fprintf(t.out, "    🔨 Creating Docker network: %s\n", e.Fields["name"])
-		case engine.StatusFinished:
-			fmt.Fprintf(t.out, "    ✅ Network created: %s (%s)\n", e.Fields["name"], e.Fields["cidr"])
-		}
+		t.handleStep(e, engine.StatusStarted, "    ", "🔨 Creating Docker network: %s", "name",
+			"✅ Network created: %s (%s)", "name", "cidr")
 
 	case "network.remove":
-		switch e.Status {
-		case engine.StatusStarted:
-			fmt.Fprintf(t.out, "  🌐 Removing network: %s\n", e.Fields["name"])
-		case engine.StatusFinished:
-			fmt.Fprintf(t.out, "  ✅ Network removed: %s\n", e.Fields["name"])
-		}
+		t.handleStep(e, engine.StatusStarted, "  ", "🌐 Removing network: %s", "name",
+			"✅ Network removed: %s", "name")
 
 	case "container.start":
 		fmt.Fprintf(t.out, "    ▶️  Starting existing container: %s\n", e.Fields["name"])
@@ -87,33 +79,52 @@ func (t *TerminalObserver) OnEvent(e engine.Event) {
 	case "container.remove":
 		if e.Status == engine.StatusInfo && e.Fields["reason"] == "not found" {
 			fmt.Fprintf(t.out, "    ℹ️  Container %s not found, skipping removal\n", e.Fields["name"])
-		} else if e.Status == engine.StatusFinished {
-			fmt.Fprintf(t.out, "    ✅ Container %s removed\n", e.Fields["name"])
+		} else {
+			t.handleStep(e, engine.StatusStarted, "    ", "🗑️  Removing container: %s", "name",
+				"✅ Container %s removed", "name")
 		}
 
 	case "volume.create":
-		fmt.Fprintf(t.out, "    📦 Creating volume: %s\n", e.Fields["name"])
+		// volume.create uses StatusInfo as its "started" status in docker_backend.go
+		t.handleStep(e, engine.StatusInfo, "    ", "📦 Creating volume: %s", "name", "", "")
 
 	case "volume.created":
-		fmt.Fprintf(t.out, "    ✅ Volume %s is created\n", e.Fields["name"])
+		// volume.created is only StatusFinished, so we treat it as the finish of volume.create
+		// We set startStatus to something that won't match so it only triggers the Finished case
+		e.Name = "volume.create"
+		t.handleStep(e, "", "    ", "", "", "✅ Volume %s is created", "name")
 
 	case "image.pull":
-		t.handleImagePull(e)
+		t.handleStep(e, engine.StatusStarted, "    ", "📥 Pulling image %s...", "ref", "✅ Pulled image %s", "ref")
 	}
 }
 
-func (t *TerminalObserver) handleImagePull(e engine.Event) {
+func (t *TerminalObserver) handleStep(e engine.Event, startStatus engine.EventStatus, prefix string, startFmt string, startFields string, finishFmt string, finishFields ...string) {
 	switch e.Status {
-	case engine.StatusStarted:
-		t.spinner = newSpinner(t.out, fmt.Sprintf("Pulling image %s...", e.Fields["ref"]))
+	case startStatus:
+		msg := fmt.Sprintf(startFmt, e.Fields[startFields])
+		t.spinner = newSpinner(t.out, prefix+msg)
 		t.spinner.start()
-	case engine.StatusFinished, engine.StatusError:
+	case engine.StatusFinished:
+		if t.spinner != nil {
+			t.spinner.stop()
+			t.spinner = nil
+		}
+		if finishFmt != "" {
+			args := make([]interface{}, len(finishFields))
+			for i, f := range finishFields {
+				args[i] = e.Fields[f]
+			}
+			fmt.Fprintf(t.out, prefix+finishFmt+"\n", args...)
+		}
+	case engine.StatusError:
 		if t.spinner != nil {
 			t.spinner.stop()
 			t.spinner = nil
 		}
 	}
 }
+
 
 // spinner runs a simple terminal animation in a goroutine.
 type spinner struct {
