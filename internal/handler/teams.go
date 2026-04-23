@@ -146,8 +146,23 @@ func DescribeTeam(name string, store state.TeamStore) error {
 }
 
 // DeleteTeam removes a team from state.
-func DeleteTeam(name string, store state.TeamStore) error {
-	if err := store.DeleteTeam(name); err != nil {
+func DeleteTeam(name string, store *state.Store) error {
+	// 1. Check for active deployments
+	deployments, err := store.Deployments.List(name)
+	if err != nil {
+		return fmt.Errorf("checking team deployments: %w", err)
+	}
+	if len(deployments) > 0 {
+		return fmt.Errorf("cannot delete team %q: it has %d active deployments (run teardown first)", name, len(deployments))
+	}
+
+	// 2. Release subnet
+	if err := store.Subnets.ReleaseSubnet(name); err != nil {
+		return fmt.Errorf("releasing team subnet: %w", err)
+	}
+
+	// 3. Delete team from registry
+	if err := store.Teams.DeleteTeam(name); err != nil {
 		return err
 	}
 

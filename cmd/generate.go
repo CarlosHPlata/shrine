@@ -51,7 +51,7 @@ var generateAppCmd = &cobra.Command{
 		}
 		domain := appDomain
 		if domain == "" {
-			domain = name + ".home.lab"
+			domain = name + ".shrine.lab"
 		}
 		pathPrefix := appPathPrefix
 		if pathPrefix == "" {

@@ -170,6 +170,29 @@ func (s *SubnetStore) GetSubnet(team string) (string, error) {
 	return "", state.ErrSubnetNotFound
 }
 
+func (s *SubnetStore) ReleaseSubnet(team string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	cidr, ok := s.subnets[team]
+	if !ok {
+		return nil // idempotent
+	}
+
+	ip, _, err := net.ParseCIDR(cidr)
+	if err != nil {
+		return fmt.Errorf("parsing stored CIDR %q: %w", cidr, err)
+	}
+
+	ipv4 := ip.To4()
+	if ipv4 != nil {
+		delete(s.taken, ipv4[2])
+	}
+	delete(s.subnets, team)
+
+	return s.save()
+}
+
 func (s *SubnetStore) ListSubnets() (state.SubnetMap, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()

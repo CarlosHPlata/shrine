@@ -1,0 +1,16 @@
+apiVersion: shrine/v1
+kind: Application
+metadata:
+  name: externaldeps
+  owner: external
+  access:
+    - team-a
+spec:
+  image: 192.168.1.206:8080/aterrizardeps:latest
+  port: 8080
+  replicas: 1
+  routing:
+    domain: externaldeps.shrine.lab
+    pathPrefix: /externaldeps
+  networking:
+    exposeToPlatform: true 

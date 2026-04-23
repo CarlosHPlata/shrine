@@ -1,0 +1,11 @@
+apiVersion: shrine/v1
+kind: Team
+metadata:
+  name: backend
+spec:
+  displayName: "Aterrizar Backend"
+  contact: "admin@backend.com"
+  quotas:
+    maxApps: 2
+    maxResources: 2
+  registryUser: legion

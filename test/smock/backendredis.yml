@@ -1,0 +1,21 @@
+apiVersion: shrine/v1
+kind: Resource
+metadata:
+  name: backendredis
+  owner: backend
+spec:
+  type: redis
+  version: latest
+  outputs:
+    - name: host
+    - name: port
+      value: 6379
+    - name: user
+      generated: true
+    - name: "REDIS_DATABASES"
+      value: 16
+    - name: "REDIS_PASSWORD"
+      generated: true
+
+  networking:
+    exposeToPlatform: false

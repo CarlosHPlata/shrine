@@ -138,6 +138,20 @@ func TestSubnetStore_Interface(t *testing.T) {
 	if len(subnets) != 1 || subnets["team-a"] != cidr1 {
 		t.Errorf("ListSubnets: got %v, want map[team-a:%s]", subnets, cidr1)
 	}
+
+	// 5. ReleaseSubnet
+	if err := store.ReleaseSubnet("team-a"); err != nil {
+		t.Fatalf("ReleaseSubnet failed: %v", err)
+	}
+	_, err = store.GetSubnet("team-a")
+	if !errors.Is(err, state.ErrSubnetNotFound) {
+		t.Errorf("GetSubnet after ReleaseSubnet: got error %v, want %v", err, state.ErrSubnetNotFound)
+	}
+
+	// 6. Idempotent ReleaseSubnet
+	if err := store.ReleaseSubnet("team-a"); err != nil {
+		t.Errorf("idempotent ReleaseSubnet failed: %v", err)
+	}
 }
 
 func TestSubnetStore_DefensiveCopy(t *testing.T) {

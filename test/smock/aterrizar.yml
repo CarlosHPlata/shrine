@@ -1,0 +1,40 @@
+apiVersion: shrine/v1
+kind: Application
+metadata:
+  name: aterrizar
+  owner: backend
+spec:
+  image: 192.168.1.206:8080/aterrizar:latest
+  port: 8080
+  replicas: 1
+  routing:
+    domain: aterrizar.shrine.lab
+    pathPrefix: /aterrizar
+  dependencies:
+    - kind: Resource
+      name: backendredis
+      owner: backend
+    - kind: Application
+      name: externaldeps
+      owner: external
+  env:
+    - name: "HTTP_CLIENT_EXPERIMENTAL_PLATFORM"
+      valueFrom: application.externaldeps.url
+    - name: "SPRING_DATA_REDIS_HOST"
+      valueFrom: resource.backendredis.host
+    - name: "SPRING_DATA_REDIS_PORT"
+      valueFrom: resource.backendredis.port
+    - name: "SPRING_DATA_REDIS_USERNAME"
+      valueFrom: resource.backendredis.user
+    - name: "SPRING_DATA_REDIS_PASSWORD"
+      valueFrom: resource.backendredis.REDIS_PASSWORD
+    - name: "HTTP_CLIENT_BASE"
+      valueFrom: application.externaldeps.url
+    - name: "HTTP_CLIENT_AVIATOR_BASE_URL"
+      template: "{{.HTTP_CLIENT_BASE}}/aviator/api"
+    - name: "HTTP_CLIENT_EXPERIMENTAL_PLATFORM_BASE_URL"
+      template: "{{.HTTP_CLIENT_BASE}}/experimentation/api"
+    - name: "HTTP_CLIENT_TAX_BASE_URL"
+      template: "{{.HTTP_CLIENT_BASE}}/tax-service"
+  networking:
+    exposeToPlatform: true

@@ -1,0 +1,11 @@
+apiVersion: shrine/v1
+kind: Team
+metadata:
+  name: external
+spec:
+  displayName: "External"
+  contact: "admin@external.com"
+  quotas:
+    maxApps: 2
+    maxResources: 2
+  registryUser: external

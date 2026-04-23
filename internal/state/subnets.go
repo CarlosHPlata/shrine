@@ -12,5 +12,6 @@ type SubnetMap map[string]string
 type SubnetStore interface {
 	AllocateSubnet(team string) (string, error)
 	GetSubnet(team string) (string, error)
+	ReleaseSubnet(team string) error
 	ListSubnets() (SubnetMap, error)
 }

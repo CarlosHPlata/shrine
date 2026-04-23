@@ -17,7 +17,7 @@ var deleteTeamCmd = &cobra.Command{
 	Long:  `Remove a team from the platform state. This does not delete the manifest file.`,
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		return handler.DeleteTeam(args[0], store.Teams)
+		return handler.DeleteTeam(args[0], store)
 	},
 }
 
