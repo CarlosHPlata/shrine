@@ -25,6 +25,7 @@ container api def456 # inline comment
 
 invalid-line
 service db ghi789
+container svc cid999 deadbeef
 `
 	if err := os.WriteFile(filepath.Join(teamDir, "deployments.txt"), []byte(data), 0600); err != nil {
 		t.Fatalf("failed to setup test file: %v", err)
@@ -45,6 +46,7 @@ service db ghi789
 		"web": {Kind: "container", Name: "web", ContainerID: "abc123"},
 		"api": {Kind: "container", Name: "api", ContainerID: "def456"},
 		"db":  {Kind: "service", Name: "db", ContainerID: "ghi789"},
+		"svc": {Kind: "container", Name: "svc", ContainerID: "cid999", ConfigHash: "deadbeef"},
 	}
 
 	if len(deployments) != len(expected) {
@@ -72,7 +74,7 @@ func TestDeploymentStore_Persistence(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewDeploymentStore failed: %v", err)
 	}
-	dep := state.Deployment{Kind: "container", Name: "web", ContainerID: "abc123"}
+	dep := state.Deployment{Kind: "container", Name: "web", ContainerID: "abc123", ConfigHash: "aabbcc"}
 	if err := store1.Record(team, dep); err != nil {
 		t.Fatalf("Record failed: %v", err)
 	}

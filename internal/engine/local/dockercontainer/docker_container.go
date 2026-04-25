@@ -22,19 +22,37 @@ func (backend *DockerBackend) CreateContainer(op engine.CreateContainerOp) error
 			fmt.Errorf("ensuring image %q: %w", op.Image, err))
 	}
 
+	wantHash := configHash(op)
+
 	existing, err := backend.client.ContainerInspect(ctx, cName)
 	switch {
-	case err == nil && existing.Config.Image == op.Image:
-		if !existing.State.Running {
-			backend.emitInfo("container.start", map[string]string{"name": cName})
-			if err := backend.client.ContainerStart(ctx, existing.ID, container.StartOptions{}); err != nil {
-				return backend.emitErr("container.start", map[string]string{"name": cName},
-					fmt.Errorf("starting container %q: %w", cName, err))
+	case err == nil:
+		deployments, stateErr := backend.state.Deployments.List(op.Team)
+		if stateErr != nil {
+			return backend.emitErr("deployment.list", map[string]string{"team": op.Team},
+				fmt.Errorf("listing deployments for team %q: %w", op.Team, stateErr))
+		}
+
+		var current *state.Deployment
+		for _, d := range deployments {
+			if d.Name == op.Name {
+				d := d
+				current = &d
+				break
 			}
 		}
-		return backend.recordDeployment(op, existing.ID)
 
-	case err == nil:
+		if current != nil && current.ConfigHash == wantHash {
+			if !existing.State.Running {
+				backend.emitInfo("container.start", map[string]string{"name": cName})
+				if err := backend.client.ContainerStart(ctx, existing.ID, container.StartOptions{}); err != nil {
+					return backend.emitErr("container.start", map[string]string{"name": cName},
+						fmt.Errorf("starting container %q: %w", cName, err))
+				}
+			}
+			return backend.recordDeployment(op, existing.ID, wantHash)
+		}
+
 		backend.emitInfo("container.recreate", map[string]string{"name": cName})
 		if err := backend.client.ContainerRemove(ctx, existing.ID, container.RemoveOptions{Force: true}); err != nil {
 			return backend.emitErr("container.remove", map[string]string{"name": cName},
@@ -98,7 +116,7 @@ func (backend *DockerBackend) CreateContainer(op engine.CreateContainerOp) error
 	}
 
 	backend.emitFinished("container.created", map[string]string{"name": cName})
-	return backend.recordDeployment(op, created.ID)
+	return backend.recordDeployment(op, created.ID, wantHash)
 }
 
 func (backend *DockerBackend) RemoveContainer(op engine.RemoveContainerOp) error {
@@ -134,12 +152,21 @@ func (backend *DockerBackend) RemoveContainer(op engine.RemoveContainerOp) error
 	return nil
 }
 
-func (backend *DockerBackend) recordDeployment(op engine.CreateContainerOp, ID string) error {
+func (backend *DockerBackend) recordDeployment(op engine.CreateContainerOp, ID string, hash string) error {
 	return backend.state.Deployments.Record(op.Team, state.Deployment{
 		Kind:        op.Kind,
 		Name:        op.Name,
 		ContainerID: ID,
+		ConfigHash:  hash,
 	})
+}
+
+func configHash(op engine.CreateContainerOp) string {
+	volSpecs := make([]string, len(op.Volumes))
+	for i, v := range op.Volumes {
+		volSpecs[i] = v.Name + ":" + v.MountPath
+	}
+	return state.ConfigHash(op.Image, op.Env, volSpecs, op.ExposeToPlatform)
 }
 
 func (backend *DockerBackend) removeDeployment(op engine.RemoveContainerOp) error {

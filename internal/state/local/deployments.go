@@ -95,13 +95,17 @@ func (s *DeploymentStore) loadTeam(team string) (map[string]state.Deployment, er
 			continue
 		}
 
-		parts := strings.SplitN(line, " ", 3)
-		if len(parts) == 3 {
-			deployments[parts[1]] = state.Deployment{
+		parts := strings.SplitN(line, " ", 4)
+		if len(parts) >= 3 {
+			d := state.Deployment{
 				Kind:        parts[0],
 				Name:        parts[1],
 				ContainerID: parts[2],
 			}
+			if len(parts) == 4 {
+				d.ConfigHash = parts[3]
+			}
+			deployments[parts[1]] = d
 		}
 	}
 
@@ -134,7 +138,7 @@ func (s *DeploymentStore) saveTeam(team string, deployments map[string]state.Dep
 	sort.Strings(keys)
 
 	for _, k := range keys {
-		if _, err := fmt.Fprintf(tmp, "%s %s %s\n", deployments[k].Kind, deployments[k].Name, deployments[k].ContainerID); err != nil {
+		if _, err := fmt.Fprintf(tmp, "%s %s %s %s\n", deployments[k].Kind, deployments[k].Name, deployments[k].ContainerID, deployments[k].ConfigHash); err != nil {
 			return fmt.Errorf("writing to temporary deployments file: %w", err)
 		}
 	}
