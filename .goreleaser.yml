@@ -25,9 +25,6 @@ builds:
 archives:
   - id: shrine
     name_template: "shrine_{{ .Os }}_{{ .Arch }}"
-    format_overrides:
-      - goos: windows
-        format: zip
     files:
       - LICENSE
 
