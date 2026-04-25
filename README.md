@@ -1,41 +1,51 @@
-# Shrine
+<div align="center">
+  <img src="assets/logo.webp" alt="Shrine logo" width="180" />
+  <h1>Shrine</h1>
+  <p>
+    Shrine is a CLI tool dedicated to deploy and orchestrate your infrastructure through a single Docker agent running, inspired by kubectl it allows you to define your infrastructure in YAML manifests. It brings a declarative workflow without the complexity of running an actual cluster.
+  </p>
 
-**Declarative homelab orchestration.** Define your infrastructure as YAML manifests, and Shrine handles Docker containers, Traefik routing, and DNS — all from a single CLI.
-
-Shrine brings a Kubernetes-inspired declarative workflow to homelabs without the complexity of running an actual cluster. Write manifests, run `shrine deploy`, and your services are live with networking, routing, and DNS configured automatically.
+  <a href="https://github.com/CarlosHPlata/shrine/releases/latest">
+    <img alt="Latest release" src="https://img.shields.io/github/v/release/CarlosHPlata/shrine?style=flat-square&color=3fa37f" />
+  </a>
+  <a href="https://github.com/CarlosHPlata/shrine/releases/latest">
+    <img alt="Release date" src="https://img.shields.io/github/release-date/CarlosHPlata/shrine?style=flat-square&color=1d6fa5" />
+  </a>
+  <a href="https://github.com/CarlosHPlata/shrine/actions/workflows/ci.yml">
+    <img alt="CI" src="https://github.com/CarlosHPlata/shrine/actions/workflows/ci.yml/badge.svg" />
+  </a>
+  <a href="LICENSE">
+    <img alt="License" src="https://img.shields.io/github/license/CarlosHPlata/shrine?style=flat-square&color=3fa37f" />
+  </a>
+</div>
 
 ---
 
-## Features
+## Install
 
-- **Declarative YAML manifests** — Kubernetes-style `Application`, `Resource`, and `Team` kinds
-- **Docker orchestration** — Container lifecycle managed via the official Docker Go SDK (no shell exec)
-- **Automatic networking** — Each team gets an isolated `/24` bridge network; cross-team communication is opt-in
-- **Traefik integration** — Route configs generated and pushed to your gateway over SSH
-- **DNS management** — AdGuard DNS entries created and cleaned up automatically
-- **Team-based access control** — Resources declare who can consume them; Shrine enforces it at deploy time
-- **Quotas** — Limit apps, resources, and allowed resource types per team
-- **Typed resource outputs** — Literals, random-generated secrets, and Go `text/template` compositions, resolved in topological order
-- **Idempotent deploys** — Re-run `deploy` safely; Shrine reconciles state instead of duplicating containers
-- **Dry-run mode** — Preview the full execution plan before touching anything
-- **Local state management** — Subnet allocation, secret generation, and deployment tracking
-
-## Quick Start
-
-### Prerequisites
-
-- Go 1.24+
-- Docker running on your app server
-- Traefik v3 on your gateway (file provider enabled)
-- AdGuard DNS (optional, for automatic DNS entries)
-
-### Install
+**curl (recommended):**
 
 ```bash
-go install github.com/CarlosHPlata/shrine@latest
+curl -fsSL https://raw.githubusercontent.com/CarlosHPlata/shrine/main/install.sh | sh
 ```
 
-Or build from source:
+Downloads the pre-built binary for your OS and architecture and places it in `/usr/local/bin`. Override the install directory:
+
+```bash
+INSTALL_DIR=~/.local/bin curl -fsSL https://raw.githubusercontent.com/CarlosHPlata/shrine/main/install.sh | sh
+```
+
+**Pin to a specific version:**
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/CarlosHPlata/shrine/main/install.sh | sh -s -- --version v0.1.0
+```
+
+**Manual download:**
+
+Pre-built binaries for every release are available on the [Releases page](https://github.com/CarlosHPlata/shrine/releases). Download the archive for your platform, extract, and place the `shrine` binary on your `$PATH`.
+
+**Build from source:**
 
 ```bash
 git clone https://github.com/CarlosHPlata/shrine.git
@@ -43,199 +53,124 @@ cd shrine
 go build -o shrine .
 ```
 
-### Usage
+Verify the installation:
 
 ```bash
-# Deploy a project
-shrine deploy ./projects/team-a/
-
-# Preview what would happen
-shrine deploy ./projects/team-a/ --dry-run
-
-# See exact operations (Docker calls, SSH writes, HTTP requests)
-shrine deploy ./projects/team-a/ --dry-run --verbose
-
-# Tear down a team's resources
-shrine teardown team-a
-
-# Check deployment status
-shrine status
-shrine status team-a
-
-# Manage teams
-shrine generate team team-a                  # scaffold a manifest YAML
-shrine create team -f teams/team-a.yml       # register a single team in state
-shrine apply teams                           # sync all teams/*.yml to state
-shrine get teams                             # list all teams from state
-shrine describe team team-a                  # show team details
-shrine delete team team-a                    # remove from state
+shrine version
 ```
 
-## Manifests
+---
 
-Shrine uses three manifest types, all following a familiar `apiVersion` / `kind` / `metadata` / `spec` structure.
+## Quickstart
 
-### Application
+### 1. Define your manifests
 
-A deployable container with routing and dependency injection:
+A Shrine project is a directory of YAML manifests. Three kinds exist: **Team**, **Resource**, and **Application**.
+
+**Team** — a namespace with quotas and permissions:
 
 ```yaml
+# teams/my-team.yml
 apiVersion: shrine/v1
-kind: Application
+kind: Team
 metadata:
-  name: hello-api
-  owner: team-a
+  name: my-team
 spec:
-  image: hello-api
-  port: 8080
-  replicas: 1
-  routing:
-    domain: hello-api.home.lab
-    pathPrefix: /hello-api
-  dependencies:
-    - kind: Resource
-      name: hello-db
-      owner: team-a
-  env:
-    - name: DATABASE_URL
-      valueFrom: resource.hello-db.url
-    - name: NODE_ENV
-      value: production
+  displayName: "My Team"
+  contact: you@example.com
+  quotas:
+    maxApps: 5
+    maxResources: 5
+    allowedResourceTypes:
+      - postgres
 ```
 
-### Resource
-
-A managed dependency (Postgres, RabbitMQ, Redis, etc.) with access control. Resources declare `outputs` — named values that other manifests can reference via `valueFrom: resource.<name>.<output>`:
+**Resource** — a managed dependency (Postgres, Redis, RabbitMQ, …) with typed outputs:
 
 ```yaml
+# manifests/my-db.yml
 apiVersion: shrine/v1
 kind: Resource
 metadata:
-  name: hello-db
-  owner: team-a
-  access:
-    - team-b
+  name: my-db
+  owner: my-team
 spec:
   type: postgres
   version: "16"
   outputs:
-    - name: host                # infrastructure-synthesized (container name on the team network)
-    - name: port
-      value: "5432"             # literal
-    - name: database
-      value: "hello"
+    - name: host
     - name: password
-      generated: true           # random secret, persisted across redeploys
+      generated: true
     - name: url
-      template: "postgres://postgres:{{.password}}@{{.host}}:{{.port}}/{{.database}}"
-  networking:
-    exposeToplatform: false
+      template: "postgres://postgres:{{.password}}@{{.host}}:5432/app"
 ```
 
-Each output is one of four kinds: a `value` literal, a `generated` random secret, a Go `text/template` composing sibling outputs and built-ins (`{{.team}}`, `{{.name}}`), or bare (no marker) for infrastructure-synthesized values like `host`.
-
-### Team
-
-A registered team space with quotas and permissions:
+**Application** — a deployable container with routing and dependency injection:
 
 ```yaml
+# manifests/my-api.yml
 apiVersion: shrine/v1
-kind: Team
+kind: Application
 metadata:
-  name: team-a
+  name: my-api
+  owner: my-team
 spec:
-  displayName: "Team Alpha"
-  contact: alice@example.com
-  quotas:
-    maxApps: 3
-    maxResources: 5
-    allowedResourceTypes:
-      - postgres
-      - rabbitmq
+  image: my-api:latest
+  port: 8080
+  routing:
+    domain: my-api.home.lab
+  dependencies:
+    - kind: Resource
+      name: my-db
+      owner: my-team
+  env:
+    - name: DATABASE_URL
+      valueFrom: resource.my-db.url
 ```
 
-## Networking Model
+### 2. Deploy
 
-| Concept | Details |
+```bash
+# Register your teams from the teams/ directory
+shrine apply teams
+
+# Preview the full execution plan — nothing is touched
+shrine deploy ./manifests/ --dry-run
+
+# Deploy for real
+shrine deploy ./manifests/
+
+# Check what's running
+shrine status my-team
+
+# Tear down when done
+shrine teardown my-team
+```
+
+---
+
+## Documentation
+
+Full documentation is on the [Shrine Docs site](https://github.com/CarlosHPlata/shrine/wiki) *(coming soon)*.
+
+| Topic | Link |
 |---|---|
-| **Team network** | Each team gets an isolated Docker bridge (`shrine.<owner>.private`) with an auto-assigned `/24` from `10.100.0.0/16` |
-| **Platform network** | A shared network (`shrine.platform`, `10.200.0.0/16`) for cross-team communication |
-| **Isolation by default** | Databases and caches live on the team's private network only |
-| **Opt-in sharing** | Resources with `exposeToplatform: true` join both networks; consumers must be on the resource's `access` list |
+| Manifest reference | TBD |
+| Networking model | TBD |
+| Configuration & state directories | TBD |
+| Traefik integration | TBD |
+| AdGuard DNS integration | TBD |
 
-## Dry-Run Output
-
-Preview deployments before they happen:
-
-```
-$ shrine deploy ./projects/team-a/ --dry-run
-
-[PLAN] team-a
-  CREATE network shrine.team-a.private (10.100.3.0/24)
-  CREATE container team-a.hello-db (postgres:16) on shrine.team-a.private
-  CREATE container team-a.hello-api (hello-api:latest)
-    ENV DATABASE_URL=postgres://postgres:<generated>@team-a.hello-db:5432/hello
-  WRITE  /opt/traefik/config/team-a-hello-api.yml (via SSH)
-  DNS    hello-api.home.lab → gateway
-```
-
-Add `--verbose` to see exact Docker API calls, SSH commands, and HTTP requests.
-
-## Project Structure
-
-```
-shrine/
-├── cmd/                   # CLI verb commands (cobra)
-│   ├── root.go            # Root command, global flags
-│   ├── generate.go        # shrine generate <resource> <name>
-│   ├── create.go          # shrine create <resource> -f <path>
-│   ├── apply.go           # shrine apply <resource>
-│   ├── get.go             # shrine get <resource>
-│   ├── describe.go        # shrine describe <resource> <name>
-│   ├── delete.go          # shrine delete <resource> <name>
-│   ├── deploy.go          # shrine deploy <path>
-│   ├── teardown.go        # shrine teardown <team>
-│   └── status.go          # shrine status [team]
-├── internal/
-│   ├── handler/           # Resource-specific business logic
-│   ├── manifest/          # YAML parsing, validation, schema types
-│   ├── config/            # Path resolution (XDG, FHS, .env)
-│   ├── planner/           # Dependency graph, access checks, ordering
-│   ├── engine/            # Orchestrator + pluggable backend interfaces
-│   │   └── backends/      # ContainerBackend, RoutingBackend, DNSBackend (real + dry-run)
-│   └── state/             # Store interfaces (Teams, Subnets, Secrets, Deployments)
-│       └── local/         # Filesystem-backed implementations
-├── teams/                 # Team manifests (Git is source of truth)
-├── main.go
-├── go.mod
-└── go.sum
-```
-
-## Configuration
-
-Shrine resolves configuration and state directories dynamically:
-
-| Directory | User (XDG) | Root (System) | Env Var | Flag |
-|---|---|---|---|---|
-| **Config** | `~/.config/shrine/` | `/etc/shrine/` | `SHRINE_CONFIG_DIR` | `--config-dir` |
-| **State** | `~/.local/share/shrine/` | `/var/lib/shrine/` | `SHRINE_STATE_DIR` | `--state-dir` |
-
-State tracks team registry, per-team subnet allocations, generated secrets, and deployment records (for teardown and idempotent redeploys).
+---
 
 ## Contributing
 
-Contributions are welcome! Please open an issue to discuss what you'd like to change before submitting a PR.
+Contributions are welcome. Please read [CONTRIBUTING.md](CONTRIBUTING.md) before opening a PR — it covers the branching model, commit style, and how to run tests.
 
-```bash
-# Clone and build
-git clone https://github.com/CarlosHPlata/shrine.git
-cd shrine
-go build ./...
+For bugs use the [bug report template](https://github.com/CarlosHPlata/shrine/issues/new?template=bug_report.md) and for new features the [feature request template](https://github.com/CarlosHPlata/shrine/issues/new?template=feature_request.md).
 
-# Run tests
-go test ./...
-```
+---
 
 ## License
 
-MIT
+MIT — see [LICENSE](LICENSE).

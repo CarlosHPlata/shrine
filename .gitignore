@@ -35,3 +35,6 @@ agents/
 dryrundata/
 
 shrine
+
+# GoReleaser output
+dist/
