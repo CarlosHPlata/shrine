@@ -159,14 +159,29 @@ func TestValidate_ApplicationEnvRules(t *testing.T) {
 		wantErr string
 	}{
 		{
-			name:    "missing value and valueFrom is rejected",
+			name:    "missing fields is rejected",
 			env:     []EnvVar{{Name: "X"}},
-			wantErr: "must set one of value or valueFrom",
+			wantErr: "must set one of value/valueFrom/template",
 		},
 		{
-			name:    "both value and valueFrom is rejected",
+			name:    "value and valueFrom is rejected",
 			env:     []EnvVar{{Name: "X", Value: "a", ValueFrom: "resource.db.url"}},
-			wantErr: "value and valueFrom are mutually exclusive",
+			wantErr: "value/valueFrom/template are mutually exclusive",
+		},
+		{
+			name:    "value and template is rejected",
+			env:     []EnvVar{{Name: "X", Value: "a", Template: "{{.Y}}"}},
+			wantErr: "value/valueFrom/template are mutually exclusive",
+		},
+		{
+			name:    "valueFrom and template is rejected",
+			env:     []EnvVar{{Name: "X", ValueFrom: "resource.db.url", Template: "{{.Y}}"}},
+			wantErr: "value/valueFrom/template are mutually exclusive",
+		},
+		{
+			name:    "template only is valid",
+			env:     []EnvVar{{Name: "X", Template: "{{.Y}}"}},
+			wantErr: "",
 		},
 	}
 
@@ -180,8 +195,14 @@ func TestValidate_ApplicationEnvRules(t *testing.T) {
 				},
 			}
 			err := Validate(m)
-			if err == nil || !strings.Contains(err.Error(), tc.wantErr) {
-				t.Errorf("expected error containing %q, got: %v", tc.wantErr, err)
+			if tc.wantErr == "" {
+				if err != nil {
+					t.Errorf("expected no error, got: %v", err)
+				}
+			} else {
+				if err == nil || !strings.Contains(err.Error(), tc.wantErr) {
+					t.Errorf("expected error containing %q, got: %v", tc.wantErr, err)
+				}
 			}
 		})
 	}

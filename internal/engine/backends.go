@@ -6,13 +6,14 @@ type VolumeMount struct {
 }
 
 type CreateContainerOp struct {
-	Team    string
-	Name    string
-	Image   string
-	Kind    string
-	Network string
-	Env     []string
-	Volumes []VolumeMount
+	Team             string
+	Name             string
+	Image            string
+	Kind             string
+	Network          string
+	Env              []string
+	Volumes          []VolumeMount
+	ExposeToPlatform bool
 }
 
 type RemoveContainerOp struct {
@@ -25,6 +26,7 @@ type ContainerBackend interface {
 	RemoveNetwork(name string) error
 	CreateContainer(op CreateContainerOp) error
 	RemoveContainer(op RemoveContainerOp) error
+	CreatePlatformNetwork() error
 }
 
 type WriteRouteOp struct {

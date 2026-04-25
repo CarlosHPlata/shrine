@@ -3,6 +3,7 @@ package local
 import (
 	"github.com/CarlosHPlata/shrine/internal/config"
 	"github.com/CarlosHPlata/shrine/internal/engine"
+	"github.com/CarlosHPlata/shrine/internal/engine/local/dockercontainer"
 	"github.com/CarlosHPlata/shrine/internal/resolver"
 	"github.com/CarlosHPlata/shrine/internal/state"
 )
@@ -10,7 +11,7 @@ import (
 func NewLocalEngine(store *state.Store, registries []config.RegistryConfig, observer engine.Observer) (*engine.Engine, error) {
 	resolver := resolver.NewLiveResolver(store.Secrets)
 
-	containerBackend, err := NewDockerBackend(store, registries, observer)
+	containerBackend, err := dockercontainer.NewDockerBackend(store, registries, observer)
 	if err != nil {
 		return nil, err
 	}

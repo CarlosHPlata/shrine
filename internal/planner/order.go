@@ -1,9 +1,11 @@
 package planner
 
 import (
-	"sort"
+	"fmt"
+	"strings"
 
 	"github.com/CarlosHPlata/shrine/internal/manifest"
+	"github.com/CarlosHPlata/shrine/internal/topo"
 )
 
 // PlannedStep represents a single unit of execution in the deployment plan.
@@ -12,44 +14,40 @@ type PlannedStep struct {
 	Name string
 }
 
-// Order computes the linear execution order for a set of manifests.
-// Currently, dependencies only flow from Applications to Resources, so the rule
-// is simple: create all Resources first, then all Applications.
-//
-// NOTE: This implementation does not currently perform a full topological sort
-// as internal Resource-to-Resource dependencies are not yet supported. When that
-// functionality is added, this function should be updated to use a graph-based
-// sorting algorithm.
-func Order(set *ManifestSet) []PlannedStep {
-	var steps []PlannedStep
+// Order computes the linear execution order for a set of manifests
+// using a topological sort to respect dependencies.
+func Order(set *ManifestSet) ([]PlannedStep, error) {
+	deps := make(map[string]map[string]struct{})
 
-	// 1. Resources First
-	// We sort names alphabetically to ensure a deterministic deployment plan.
-	resourceNames := make([]string, 0, len(set.Resources))
+	// Pass 1: Resources (leaf nodes - no outgoing deps)
 	for name := range set.Resources {
-		resourceNames = append(resourceNames, name)
+		key := manifest.ResourceKind + ":" + name
+		deps[key] = make(map[string]struct{})
 	}
-	sort.Strings(resourceNames)
-	steps = appendSteps(steps, resourceNames, manifest.ResourceKind)
 
-	// 2. Applications Second
-	// We sort names alphabetically to ensure a deterministic deployment plan.
-	appNames := make([]string, 0, len(set.Applications))
-	for name := range set.Applications {
-		appNames = append(appNames, name)
+	// Pass 2: Applications (may have deps)
+	for name, app := range set.Applications {
+		key := manifest.ApplicationKind + ":" + name
+		d := make(map[string]struct{})
+		for _, dep := range app.Spec.Dependencies {
+			d[dep.Kind+":"+dep.Name] = struct{}{}
+		}
+		deps[key] = d
 	}
-	sort.Strings(appNames)
-	steps = appendSteps(steps, appNames, manifest.ApplicationKind)
 
-	return steps
-}
+	order, err := topo.Sort(deps)
+	if err != nil {
+		return nil, fmt.Errorf("dependency cycle in deployment plan: %w", err)
+	}
 
-func appendSteps(steps []PlannedStep, names []string, kind string) []PlannedStep {
-	for _, name := range names {
+	var steps []PlannedStep
+	for _, key := range order {
+		parts := strings.SplitN(key, ":", 2)
 		steps = append(steps, PlannedStep{
-			Kind: kind,
-			Name: name,
+			Kind: parts[0],
+			Name: parts[1],
 		})
 	}
-	return steps
+
+	return steps, nil
 }

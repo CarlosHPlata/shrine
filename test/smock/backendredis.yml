@@ -6,15 +6,16 @@ metadata:
 spec:
   type: redis
   version: latest
+  image: 'bitnami/redis:latest'
   outputs:
     - name: host
     - name: port
       value: 6379
-    - name: user
-      generated: true
-    - name: "REDIS_DATABASES"
+    - name: REDIS_USERNAME
+      value: default
+    - name: REDIS_DATABASES
       value: 16
-    - name: "REDIS_PASSWORD"
+    - name: REDIS_PASSWORD
       generated: true
 
   networking:

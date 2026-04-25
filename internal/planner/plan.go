@@ -29,7 +29,12 @@ func Plan(dir string, store state.TeamStore) PlanResult {
 		return PlanResult{ValidationErr: errs}
 	}
 
-	return PlanResult{Steps: Order(set), ManifestSet: set}
+	steps, err := Order(set)
+	if err != nil {
+		return PlanResult{Error: err}
+	}
+
+	return PlanResult{Steps: steps, ManifestSet: set}
 }
 
 func PlanTeardown(team string, store state.DeploymentStore) PlanTeardownResult {

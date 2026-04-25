@@ -146,7 +146,7 @@ func TestResolveApplication_StaticAndValueFrom(t *testing.T) {
 		"db": {"url": "postgres://..."},
 	}
 
-	env, err := NewLiveResolver(nil).ResolveApplication(app, resolved)
+	env, err := NewLiveResolver(nil).ResolveApplication(app, ResolvedDependencies{Resources: resolved})
 	if err != nil {
 		t.Fatalf("ResolveApplication returned error: %v", err)
 	}
@@ -167,8 +167,170 @@ func TestResolveApplication_MissingResource(t *testing.T) {
 			},
 		},
 	}
-	_, err := NewLiveResolver(nil).ResolveApplication(app, map[string]map[string]string{})
+	_, err := NewLiveResolver(nil).ResolveApplication(app, ResolvedDependencies{Resources: map[string]map[string]string{}})
 	if err == nil || !strings.Contains(err.Error(), "unknown resource") {
 		t.Errorf("expected unknown resource error, got: %v", err)
 	}
+}
+func TestResolveApplication_Templates(t *testing.T) {
+	t.Run("simple template", func(t *testing.T) {
+		app := &manifest.ApplicationManifest{
+			Metadata: manifest.Metadata{Name: "api", Owner: "team-a"},
+			Spec: manifest.ApplicationSpec{
+				Env: []manifest.EnvVar{
+					{Name: "FOO", Value: "hello"},
+					{Name: "BAR", Template: "{{.FOO}}/world"},
+				},
+			},
+		}
+		env, err := NewLiveResolver(nil).ResolveApplication(app, ResolvedDependencies{})
+		if err != nil {
+			t.Fatalf("error: %v", err)
+		}
+		if env["BAR"] != "hello/world" {
+			t.Errorf("BAR = %q, want hello/world", env["BAR"])
+		}
+	})
+
+	t.Run("template with valueFrom", func(t *testing.T) {
+		app := &manifest.ApplicationManifest{
+			Metadata: manifest.Metadata{Name: "api", Owner: "team-a"},
+			Spec: manifest.ApplicationSpec{
+				Env: []manifest.EnvVar{
+					{Name: "HOST", ValueFrom: "resource.db.host"},
+					{Name: "URL", Template: "http://{{.HOST}}:8080"},
+				},
+			},
+		}
+		resolved := map[string]map[string]string{
+			"db": {"host": "db-server"},
+		}
+		env, err := NewLiveResolver(nil).ResolveApplication(app, ResolvedDependencies{Resources: resolved})
+		if err != nil {
+			t.Fatalf("error: %v", err)
+		}
+		if env["URL"] != "http://db-server:8080" {
+			t.Errorf("URL = %q, want http://db-server:8080", env["URL"])
+		}
+	})
+
+	t.Run("template chain", func(t *testing.T) {
+		app := &manifest.ApplicationManifest{
+			Metadata: manifest.Metadata{Name: "api", Owner: "team-a"},
+			Spec: manifest.ApplicationSpec{
+				Env: []manifest.EnvVar{
+					{Name: "C", Value: "C"},
+					{Name: "B", Template: "{{.C}}+B"},
+					{Name: "A", Template: "{{.B}}+A"},
+				},
+			},
+		}
+		env, err := NewLiveResolver(nil).ResolveApplication(app, ResolvedDependencies{})
+		if err != nil {
+			t.Fatalf("error: %v", err)
+		}
+		if env["A"] != "C+B+A" {
+			t.Errorf("A = %q, want C+B+A", env["A"])
+		}
+	})
+
+	t.Run("cycle detected", func(t *testing.T) {
+		app := &manifest.ApplicationManifest{
+			Metadata: manifest.Metadata{Name: "api", Owner: "team-a"},
+			Spec: manifest.ApplicationSpec{
+				Env: []manifest.EnvVar{
+					{Name: "A", Template: "{{.B}}"},
+					{Name: "B", Template: "{{.A}}"},
+				},
+			},
+		}
+		_, err := NewLiveResolver(nil).ResolveApplication(app, ResolvedDependencies{})
+		if err == nil || !strings.Contains(err.Error(), "template cycle") {
+			t.Errorf("expected cycle error, got: %v", err)
+		}
+	})
+
+	t.Run("built-ins visible", func(t *testing.T) {
+		app := &manifest.ApplicationManifest{
+			Metadata: manifest.Metadata{Name: "api", Owner: "team-a"},
+			Spec: manifest.ApplicationSpec{
+				Env: []manifest.EnvVar{
+					{Name: "ID", Template: "{{.team}}.{{.name}}"},
+				},
+			},
+		}
+		env, err := NewLiveResolver(nil).ResolveApplication(app, ResolvedDependencies{})
+		if err != nil {
+			t.Fatalf("error: %v", err)
+		}
+		if env["ID"] != "team-a.api" {
+			t.Errorf("ID = %q, want team-a.api", env["ID"])
+		}
+	})
+
+	t.Run("app-to-app dependency", func(t *testing.T) {
+		app := &manifest.ApplicationManifest{
+			Metadata: manifest.Metadata{Name: "consumer", Owner: "team-a"},
+			Spec: manifest.ApplicationSpec{
+				Env: []manifest.EnvVar{
+					{Name: "PRODUCER_HOST", ValueFrom: "application.producer.host"},
+				},
+			},
+		}
+		resolvedApps := map[string]map[string]string{
+			"producer": {"host": "team-b.producer", "port": "80"},
+		}
+		env, err := NewLiveResolver(nil).ResolveApplication(app, ResolvedDependencies{Applications: resolvedApps})
+		if err != nil {
+			t.Fatalf("error: %v", err)
+		}
+		if env["PRODUCER_HOST"] != "team-b.producer" {
+			t.Errorf("PRODUCER_HOST = %q, want team-b.producer", env["PRODUCER_HOST"])
+		}
+	})
+}
+
+func TestResolveApplication_AppBuiltins(t *testing.T) {
+	app := &manifest.ApplicationManifest{
+		Metadata: manifest.Metadata{Name: "api", Owner: "team-a"},
+		Spec: manifest.ApplicationSpec{
+			Env: []manifest.EnvVar{
+				{Name: "WORKER_HOST", ValueFrom: "application.worker.host"},
+				{Name: "WORKER_PORT", ValueFrom: "application.worker.port"},
+			},
+		},
+	}
+
+	deps := ResolvedDependencies{
+		Applications: map[string]map[string]string{
+			"worker": {"host": "team-b.worker", "port": "8080"},
+		},
+	}
+
+	env, err := NewLiveResolver(nil).ResolveApplication(app, deps)
+	if err != nil {
+		t.Fatalf("ResolveApplication returned error: %v", err)
+	}
+
+	if env["WORKER_HOST"] != "team-b.worker" {
+		t.Errorf("WORKER_HOST = %q, want %q", env["WORKER_HOST"], "team-b.worker")
+	}
+	if env["WORKER_PORT"] != "8080" {
+		t.Errorf("WORKER_PORT = %q, want %q", env["WORKER_PORT"], "8080")
+	}
+
+	t.Run("invalid built-in fails", func(t *testing.T) {
+		badApp := &manifest.ApplicationManifest{
+			Metadata: manifest.Metadata{Name: "api", Owner: "team-a"},
+			Spec: manifest.ApplicationSpec{
+				Env: []manifest.EnvVar{
+					{Name: "URL", ValueFrom: "application.worker.url"},
+				},
+			},
+		}
+		_, err := NewLiveResolver(nil).ResolveApplication(badApp, deps)
+		if err == nil || !strings.Contains(err.Error(), "has no resolved output \"url\"") {
+			t.Errorf("expected missing output error, got: %v", err)
+		}
+	})
 }

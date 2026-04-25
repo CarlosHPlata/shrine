@@ -9,18 +9,29 @@ import (
 
 	"github.com/CarlosHPlata/shrine/internal/manifest"
 	"github.com/CarlosHPlata/shrine/internal/state"
+	"github.com/CarlosHPlata/shrine/internal/topo"
 )
 
 // generatedSecretLength is the byte length passed to the secret store for
 // outputs marked `generated: true`.
 const generatedSecretLength = 32
 
+// ResolvedDependencies bundles the materialized outputs of resources and the
+// synthesized built-ins of applications for use during final resolution.
+type ResolvedDependencies struct {
+	Resources    map[string]map[string]string
+	Applications map[string]map[string]string
+}
+
 // Resolver materializes manifest outputs and application env vars into final
 // string values. Use NewLiveResolver for real deployments or NewDryRunResolver
 // for planning/previewing.
 type Resolver interface {
 	ResolveResource(res *manifest.ResourceManifest) (map[string]string, error)
-	ResolveApplication(app *manifest.ApplicationManifest, resolvedResources map[string]map[string]string) (map[string]string, error)
+	ResolveApplication(
+		app *manifest.ApplicationManifest,
+		deps ResolvedDependencies,
+	) (map[string]string, error)
 }
 
 type LiveResolver struct {
@@ -72,7 +83,11 @@ func (r *LiveResolver) ResolveResource(res *manifest.ResourceManifest) (map[stri
 
 	// Pass 2: topologically sort templates by their sibling references and
 	// render them in order.
-	rendered, err := renderTemplates(res.Metadata.Name, templates, values)
+	tmplSrcs := make(map[string]string, len(templates))
+	for _, t := range templates {
+		tmplSrcs[t.Name] = t.Template
+	}
+	rendered, err := renderTemplates(fmt.Sprintf("resource %q", res.Metadata.Name), tmplSrcs, values)
 	if err != nil {
 		return nil, err
 	}
@@ -86,38 +101,75 @@ func (r *LiveResolver) ResolveResource(res *manifest.ResourceManifest) (map[stri
 // valueFrom.
 func (r *LiveResolver) ResolveApplication(
 	app *manifest.ApplicationManifest,
-	resolvedResources map[string]map[string]string,
+	deps ResolvedDependencies,
 ) (map[string]string, error) {
 	env := make(map[string]string, len(app.Spec.Env))
+	tmplSrcs := make(map[string]string)
+
 	for _, e := range app.Spec.Env {
 		switch {
 		case e.Value != "":
 			env[e.Name] = e.Value
 		case e.ValueFrom != "":
-			val, err := lookupValueFrom(e.ValueFrom, resolvedResources)
+			val, err := lookupValueFrom(e.ValueFrom, deps)
 			if err != nil {
 				return nil, fmt.Errorf("app %q: env %q: %w", app.Metadata.Name, e.Name, err)
 			}
 			env[e.Name] = val
+		case e.Template != "":
+			tmplSrcs[e.Name] = e.Template
 		default:
-			return nil, fmt.Errorf("app %q: env %q has neither value nor valueFrom", app.Metadata.Name, e.Name)
+			return nil, fmt.Errorf("app %q: env %q has neither value, valueFrom nor template", app.Metadata.Name, e.Name)
 		}
 	}
+
+	if len(tmplSrcs) == 0 {
+		return env, nil
+	}
+
+	// Seed render context with built-ins and sibling non-template envs.
+	ctx := map[string]string{
+		"team": app.Metadata.Owner,
+		"name": app.Metadata.Name,
+	}
+	maps.Copy(ctx, env)
+
+	rendered, err := renderTemplates(fmt.Sprintf("app %q", app.Metadata.Name), tmplSrcs, ctx)
+	if err != nil {
+		return nil, err
+	}
+	maps.Copy(env, rendered)
+
 	return env, nil
 }
 
-func lookupValueFrom(ref string, resolvedResources map[string]map[string]string) (string, error) {
+func lookupValueFrom(
+	ref string,
+	deps ResolvedDependencies,
+) (string, error) {
 	parts := strings.Split(ref, ".")
-	if len(parts) != 3 || parts[0] != "resource" {
+	if len(parts) != 3 {
 		return "", fmt.Errorf("invalid valueFrom format %q", ref)
 	}
-	outputs, ok := resolvedResources[parts[1]]
+
+	var outputs map[string]string
+	var ok bool
+
+	switch parts[0] {
+	case "resource":
+		outputs, ok = deps.Resources[parts[1]]
+	case "application":
+		outputs, ok = deps.Applications[parts[1]]
+	default:
+		return "", fmt.Errorf("invalid valueFrom prefix %q (must be resource or application)", parts[0])
+	}
+
 	if !ok {
-		return "", fmt.Errorf("unknown resource %q in valueFrom %q", parts[1], ref)
+		return "", fmt.Errorf("unknown %s %q in valueFrom %q", parts[0], parts[1], ref)
 	}
 	val, ok := outputs[parts[2]]
 	if !ok {
-		return "", fmt.Errorf("resource %q has no resolved output %q", parts[1], parts[2])
+		return "", fmt.Errorf("%s %q has no resolved output %q", parts[0], parts[1], parts[2])
 	}
 	return val, nil
 }
@@ -125,7 +177,7 @@ func lookupValueFrom(ref string, resolvedResources map[string]map[string]string)
 // renderTemplates resolves `templates` in topological order based on their
 // inter-template references, erroring on cycles. `values` provides the values
 // of non-template outputs and built-ins and is not mutated.
-func renderTemplates(resName string, templates []manifest.Output, values map[string]string) (map[string]string, error) {
+func renderTemplates(scope string, templates, values map[string]string) (map[string]string, error) {
 	if len(templates) == 0 {
 		return nil, nil
 	}
@@ -134,32 +186,26 @@ func renderTemplates(resName string, templates []manifest.Output, values map[str
 	parsed := make(map[string]*template.Template, len(templates))
 	// deps[name] = set of sibling template names this template references.
 	deps := make(map[string]map[string]struct{}, len(templates))
-	// tmplSet: set of template-output names, used to distinguish template
-	// refs from non-template refs when building the dep graph.
-	tmplSet := make(map[string]struct{}, len(templates))
-	for _, t := range templates {
-		tmplSet[t.Name] = struct{}{}
-	}
 
-	for _, t := range templates {
-		tmpl, err := template.New(t.Name).Parse(t.Template)
+	for name, src := range templates {
+		tmpl, err := template.New(name).Parse(src)
 		if err != nil {
-			return nil, fmt.Errorf("resource %q: parsing template %q: %w", resName, t.Name, err)
+			return nil, fmt.Errorf("%s: parsing template %q: %w", scope, name, err)
 		}
-		parsed[t.Name] = tmpl
+		parsed[name] = tmpl
 
 		d := make(map[string]struct{})
 		for _, ref := range manifest.ExtractFieldRefs(tmpl.Tree) {
-			if _, isTmpl := tmplSet[ref]; isTmpl && ref != t.Name {
+			if _, isTmpl := templates[ref]; isTmpl && ref != name {
 				d[ref] = struct{}{}
 			}
 		}
-		deps[t.Name] = d
+		deps[name] = d
 	}
 
-	order, err := topoSort(deps)
+	order, err := topo.Sort(deps)
 	if err != nil {
-		return nil, fmt.Errorf("resource %q: %w", resName, err)
+		return nil, fmt.Errorf("%s: template cycle: %w", scope, err)
 	}
 
 	// Render in order, accumulating into a local map so earlier templates are
@@ -171,64 +217,10 @@ func renderTemplates(resName string, templates []manifest.Output, values map[str
 	for _, name := range order {
 		var buf bytes.Buffer
 		if err := parsed[name].Execute(&buf, ctx); err != nil {
-			return nil, fmt.Errorf("resource %q: rendering template %q: %w", resName, name, err)
+			return nil, fmt.Errorf("%s: rendering template %q: %w", scope, name, err)
 		}
 		ctx[name] = buf.String()
 		out[name] = buf.String()
 	}
 	return out, nil
-}
-
-// topoSort returns the template names in an order where each name appears
-// after its dependencies, using Kahn's algorithm. Cycles produce an error
-// listing the unresolved nodes.
-func topoSort(deps map[string]map[string]struct{}) ([]string, error) {
-	// reverse[x] = set of nodes that depend on x.
-	reverse := make(map[string]map[string]struct{}, len(deps))
-	indeg := make(map[string]int, len(deps))
-	for node := range deps {
-		indeg[node] = 0
-		reverse[node] = make(map[string]struct{})
-	}
-	for node, ds := range deps {
-		for d := range ds {
-			if _, ok := deps[d]; !ok {
-				// dependency isn't a template — already resolved, skip.
-				continue
-			}
-			reverse[d][node] = struct{}{}
-			indeg[node]++
-		}
-	}
-
-	var queue []string
-	for node, deg := range indeg {
-		if deg == 0 {
-			queue = append(queue, node)
-		}
-	}
-
-	var order []string
-	for len(queue) > 0 {
-		n := queue[0]
-		queue = queue[1:]
-		order = append(order, n)
-		for dep := range reverse[n] {
-			indeg[dep]--
-			if indeg[dep] == 0 {
-				queue = append(queue, dep)
-			}
-		}
-	}
-
-	if len(order) != len(deps) {
-		var stuck []string
-		for node, deg := range indeg {
-			if deg > 0 {
-				stuck = append(stuck, node)
-			}
-		}
-		return nil, fmt.Errorf("template cycle involving outputs: %v", stuck)
-	}
-	return order, nil
 }

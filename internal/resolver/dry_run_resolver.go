@@ -2,6 +2,7 @@ package resolver
 
 import (
 	"fmt"
+	"maps"
 
 	"github.com/CarlosHPlata/shrine/internal/manifest"
 )
@@ -44,25 +45,44 @@ func (r *DryRunResolver) ResolveResource(res *manifest.ResourceManifest) (map[st
 
 func (r *DryRunResolver) ResolveApplication(
 	app *manifest.ApplicationManifest,
-	resolvedResources map[string]map[string]string,
+	deps ResolvedDependencies,
 ) (map[string]string, error) {
 	env := make(map[string]string, len(app.Spec.Env))
+	tmplSrcs := make(map[string]string)
+
 	for _, e := range app.Spec.Env {
 		switch {
 		case e.Value != "":
 			env[e.Name] = e.Value
 		case e.ValueFrom != "":
-			val, err := lookupValueFrom(e.ValueFrom, resolvedResources)
+			val, err := lookupValueFrom(e.ValueFrom, deps)
 			if err != nil {
-				// In dry-run, we might still fail if the referenced resource
-				// wasn't plan-able, but since ExecuteDeploy resolves all
-				// resources first, this should be safe.
 				return nil, fmt.Errorf("dry-run: app %q: env %q: %w", app.Metadata.Name, e.Name, err)
 			}
 			env[e.Name] = val
+		case e.Template != "":
+			tmplSrcs[e.Name] = e.Template
 		default:
-			return nil, fmt.Errorf("dry-run: app %q: env %q has neither value nor valueFrom", app.Metadata.Name, e.Name)
+			return nil, fmt.Errorf("dry-run: app %q: env %q has neither value, valueFrom nor template", app.Metadata.Name, e.Name)
 		}
 	}
+
+	if len(tmplSrcs) == 0 {
+		return env, nil
+	}
+
+	// Seed render context with built-ins and sibling non-template envs.
+	ctx := map[string]string{
+		"team": app.Metadata.Owner,
+		"name": app.Metadata.Name,
+	}
+	maps.Copy(ctx, env)
+
+	rendered, err := renderTemplates(fmt.Sprintf("app %q", app.Metadata.Name), tmplSrcs, ctx)
+	if err != nil {
+		return nil, err
+	}
+	maps.Copy(env, rendered)
+
 	return env, nil
 }

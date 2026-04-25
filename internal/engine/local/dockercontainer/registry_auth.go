@@ -1,4 +1,4 @@
-package local
+package dockercontainer
 
 import (
 	"encoding/base64"
@@ -11,7 +11,7 @@ import (
 
 // registryAuthFor returns the base64 encoded auth JSON Docker expects
 // on ImagePull for the registry implied by the image reference. Returns "" if
-// the image targets a registry we have no credetials for (anonymous pull).
+// the image targets a registry we have no credentials for (anonymous pull).
 func (backend *DockerBackend) registryAuthFor(imageRef string) (string, error) {
 	host := parseRegistryHost(imageRef)
 	if host == "" {

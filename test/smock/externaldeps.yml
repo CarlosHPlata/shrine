@@ -4,7 +4,7 @@ metadata:
   name: externaldeps
   owner: external
   access:
-    - team-a
+    - backend
 spec:
   image: 192.168.1.206:8080/aterrizardeps:latest
   port: 8080

@@ -44,7 +44,11 @@ func (d *DryRunContainerBackend) CreateContainer(op engine.CreateContainerOp) er
 		for i, v := range op.Volumes {
 			parts[i] = fmt.Sprintf("%s:%s", v.Name, v.MountPath)
 		}
-		fmt.Fprintf(d.Out, " volumes=%s", strings.Join(parts, ", "))
+		fmt.Fprintf(d.Out, "\n  volumes=%s", strings.Join(parts, ", "))
+	}
+
+	if op.ExposeToPlatform {
+		fmt.Fprintf(d.Out, "\n  attach to platform network=shrine.platform")
 	}
 
 	fmt.Fprintln(d.Out)
@@ -53,5 +57,10 @@ func (d *DryRunContainerBackend) CreateContainer(op engine.CreateContainerOp) er
 
 func (d *DryRunContainerBackend) RemoveContainer(op engine.RemoveContainerOp) error {
 	fmt.Fprintf(d.Out, "[DOCKER] ContainerRemove: name=%s.%s\n", op.Team, op.Name)
+	return nil
+}
+
+func (d *DryRunContainerBackend) CreatePlatformNetwork() error {
+	fmt.Fprintf(d.Out, "[DOCKER] CreatePlatformNetwork name=shrine.platform\n")
 	return nil
 }

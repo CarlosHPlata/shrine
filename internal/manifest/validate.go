@@ -86,12 +86,8 @@ func validateApplicationSpec(spec ApplicationSpec) []string {
 			errs = append(errs, fmt.Sprintf("spec.env[%d].name is required", i))
 			continue
 		}
-		switch {
-		case e.Value != "" && e.ValueFrom != "":
-			errs = append(errs, fmt.Sprintf("spec.env[%d] %q: value and valueFrom are mutually exclusive", i, e.Name))
-		case e.Value == "" && e.ValueFrom == "":
-			errs = append(errs, fmt.Sprintf("spec.env[%d] %q: must set one of value or valueFrom", i, e.Name))
-		}
+		kinds := countSet(e.Value != "", e.ValueFrom != "", e.Template != "")
+		errs = append(errs, validateExclusiveFields("spec.env", i, e.Name, "value/valueFrom/template", kinds)...)
 	}
 
 	// validate volumes
@@ -124,17 +120,7 @@ func validateResourceSpec(spec ResourceSpec) []string {
 		}
 		seen[o.Name] = true
 
-		kinds := 0
-		if o.Value != "" {
-			kinds++
-		}
-		if o.Generated {
-			kinds++
-		}
-		if o.Template != "" {
-			kinds++
-		}
-
+		kinds := countSet(o.Value != "", o.Generated, o.Template != "")
 		if o.Name == "host" {
 			if kinds > 0 {
 				errs = append(errs, fmt.Sprintf("spec.outputs[%d]: %q is a CLI built-in and must not set value/generated/template", i, o.Name))
@@ -142,12 +128,7 @@ func validateResourceSpec(spec ResourceSpec) []string {
 			continue
 		}
 
-		switch {
-		case kinds == 0:
-			errs = append(errs, fmt.Sprintf("spec.outputs[%d] %q: must set one of value/generated/template", i, o.Name))
-		case kinds > 1:
-			errs = append(errs, fmt.Sprintf("spec.outputs[%d] %q: value/generated/template are mutually exclusive", i, o.Name))
-		}
+		errs = append(errs, validateExclusiveFields("spec.outputs", i, o.Name, "value/generated/template", kinds)...)
 	}
 
 	// validate volumes
@@ -191,6 +172,27 @@ func validateTeamSpec(spec TeamSpec) []string {
 	}
 	if spec.Contact == "" {
 		errs = append(errs, "spec.contact is required")
+	}
+	return errs
+}
+
+func countSet(conds ...bool) int {
+	n := 0
+	for _, c := range conds {
+		if c {
+			n++
+		}
+	}
+	return n
+}
+
+func validateExclusiveFields(path string, index int, name string, labels string, count int) []string {
+	var errs []string
+	switch {
+	case count == 0:
+		errs = append(errs, fmt.Sprintf("%s[%d] %q: must set one of %s", path, index, name, labels))
+	case count > 1:
+		errs = append(errs, fmt.Sprintf("%s[%d] %q: %s are mutually exclusive", path, index, name, labels))
 	}
 	return errs
 }

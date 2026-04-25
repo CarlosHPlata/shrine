@@ -26,6 +26,7 @@ type EnvVar struct {
 	Name      string `yaml:"name"`
 	Value     string `yaml:"value,omitempty"`
 	ValueFrom string `yaml:"valueFrom,omitempty"`
+	Template  string `yaml:"template,omitempty" json:"template,omitempty"`
 }
 
 // Used in Application spec

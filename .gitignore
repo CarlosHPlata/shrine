@@ -31,7 +31,6 @@ go.work.sum
 # .idea/
 .vscode/
 
-AGENTS.md
 agents/
 dryrundata/
 

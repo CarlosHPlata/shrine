@@ -3,6 +3,7 @@ package engine
 import (
 	"fmt"
 	"sort"
+	"strconv"
 
 	"github.com/CarlosHPlata/shrine/internal/manifest"
 	"github.com/CarlosHPlata/shrine/internal/planner"
@@ -31,28 +32,45 @@ func (engine *Engine) ExecuteDeploy(steps []planner.PlannedStep, set *planner.Ma
 		engine.Observer = NoopObserver{}
 	}
 
-	// Pre-resolve every resource up-front so applications can reference their
+	// 1. Pre-resolve every resource up-front so applications can reference their
 	// outputs via valueFrom regardless of deploy order.
-	resolvedResources := make(map[string]map[string]string, len(set.Resources))
+	deps := resolver.ResolvedDependencies{
+		Resources:    make(map[string]map[string]string, len(set.Resources)),
+		Applications: make(map[string]map[string]string, len(set.Applications)),
+	}
+
+	if err := engine.Container.CreatePlatformNetwork(); err != nil {
+		return engine.emitErr("network.create", map[string]string{"name": "platform"},
+			fmt.Errorf("creating platform network: %w", err))
+	}
+
 	for name, res := range set.Resources {
 		values, err := engine.Resolver.ResolveResource(res)
 		if err != nil {
 			return engine.emitErr("resource.resolve", map[string]string{"name": name},
 				fmt.Errorf("resolving resource %q: %w", name, err))
 		}
-		resolvedResources[name] = values
+		deps.Resources[name] = values
+	}
+
+	// Synthesize app built-ins up-front so apps can reference each other.
+	for name, app := range set.Applications {
+		deps.Applications[name] = map[string]string{
+			"host": app.Metadata.Owner + "." + app.Metadata.Name,
+			"port": strconv.Itoa(app.Spec.Port),
+		}
 	}
 
 	for _, step := range steps {
 		if step.Kind == manifest.ResourceKind {
-			err := engine.deployResource(set, step, resolvedResources[step.Name])
+			err := engine.deployResource(set, step, deps.Resources[step.Name])
 			if err != nil {
 				return err
 			}
 		}
 
 		if step.Kind == manifest.ApplicationKind {
-			err := engine.deployApplication(set, step, resolvedResources)
+			err := engine.deployApplication(set, step, deps)
 			if err != nil {
 				return err
 			}
@@ -80,7 +98,11 @@ func (engine *Engine) ExecuteTeardown(team string, steps []planner.PlannedStep) 
 	return nil
 }
 
-func (engine *Engine) deployApplication(set *planner.ManifestSet, step planner.PlannedStep, resolvedResources map[string]map[string]string) error {
+func (engine *Engine) deployApplication(
+	set *planner.ManifestSet,
+	step planner.PlannedStep,
+	deps resolver.ResolvedDependencies,
+) error {
 	application := set.Applications[step.Name]
 
 	engine.Observer.OnEvent(Event{
@@ -90,7 +112,7 @@ func (engine *Engine) deployApplication(set *planner.ManifestSet, step planner.P
 	})
 
 	// 1. Resolve env: static values and valueFrom references.
-	envMap, err := engine.Resolver.ResolveApplication(application, resolvedResources)
+	envMap, err := engine.Resolver.ResolveApplication(application, deps)
 	if err != nil {
 		return engine.emitErr("application.resolve", map[string]string{"name": step.Name},
 			fmt.Errorf("application %q: %w", step.Name, err))
@@ -123,13 +145,14 @@ func (engine *Engine) deployApplication(set *planner.ManifestSet, step planner.P
 		Fields: map[string]string{"team": application.Metadata.Owner, "name": application.Metadata.Name},
 	})
 	op := CreateContainerOp{
-		Team:    application.Metadata.Owner,
-		Name:    application.Metadata.Name,
-		Kind:    manifest.ApplicationKind,
-		Image:   application.Spec.Image,
-		Network: application.Metadata.Owner,
-		Env:     env,
-		Volumes: volumes,
+		Team:             application.Metadata.Owner,
+		Name:             application.Metadata.Name,
+		Kind:             manifest.ApplicationKind,
+		Image:            application.Spec.Image,
+		Network:          application.Metadata.Owner,
+		Env:              env,
+		Volumes:          volumes,
+		ExposeToPlatform: application.Spec.Networking.ExposeToPlatform,
 	}
 	if err := engine.Container.CreateContainer(op); err != nil {
 		return engine.emitErr("container.create", map[string]string{"team": application.Metadata.Owner, "name": application.Metadata.Name},
@@ -239,13 +262,14 @@ func (engine *Engine) deployResource(set *planner.ManifestSet, step planner.Plan
 		Fields: map[string]string{"team": resource.Metadata.Owner, "name": resource.Metadata.Name},
 	})
 	op := CreateContainerOp{
-		Team:    resource.Metadata.Owner,
-		Name:    resource.Metadata.Name,
-		Kind:    manifest.ResourceKind,
-		Image:   resource.Spec.Image,
-		Network: resource.Metadata.Owner,
-		Env:     env,
-		Volumes: volumes,
+		Team:             resource.Metadata.Owner,
+		Name:             resource.Metadata.Name,
+		Kind:             manifest.ResourceKind,
+		Image:            resource.Spec.Image,
+		Network:          resource.Metadata.Owner,
+		Env:              env,
+		Volumes:          volumes,
+		ExposeToPlatform: resource.Spec.Networking.ExposeToPlatform,
 	}
 	if err := engine.Container.CreateContainer(op); err != nil {
 		return engine.emitErr("container.create", map[string]string{"team": resource.Metadata.Owner, "name": resource.Metadata.Name},

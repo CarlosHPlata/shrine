@@ -18,23 +18,23 @@ spec:
       name: externaldeps
       owner: external
   env:
-    - name: "HTTP_CLIENT_EXPERIMENTAL_PLATFORM"
-      valueFrom: application.externaldeps.url
     - name: "SPRING_DATA_REDIS_HOST"
       valueFrom: resource.backendredis.host
     - name: "SPRING_DATA_REDIS_PORT"
       valueFrom: resource.backendredis.port
     - name: "SPRING_DATA_REDIS_USERNAME"
-      valueFrom: resource.backendredis.user
+      valueFrom: resource.backendredis.REDIS_USERNAME
     - name: "SPRING_DATA_REDIS_PASSWORD"
       valueFrom: resource.backendredis.REDIS_PASSWORD
-    - name: "HTTP_CLIENT_BASE"
-      valueFrom: application.externaldeps.url
-    - name: "HTTP_CLIENT_AVIATOR_BASE_URL"
-      template: "{{.HTTP_CLIENT_BASE}}/aviator/api"
-    - name: "HTTP_CLIENT_EXPERIMENTAL_PLATFORM_BASE_URL"
-      template: "{{.HTTP_CLIENT_BASE}}/experimentation/api"
-    - name: "HTTP_CLIENT_TAX_BASE_URL"
-      template: "{{.HTTP_CLIENT_BASE}}/tax-service"
+    - name: externalport
+      valueFrom: application.externaldeps.port
+    - name: externalhost
+      valueFrom: application.externaldeps.host
+    - name: HTTP_CLIENT_AVIATOR_BASE_URL
+      template: "http://{{.externalhost}}:{{.externalport}}/aviator/api/"
+    - name: HTTP_CLIENT_EXPERIMENTAL_PLATFORM_BASE_URL
+      template: "http://{{.externalhost}}:{{.externalport}}/experimentation/api/"
+    - name: HTTP_CLIENT_TAX_BASE_URL
+      template: "http://{{.externalhost}}:{{.externalport}}/tax-service/"
   networking:
     exposeToPlatform: true

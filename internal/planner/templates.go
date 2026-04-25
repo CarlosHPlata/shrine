@@ -40,3 +40,33 @@ func validateTemplates(res *manifest.ResourceManifest) []error {
 	}
 	return errs
 }
+func validateEnvTemplates(app *manifest.ApplicationManifest) []error {
+	var errs []error
+
+	valid := map[string]struct{}{
+		"team": {},
+		"name": {},
+	}
+	for _, e := range app.Spec.Env {
+		valid[e.Name] = struct{}{}
+	}
+
+	for _, e := range app.Spec.Env {
+		if e.Template == "" {
+			continue
+		}
+		tmpl, err := template.New(e.Name).Parse(e.Template)
+		if err != nil {
+			errs = append(errs, fmt.Errorf("app %q: template env %q has invalid syntax: %w",
+				app.Metadata.Name, e.Name, err))
+			continue
+		}
+		for _, ref := range manifest.ExtractFieldRefs(tmpl.Tree) {
+			if _, ok := valid[ref]; !ok {
+				errs = append(errs, fmt.Errorf("app %q: template env %q references unknown variable %q",
+					app.Metadata.Name, e.Name, ref))
+			}
+		}
+	}
+	return errs
+}
