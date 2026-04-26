@@ -38,3 +38,6 @@ shrine
 
 # GoReleaser output
 dist/
+
+# Claude Code local config
+.claude/

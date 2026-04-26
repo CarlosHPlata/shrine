@@ -153,6 +153,7 @@ func (engine *Engine) deployApplication(
 		Env:              env,
 		Volumes:          volumes,
 		ExposeToPlatform: application.Spec.Networking.ExposeToPlatform,
+		ImagePullPolicy:  manifest.EffectivePullPolicy(application.Spec.Image, application.Spec.ImagePullPolicy),
 	}
 	if err := engine.Container.CreateContainer(op); err != nil {
 		return engine.emitErr("container.create", map[string]string{"team": application.Metadata.Owner, "name": application.Metadata.Name},
@@ -270,6 +271,7 @@ func (engine *Engine) deployResource(set *planner.ManifestSet, step planner.Plan
 		Env:              env,
 		Volumes:          volumes,
 		ExposeToPlatform: resource.Spec.Networking.ExposeToPlatform,
+		ImagePullPolicy:  manifest.EffectivePullPolicy(resource.Spec.Image, resource.Spec.ImagePullPolicy),
 	}
 	if err := engine.Container.CreateContainer(op); err != nil {
 		return engine.emitErr("container.create", map[string]string{"team": resource.Metadata.Owner, "name": resource.Metadata.Name},

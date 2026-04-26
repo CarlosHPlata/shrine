@@ -14,6 +14,7 @@ type CreateContainerOp struct {
 	Env              []string
 	Volumes          []VolumeMount
 	ExposeToPlatform bool
+	ImagePullPolicy  string
 }
 
 type RemoveContainerOp struct {
