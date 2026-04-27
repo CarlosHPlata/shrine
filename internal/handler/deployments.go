@@ -130,17 +130,48 @@ func DescribeResource(team, name string, store *state.Store) error {
 }
 
 func describeDeployment(team, name, kind string, store *state.Store) error {
-	deployments, err := store.Deployments.List(team)
-	if err != nil {
-		return fmt.Errorf("listing deployments for team %q: %w", team, err)
+	if team != "" {
+		// Explicit team: search only within that team.
+		deployments, err := store.Deployments.List(team)
+		if err != nil {
+			return fmt.Errorf("listing deployments for team %q: %w", team, err)
+		}
+		for _, d := range deployments {
+			if d.Name == name && d.Kind == kind {
+				printDeploymentDetail(team, d)
+				return nil
+			}
+		}
+		return fmt.Errorf("%s %q not found in team %q", kind, name, team)
 	}
-	for _, d := range deployments {
-		if d.Name == name && d.Kind == kind {
-			printDeploymentDetail(team, d)
-			return nil
+
+	// No team specified: search all teams and disambiguate.
+	all, err := collectAllDeployments(store)
+	if err != nil {
+		return err
+	}
+
+	var matches []teamedDeployment
+	for _, td := range all {
+		if td.Deployment.Name == name && td.Deployment.Kind == kind {
+			matches = append(matches, td)
 		}
 	}
-	return fmt.Errorf("%s %q not found in team %q", kind, name, team)
+
+	switch len(matches) {
+	case 0:
+		return fmt.Errorf("%s %q not found in any team", kind, name)
+	case 1:
+		printDeploymentDetail(matches[0].Team, matches[0].Deployment)
+		return nil
+	default:
+		teamNames := make([]string, len(matches))
+		for i, m := range matches {
+			teamNames[i] = m.Team
+		}
+		return fmt.Errorf("ambiguous: %s %q found in teams [%s], use --team to disambiguate",
+			kind, name, strings.Join(teamNames, ", "))
+	}
 }
 
 func printDeploymentDetail(team string, d state.Deployment) {

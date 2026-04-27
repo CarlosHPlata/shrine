@@ -1,6 +1,7 @@
 package planner
 
 import (
+	"fmt"
 	"sort"
 
 	"github.com/CarlosHPlata/shrine/internal/manifest"
@@ -35,6 +36,79 @@ func Plan(dir string, store state.TeamStore) PlanResult {
 	}
 
 	return PlanResult{Steps: steps, ManifestSet: set}
+}
+
+// PlanSingle plans the deployment of a single manifest file.
+// If specsDir is non-empty it loads the full directory as resolution context;
+// otherwise a minimal ManifestSet containing only the parsed manifest is used.
+func PlanSingle(file, specsDir string, store state.TeamStore) PlanResult {
+	// Step 1: Parse and validate the target manifest.
+	m, err := manifest.Parse(file)
+	if err != nil {
+		return PlanResult{Error: err}
+	}
+	if err := manifest.Validate(m); err != nil {
+		return PlanResult{Error: err}
+	}
+
+	// Derive the name from the concrete sub-manifest.
+	var name string
+	switch m.Kind {
+	case manifest.ApplicationKind:
+		name = m.Application.Metadata.Name
+	case manifest.ResourceKind:
+		name = m.Resource.Metadata.Name
+	case manifest.TeamKind:
+		return PlanResult{Error: fmt.Errorf("team manifests cannot be applied with --file; use 'shrine apply teams' instead")}
+	default:
+		return PlanResult{Error: fmt.Errorf("unsupported manifest kind %q for single-file apply", m.Kind)}
+	}
+
+	var set *ManifestSet
+
+	if specsDir != "" {
+		// Step 2a: Load the full directory for dependency resolution context.
+		set, err = LoadDir(specsDir)
+		if err != nil {
+			return PlanResult{Error: err}
+		}
+
+		// Add the target manifest to the set if it is not already present.
+		alreadyPresent := false
+		switch m.Kind {
+		case manifest.ApplicationKind:
+			_, alreadyPresent = set.Applications[name]
+		case manifest.ResourceKind:
+			_, alreadyPresent = set.Resources[name]
+		}
+
+		if !alreadyPresent {
+			if err := set.mapKind(m, file); err != nil {
+				return PlanResult{Error: err}
+			}
+		}
+	} else {
+		// Step 2b: Minimal set — only the single manifest.
+		set = &ManifestSet{
+			Applications: make(map[string]*manifest.ApplicationManifest),
+			Resources:    make(map[string]*manifest.ResourceManifest),
+		}
+		if err := set.mapKind(m, file); err != nil {
+			return PlanResult{Error: err}
+		}
+	}
+
+	// Step 3: Resolve dependencies, quotas, and access control.
+	if errs := Resolve(set, store); len(errs) > 0 {
+		return PlanResult{ValidationErr: errs}
+	}
+
+	// Step 4: Return a single-step plan; ManifestSet is carried for callers that
+	// need the resolution context (e.g. value injection).
+	return PlanResult{
+		Steps:       []PlannedStep{{Kind: m.Kind, Name: name}},
+		ManifestSet: set,
+	}
 }
 
 func PlanTeardown(team string, store state.DeploymentStore) PlanTeardownResult {

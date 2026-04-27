@@ -33,18 +33,26 @@ var generateTeamCmd = &cobra.Command{
 	Long:  `Create a skeleton team manifest YAML file in the specified directory.`,
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		return handler.GenerateTeam(args[0], generatePath)
+		dir, err := cfg.ResolveSpecsDir(generatePath)
+		if err != nil {
+			return err
+		}
+		return handler.GenerateTeam(args[0], dir)
 	},
 }
 
 var generateAppCmd = &cobra.Command{
-	Use:   "app [name]",
-	Short: "Generate a new application manifest",
-	Long:  `Create a skeleton application manifest YAML file in the specified directory.`,
-	Args:  cobra.ExactArgs(1),
+	Use:     "application [name]",
+	Aliases: []string{"app"},
+	Short:   "Generate a new application manifest",
+	Long:    `Create a skeleton application manifest YAML file in the specified directory.`,
+	Args:    cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
+		dir, err := cfg.ResolveSpecsDir(generatePath)
+		if err != nil {
+			return err
+		}
 		name := args[0]
-		// Dynamic defaults if flags not set
 		image := appImage
 		if image == "" {
 			image = name + ":latest"
@@ -61,7 +69,7 @@ var generateAppCmd = &cobra.Command{
 		return handler.GenerateApp(handler.AppOptions{
 			Name:             name,
 			Team:             generateTeam,
-			OutputDir:        generatePath,
+			OutputDir:        dir,
 			Port:             appPort,
 			Replicas:         appReplicas,
 			Domain:           domain,
@@ -73,15 +81,20 @@ var generateAppCmd = &cobra.Command{
 }
 
 var generateResourceCmd = &cobra.Command{
-	Use:   "resource [name]",
-	Short: "Generate a new resource manifest",
-	Long:  `Create a skeleton resource manifest YAML file in the specified directory.`,
-	Args:  cobra.ExactArgs(1),
+	Use:     "resource [name]",
+	Aliases: []string{"res"},
+	Short:   "Generate a new resource manifest",
+	Long:    `Create a skeleton resource manifest YAML file in the specified directory.`,
+	Args:    cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
+		dir, err := cfg.ResolveSpecsDir(generatePath)
+		if err != nil {
+			return err
+		}
 		return handler.GenerateResource(handler.ResourceOptions{
 			Name:             args[0],
 			Team:             generateTeam,
-			OutputDir:        generatePath,
+			OutputDir:        dir,
 			Type:             resType,
 			Version:          resVersion,
 			ExposeToPlatform: resExpose,
@@ -90,7 +103,7 @@ var generateResourceCmd = &cobra.Command{
 }
 
 func init() {
-	generateCmd.PersistentFlags().StringVarP(&generatePath, "path", "p", ".", "Directory to write the manifest to")
+	generateCmd.PersistentFlags().StringVarP(&generatePath, "path", "p", "", "Directory to write the manifest to (overrides specsDir in config.yml)")
 
 	// App flags
 	generateAppCmd.PersistentFlags().StringVarP(&generateTeam, "team", "t", "default-team", "Team that owns the resource")

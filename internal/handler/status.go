@@ -66,10 +66,16 @@ func StatusTeam(name string, store *state.Store, backend engine.ContainerBackend
 }
 
 func StatusApplication(team, name string, store *state.Store, backend engine.ContainerBackend) error {
+	if team == "" {
+		return statusSingleDeploymentAutoTeam(name, manifest.ApplicationKind, store, backend)
+	}
 	return statusSingleDeployment(team, name, manifest.ApplicationKind, store, backend)
 }
 
 func StatusResource(team, name string, store *state.Store, backend engine.ContainerBackend) error {
+	if team == "" {
+		return statusSingleDeploymentAutoTeam(name, manifest.ResourceKind, store, backend)
+	}
 	return statusSingleDeployment(team, name, manifest.ResourceKind, store, backend)
 }
 
@@ -89,4 +95,34 @@ func statusSingleDeployment(team, name, kind string, store *state.Store, backend
 		}
 	}
 	return fmt.Errorf("%s %q not found in team %q", kind, name, team)
+}
+
+func statusSingleDeploymentAutoTeam(name, kind string, store *state.Store, backend engine.ContainerBackend) error {
+	teams, err := store.Teams.ListTeams()
+	if err != nil {
+		return fmt.Errorf("listing teams: %w", err)
+	}
+
+	var matchingTeams []string
+	for _, t := range teams {
+		deployments, err := store.Deployments.List(t.Metadata.Name)
+		if err != nil {
+			continue
+		}
+		for _, d := range deployments {
+			if d.Name == name && d.Kind == kind {
+				matchingTeams = append(matchingTeams, t.Metadata.Name)
+				break
+			}
+		}
+	}
+
+	if len(matchingTeams) == 0 {
+		return fmt.Errorf("%s %q not found in any team", kind, name)
+	}
+	if len(matchingTeams) > 1 {
+		return fmt.Errorf("ambiguous: %s %q found in teams [%s], use --team to disambiguate", kind, name, strings.Join(matchingTeams, ", "))
+	}
+
+	return statusSingleDeployment(matchingTeams[0], name, kind, store, backend)
 }

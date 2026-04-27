@@ -7,6 +7,8 @@ import (
 	"github.com/spf13/cobra"
 )
 
+var statusTeamFlag string
+
 var statusCmd = &cobra.Command{
 	Use:   "status [team]",
 	Short: "Show live deployment status",
@@ -35,32 +37,32 @@ var statusCmd = &cobra.Command{
 }
 
 var statusAppCmd = &cobra.Command{
-	Use:     "application [team] [name]",
-	Aliases: []string{"app", "apps", "applications"},
+	Use:     "application [name]",
+	Aliases: []string{"app"},
 	Short:   "Show live status for an application",
 	Long:    `Show the live container status for a specific deployed application.`,
-	Args:    cobra.ExactArgs(2),
+	Args:    cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		backend, err := dockercontainer.NewDockerBackend(store, cfg.Registries, engine.NoopObserver{})
 		if err != nil {
 			return err
 		}
-		return handler.StatusApplication(args[0], args[1], store, backend)
+		return handler.StatusApplication(statusTeamFlag, args[0], store, backend)
 	},
 }
 
 var statusResourceCmd = &cobra.Command{
-	Use:     "resource [team] [name]",
-	Aliases: []string{"res", "resources"},
+	Use:     "resource [name]",
+	Aliases: []string{"res"},
 	Short:   "Show live status for a resource",
 	Long:    `Show the live container status for a specific deployed resource.`,
-	Args:    cobra.ExactArgs(2),
+	Args:    cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		backend, err := dockercontainer.NewDockerBackend(store, cfg.Registries, engine.NoopObserver{})
 		if err != nil {
 			return err
 		}
-		return handler.StatusResource(args[0], args[1], store, backend)
+		return handler.StatusResource(statusTeamFlag, args[0], store, backend)
 	},
 }
 
@@ -68,4 +70,7 @@ func init() {
 	rootCmd.AddCommand(statusCmd)
 	statusCmd.AddCommand(statusAppCmd)
 	statusCmd.AddCommand(statusResourceCmd)
+
+	statusAppCmd.Flags().StringVarP(&statusTeamFlag, "team", "t", "", "Team to search in (searches all teams if omitted)")
+	statusResourceCmd.Flags().StringVarP(&statusTeamFlag, "team", "t", "", "Team to search in (searches all teams if omitted)")
 }

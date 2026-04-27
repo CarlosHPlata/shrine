@@ -1,17 +1,38 @@
 # Shrine
 
-Shrine is a Go CLI that orchestrates homelab services via declarative YAML manifests. It manages Docker containers, Traefik routes, and AdGuard DNS entries — all driven by `kind: Application` and `kind: Resource` files that intentionally mirror Kubernetes manifest conventions.
+Shrine is a Go CLI that orchestrates homelab services via declarative YAML manifests. It manages Docker containers — all driven by `kind: Application` and `kind: Resource` files that intentionally mirror Kubernetes manifest conventions.
 
 ## Quick Start
 
 ```bash
 go build -o shrine .
 
-shrine deploy ./projects/team-a/          # deploy all manifests in a directory
-shrine deploy ./projects/team-a/ --dry-run # print plan, no side effects
+shrine deploy                              # deploy all manifests (uses specsDir from config)
+shrine deploy --path ./manifests/          # override specsDir
+shrine deploy --dry-run                    # print plan, no side effects
+shrine apply -f ./manifests/my-app.yml    # deploy a single manifest
+shrine apply teams                         # sync team manifests to state
 shrine teardown team-a                     # remove all containers and network for a team
 shrine status                              # show all deployed resources
+shrine status app my-api                  # show status for a specific app
 ```
+
+## CLI Reference
+
+### shrine deploy
+No positional path argument. Uses --path/-p flag or specsDir from config.yml. Examples: shrine deploy, shrine deploy --path ./manifests/, shrine deploy --dry-run
+
+### shrine apply -f <file>
+New command. Deploys a single manifest file. Kind is inferred from the YAML kind: field. Uses specsDir (or --path) as resolution context for valueFrom dependencies.
+
+### shrine apply teams
+Syncs team manifests to state. Uses --path/-p flag or specsDir from config (no longer defaults to .).
+
+### shrine status app/resource <name>
+Team is now an optional --team/-t flag, not a required positional argument. Shrine auto-searches all teams; use --team to disambiguate. Examples: shrine status app my-api, shrine status app my-api --team team-a, shrine status resource my-db
+
+### shrine describe app/resource <name>
+Same as status: team is now an optional --team flag, not required. Examples: shrine describe app my-api, shrine describe app my-api --team team-a
 
 ## Manifest Kinds
 
@@ -121,7 +142,7 @@ spec:
 shrine/
 ├── cmd/                        # Cobra commands (thin dispatchers)
 │   ├── root.go                 # Global flags: --config-dir, --state-dir
-│   ├── deploy.go               # shrine deploy [path] [--dry-run]
+│   ├── deploy.go               # shrine deploy [--path] [--dry-run]
 │   ├── teardown.go             # shrine teardown <team>
 │   ├── generate.go             # shrine generate team|app|resource <name>
 │   └── ...
@@ -134,11 +155,11 @@ shrine/
 │   ├── topo/                   # Standalone Kahn's algorithm (shared by planner + resolver)
 │   │   └── topo.go             # Sort(deps map[string]map[string]struct{}) ([]string, error)
 │   ├── planner/                # Dependency graph, access checks, ordering
-│   │   ├── loader.go           # LoadDir → ManifestSet (duplicate detection)
+│   │   ├── loader.go           # LoadDir → ManifestSet (duplicate detection, recursive scan)
 │   │   ├── resolve.go          # validateDependencies, access checks, quota enforcement
 │   │   ├── templates.go        # Plan-time template ref validation (unknown refs rejected)
 │   │   ├── order.go            # Topo sort over Resource+Application graph → []PlannedStep
-│   │   └── plan.go             # Plan() entry point: load → resolve → order
+│   │   └── plan.go             # Plan(), PlanSingle() entry points: load → resolve → order/single-step
 │   ├── resolver/               # Materializes outputs and env at deploy time
 │   │   ├── resolver.go         # LiveResolver: secrets, templates, valueFrom lookup
 │   │   └── dry_run_resolver.go # DryRunResolver: same API, placeholder values
@@ -150,6 +171,7 @@ shrine/
 │   │       └── dockercontainer/
 │   ├── config/                 # Path resolution (Flag > Env > XDG/FHS) + config.yml loader
 │   ├── handler/                # Business logic handlers called by cmd/ (teams, deploy, etc.)
+│   │   └── apply.go
 │   └── state/                  # Store interfaces + local filesystem implementations
 │       └── local/              # SubnetStore, SecretStore, DeploymentStore
 ├── agents/
@@ -172,9 +194,9 @@ shrine/
 ## Deploy Pipeline
 
 ```
-shrine deploy ./path/
+shrine deploy
      │
-     ├── manifest.LoadDir()          → ManifestSet (all Applications + Resources)
+     ├── manifest.LoadDir()          → ManifestSet (all Applications + Resources, recursive)
      ├── planner.Resolve()           → validates deps, access, quotas, template refs
      ├── planner.Order()             → topo-sorted []PlannedStep (Kahn's algorithm)
      ├── resolver.ResolveResource()  → materializes each Resource's outputs (literals, secrets, templates)
@@ -218,7 +240,15 @@ shrine deploy ./path/
 
 ```
 <config-dir>/                    # default: ~/.config/shrine/
-└── config.yml                   # registry credentials, gateway IP
+└── config.yml                   # registry credentials, specsDir, gateway IP
+```
+
+```yaml
+specsDir: ~/projects/myapp/manifests   # default specs directory (~ is expanded)
+registries:
+  - host: ghcr.io
+    username: myuser
+    password: mytoken
 ```
 
 ## Infrastructure (Homelab Reference)
@@ -236,8 +266,8 @@ shrine deploy ./path/
 ```bash
 go test ./...                        # run all tests
 go test ./internal/planner/...       # single package
-go run . deploy test/smock/ --dry-run  # integration smoke test (no Docker needed)
-go run . deploy test/smock/          # real Docker round-trip
+go run . deploy --path test/smock/ --dry-run  # integration smoke test (no Docker needed)
+go run . deploy --path test/smock/          # real Docker round-trip
 go run . teardown backend
 go run . teardown external
 ```
