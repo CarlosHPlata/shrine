@@ -17,12 +17,12 @@ func (backend *DockerBackend) CreateContainer(op engine.CreateContainerOp) error
 	cName := containerName(op.Team, op.Name)
 	netName := networkName(op.Team)
 
-	if err := backend.ensureImage(ctx, op.Image); err != nil {
-		return backend.emitErr("image.ensure", map[string]string{"ref": op.Image},
-			fmt.Errorf("ensuring image %q: %w", op.Image, err))
+	digest, err := backend.resolveImage(ctx, op.Image, op.ImagePullPolicy)
+	if err != nil {
+		return err
 	}
 
-	wantHash := configHash(op)
+	wantHash := configHash(op, digest)
 
 	existing, err := backend.client.ContainerInspect(ctx, cName)
 	switch {
@@ -33,30 +33,12 @@ func (backend *DockerBackend) CreateContainer(op engine.CreateContainerOp) error
 				fmt.Errorf("listing deployments for team %q: %w", op.Team, stateErr))
 		}
 
-		var current *state.Deployment
-		for _, d := range deployments {
-			if d.Name == op.Name {
-				d := d
-				current = &d
-				break
-			}
+		if isContainerUpToDate(deployments, op.Name, wantHash) {
+			return backend.ensureRunning(ctx, cName, existing, op, wantHash)
 		}
 
-		if current != nil && current.ConfigHash == wantHash {
-			if !existing.State.Running {
-				backend.emitInfo("container.start", map[string]string{"name": cName})
-				if err := backend.client.ContainerStart(ctx, existing.ID, container.StartOptions{}); err != nil {
-					return backend.emitErr("container.start", map[string]string{"name": cName},
-						fmt.Errorf("starting container %q: %w", cName, err))
-				}
-			}
-			return backend.recordDeployment(op, existing.ID, wantHash)
-		}
-
-		backend.emitInfo("container.recreate", map[string]string{"name": cName})
-		if err := backend.client.ContainerRemove(ctx, existing.ID, container.RemoveOptions{Force: true}); err != nil {
-			return backend.emitErr("container.remove", map[string]string{"name": cName},
-				fmt.Errorf("removing stale container %q: %w", cName, err))
+		if err := backend.removeStaleContainer(ctx, cName, existing.ID); err != nil {
+			return err
 		}
 
 	case !errdefs.IsNotFound(err):
@@ -64,30 +46,41 @@ func (backend *DockerBackend) CreateContainer(op engine.CreateContainerOp) error
 			fmt.Errorf("inspecting container %q: %w", cName, err))
 	}
 
+	return backend.createFreshContainer(ctx, op, cName, netName, wantHash)
+}
+
+func (backend *DockerBackend) ensureRunning(ctx context.Context, cName string, existing container.InspectResponse, op engine.CreateContainerOp, wantHash string) error {
+	if !existing.State.Running {
+		backend.emitInfo("container.start", map[string]string{"name": cName})
+		if err := backend.client.ContainerStart(ctx, existing.ID, container.StartOptions{}); err != nil {
+			return backend.emitErr("container.start", map[string]string{"name": cName},
+				fmt.Errorf("starting container %q: %w", cName, err))
+		}
+	}
+	return backend.recordDeployment(op, existing.ID, wantHash)
+}
+
+func (backend *DockerBackend) removeStaleContainer(ctx context.Context, cName, existingID string) error {
+	backend.emitInfo("container.recreate", map[string]string{"name": cName})
+	if err := backend.client.ContainerRemove(ctx, existingID, container.RemoveOptions{Force: true}); err != nil {
+		return backend.emitErr("container.remove", map[string]string{"name": cName},
+			fmt.Errorf("removing stale container %q: %w", cName, err))
+	}
+	return nil
+}
+
+func (backend *DockerBackend) createFreshContainer(ctx context.Context, op engine.CreateContainerOp, cName, netName, wantHash string) error {
 	backend.emitInfo("container.fresh", map[string]string{"name": cName})
+
 	labels := map[string]string{
 		"shrine.team":     op.Team,
 		"shrine.resource": op.Name,
 		"shrine.kind":     op.Kind,
 	}
 
-	mounts := make([]mount.Mount, len(op.Volumes))
-	for i, v := range op.Volumes {
-		if err := backend.ensureVolume(ctx, op, v); err != nil {
-			return err
-		}
-		mounts[i] = mount.Mount{
-			Type:   mount.TypeVolume,
-			Source: volumeName(op.Team, op.Name, v.Name),
-			Target: v.MountPath,
-		}
-	}
-
-	endpoints := map[string]*network.EndpointSettings{
-		netName: {},
-	}
-	if op.ExposeToPlatform {
-		endpoints[platformNetworkName] = &network.EndpointSettings{}
+	mounts, err := backend.buildMounts(ctx, op)
+	if err != nil {
+		return err
 	}
 
 	created, err := backend.client.ContainerCreate(ctx,
@@ -99,9 +92,7 @@ func (backend *DockerBackend) CreateContainer(op engine.CreateContainerOp) error
 		&container.HostConfig{
 			Mounts: mounts,
 		},
-		&network.NetworkingConfig{
-			EndpointsConfig: endpoints,
-		},
+		buildNetwork(op, netName),
 		nil,
 		cName,
 	)
@@ -117,6 +108,40 @@ func (backend *DockerBackend) CreateContainer(op engine.CreateContainerOp) error
 
 	backend.emitFinished("container.created", map[string]string{"name": cName})
 	return backend.recordDeployment(op, created.ID, wantHash)
+}
+
+func (backend *DockerBackend) buildMounts(ctx context.Context, op engine.CreateContainerOp) ([]mount.Mount, error) {
+	mounts := make([]mount.Mount, len(op.Volumes))
+	for i, v := range op.Volumes {
+		if err := backend.ensureVolume(ctx, op, v); err != nil {
+			return nil, err
+		}
+		mounts[i] = mount.Mount{
+			Type:   mount.TypeVolume,
+			Source: volumeName(op.Team, op.Name, v.Name),
+			Target: v.MountPath,
+		}
+	}
+	return mounts, nil
+}
+
+func buildNetwork(op engine.CreateContainerOp, netName string) *network.NetworkingConfig {
+	endpoints := map[string]*network.EndpointSettings{
+		netName: {},
+	}
+	if op.ExposeToPlatform {
+		endpoints[platformNetworkName] = &network.EndpointSettings{}
+	}
+	return &network.NetworkingConfig{EndpointsConfig: endpoints}
+}
+
+func isContainerUpToDate(deployments []state.Deployment, name, wantHash string) bool {
+	for _, d := range deployments {
+		if d.Name == name {
+			return d.ConfigHash == wantHash
+		}
+	}
+	return false
 }
 
 func (backend *DockerBackend) RemoveContainer(op engine.RemoveContainerOp) error {
@@ -161,12 +186,12 @@ func (backend *DockerBackend) recordDeployment(op engine.CreateContainerOp, ID s
 	})
 }
 
-func configHash(op engine.CreateContainerOp) string {
+func configHash(op engine.CreateContainerOp, digest string) string {
 	volSpecs := make([]string, len(op.Volumes))
 	for i, v := range op.Volumes {
 		volSpecs[i] = v.Name + ":" + v.MountPath
 	}
-	return state.ConfigHash(op.Image, op.Env, volSpecs, op.ExposeToPlatform)
+	return state.ConfigHash(digest, op.Env, volSpecs, op.ExposeToPlatform)
 }
 
 func (backend *DockerBackend) removeDeployment(op engine.RemoveContainerOp) error {

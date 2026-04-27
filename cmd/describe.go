@@ -17,11 +17,46 @@ var describeTeamCmd = &cobra.Command{
 	Long:  `Display the full configuration from state for a specific team.`,
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		return handler.DescribeTeam(args[0], store.Teams)
+		return handler.DescribeTeam(args[0], store)
+	},
+}
+
+var describeAppCmd = &cobra.Command{
+	Use:   "app [name]",
+	Short: "Show details for a deployed application",
+	Long: `Display the deployment record for a specific application.
+
+If --team is omitted, all teams are searched automatically. If the application
+name is found in more than one team you will be prompted to disambiguate with
+--team.`,
+	Args: cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		team, _ := cmd.Flags().GetString("team")
+		return handler.DescribeApplication(team, args[0], store)
+	},
+}
+
+var describeResourceCmd = &cobra.Command{
+	Use:   "resource [name]",
+	Short: "Show details for a deployed resource",
+	Long: `Display the deployment record for a specific resource.
+
+If --team is omitted, all teams are searched automatically. If the resource
+name is found in more than one team you will be prompted to disambiguate with
+--team.`,
+	Args: cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		team, _ := cmd.Flags().GetString("team")
+		return handler.DescribeResource(team, args[0], store)
 	},
 }
 
 func init() {
 	rootCmd.AddCommand(describeCmd)
 	describeCmd.AddCommand(describeTeamCmd)
+	describeCmd.AddCommand(describeAppCmd)
+	describeCmd.AddCommand(describeResourceCmd)
+
+	describeAppCmd.Flags().String("team", "", "Restrict search to this team (optional)")
+	describeResourceCmd.Flags().String("team", "", "Restrict search to this team (optional)")
 }

@@ -2,6 +2,7 @@ package planner
 
 import (
 	"fmt"
+	"io/fs"
 	"path/filepath"
 
 	"github.com/CarlosHPlata/shrine/internal/manifest"
@@ -48,15 +49,22 @@ func LoadDir(dir string) (*ManifestSet, error) {
 }
 
 func getFiles(dir string) ([]string, error) {
-	// 1. Discovery: Support both .yml and .yaml for flexibility,
-	// maintaining consistency with the filepath.Glob pattern used in ApplyTeams.
 	var files []string
-	for _, ext := range []string{"*.yml", "*.yaml"} {
-		matches, err := filepath.Glob(filepath.Join(dir, ext))
+	err := filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
-			return nil, fmt.Errorf("searching for %s files: %w", ext, err)
+			return err
 		}
-		files = append(files, matches...)
+		if d.IsDir() {
+			return nil
+		}
+		ext := filepath.Ext(path)
+		if ext == ".yml" || ext == ".yaml" {
+			files = append(files, path)
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, fmt.Errorf("scanning manifest directory %q: %w", dir, err)
 	}
 	return files, nil
 }

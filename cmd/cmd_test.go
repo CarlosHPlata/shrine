@@ -58,7 +58,7 @@ func TestDeployDryRun(t *testing.T) {
 	cmd.SetOutput(&out)
 
 	// 3. Execute deploy dry-run
-	cmd.SetArgs([]string{"deploy", "./testdata/basic-app", "--dry-run", "--state-dir", tmpDir})
+	cmd.SetArgs([]string{"deploy", "--path", "./testdata/basic-app", "--dry-run", "--state-dir", tmpDir})
 	if err := cmd.Execute(); err != nil {
 		t.Fatalf("Execute failed: %v\nOutput: %s", err, out.String())
 	}

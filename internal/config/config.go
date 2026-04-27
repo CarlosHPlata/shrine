@@ -2,9 +2,11 @@ package config
 
 import (
 	"errors"
+	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"gopkg.in/yaml.v3"
 )
@@ -12,6 +14,7 @@ import (
 // Config represents the global configuration for shrine.
 type Config struct {
 	Registries []RegistryConfig `yaml:"registries,omitempty"`
+	SpecsDir   string           `yaml:"specsDir,omitempty"`
 }
 
 // RegistryConfig holds credentials and host information for a Docker registry.
@@ -46,4 +49,32 @@ func Load(configDir string) (*Config, error) {
 	}
 
 	return &cfg, nil
+}
+
+// ResolveSpecsDir returns the specs directory to use, with the following priority:
+//  1. flagValue (from --path / -p)
+//  2. c.SpecsDir (from config.yml specsDir)
+//  3. error if neither is set
+//
+// Tilde (~) at the start of a path is expanded to the user's home directory.
+func (c *Config) ResolveSpecsDir(flagValue string) (string, error) {
+	raw := flagValue
+	if raw == "" {
+		raw = c.SpecsDir
+	}
+	if raw == "" {
+		return "", fmt.Errorf("no specs directory: set --path/-p flag or specsDir in config.yml")
+	}
+	return expandTilde(raw)
+}
+
+func expandTilde(path string) (string, error) {
+	if path != "~" && !strings.HasPrefix(path, "~/") {
+		return path, nil
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", fmt.Errorf("expanding ~: %w", err)
+	}
+	return filepath.Join(home, path[1:]), nil
 }

@@ -61,11 +61,32 @@ shrine version
 
 ---
 
+## Configuration
+
+Shrine reads its configuration from `~/.config/shrine/config.yml` (or the path set by `--config-dir`).
+
+```yaml
+specsDir: ~/projects/myapp/manifests
+registries:
+  - host: ghcr.io
+    username: myuser
+    password: mytoken
+```
+
+| Field | Description |
+|---|---|
+| `specsDir` | Default directory for manifest files. When set, `shrine deploy`, `shrine apply`, and `shrine generate` all resolve specs from this path without needing `--path`. |
+| `registries` | List of container registry credentials used when pulling or resolving images. |
+
+The `specsDir` value is the most convenient way to avoid repeating `--path` on every command. Any command that accepts `--path`/`-p` will fall back to `specsDir` when the flag is omitted.
+
+---
+
 ## Quickstart
 
 ### 1. Define your manifests
 
-A Shrine project is a directory of YAML manifests. Three kinds exist: **Team**, **Resource**, and **Application**.
+A Shrine project is a directory of YAML manifests. Three kinds exist: **Team**, **Resource**, and **Application**. Manifests can be organised into any subdirectory structure — Shrine scans recursively.
 
 **Team** — a namespace with quotas and permissions:
 
@@ -131,20 +152,89 @@ spec:
 ### 2. Deploy
 
 ```bash
-# Register your teams from the teams/ directory
+# Register your teams
 shrine apply teams
 
-# Preview the full execution plan — nothing is touched
-shrine deploy ./manifests/ --dry-run
+# Preview the full execution plan
+shrine deploy --dry-run
 
 # Deploy for real
-shrine deploy ./manifests/
+shrine deploy
+
+# Deploy a single manifest
+shrine apply -f ./manifests/my-team/my-api.yml
 
 # Check what's running
-shrine status my-team
+shrine status
+shrine status app my-api
+shrine status app my-api --team my-team   # disambiguate if needed
 
 # Tear down when done
 shrine teardown my-team
+```
+
+`shrine deploy` and `shrine apply teams` resolve manifests from `specsDir` in `config.yml`. Pass `--path`/`-p` to override for a single invocation:
+
+```bash
+shrine deploy --path ./manifests/
+shrine apply teams --path ./teams/
+```
+
+---
+
+## Command Reference
+
+### `shrine deploy`
+
+Deploys all manifests found under the configured specs directory (or `--path`). Scans subdirectories recursively.
+
+```bash
+shrine deploy                        # uses specsDir from config.yml
+shrine deploy --path ./manifests/    # explicit path override
+shrine deploy --dry-run              # preview plan without making changes
+```
+
+### `shrine apply`
+
+```bash
+# Deploy all team manifests
+shrine apply teams
+shrine apply teams --path ./teams/
+
+# Deploy a single manifest file (kind is inferred from the YAML kind: field)
+shrine apply -f ./manifests/my-team/my-api.yml
+```
+
+`valueFrom` references inside the target manifest are resolved relative to `specsDir` (or `--path`).
+
+### `shrine status`
+
+```bash
+shrine status                        # overview of all running workloads
+shrine status app <name>             # status for a specific application
+shrine status resource <name>        # status for a specific resource
+shrine status app <name> --team <t>  # disambiguate when the name exists in multiple teams
+```
+
+The `--team`/`-t` flag is optional — Shrine searches all teams automatically.
+
+### `shrine describe`
+
+```bash
+shrine describe app <name>
+shrine describe resource <name>
+shrine describe app <name> --team <team>   # optional disambiguation
+```
+
+### `shrine generate`
+
+Scaffolds new manifest files into the specs directory.
+
+```bash
+shrine generate app my-api
+shrine generate resource my-db
+shrine generate team my-team
+shrine generate app my-api --path ./manifests/   # explicit path override
 ```
 
 ---

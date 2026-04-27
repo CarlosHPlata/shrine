@@ -127,8 +127,8 @@ func ListTeams(store state.TeamStore) error {
 }
 
 // DescribeTeam displays detailed info about a single team from state.
-func DescribeTeam(name string, store state.TeamStore) error {
-	team, err := store.LoadTeam(name)
+func DescribeTeam(name string, store *state.Store) error {
+	team, err := store.Teams.LoadTeam(name)
 	if err != nil {
 		return err
 	}
@@ -142,6 +142,24 @@ func DescribeTeam(name string, store state.TeamStore) error {
 	fmt.Printf("  Max Resources: %d\n", team.Spec.Quotas.MaxResources)
 	fmt.Printf("  Allowed Resource Types: %v\n", team.Spec.Quotas.AllowedResourceTypes)
 
+	return printTeamDeploymentsSummary(name, store)
+}
+
+func printTeamDeploymentsSummary(team string, store *state.Store) error {
+	deployments, err := store.Deployments.List(team)
+	if err != nil {
+		return fmt.Errorf("listing deployments for team %q: %w", team, err)
+	}
+	fmt.Println("Deployments:")
+	if len(deployments) == 0 {
+		fmt.Println("  (none)")
+		return nil
+	}
+	fmt.Printf("  %-30s %-15s\n", "NAME", "KIND")
+	fmt.Printf("  %s\n", strings.Repeat("-", 46))
+	for _, d := range deployments {
+		fmt.Printf("  %-30s %-15s\n", d.Name, d.Kind)
+	}
 	return nil
 }
 

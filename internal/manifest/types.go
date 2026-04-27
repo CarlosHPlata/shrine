@@ -1,9 +1,16 @@
 package manifest
 
+import "strings"
+
 const (
 	ApplicationKind = "Application"
 	ResourceKind    = "Resource"
 	TeamKind        = "Team"
+)
+
+const (
+	ImagePullPolicyAlways       = "Always"
+	ImagePullPolicyIfNotPresent = "IfNotPresent"
 )
 
 // Metadata holds fields shared by all manifest kinds.
@@ -46,14 +53,15 @@ type VolumeMount struct {
 }
 
 type ApplicationSpec struct {
-	Image        string        `yaml:"image"`
-	Port         int           `yaml:"port,omitempty"`
-	Replicas     int           `yaml:"replicas,omitempty"`
-	Routing      Routing       `yaml:"routing,omitempty"`
-	Dependencies []Dependency  `yaml:"dependencies,omitempty"`
-	Env          []EnvVar      `yaml:"env,omitempty"`
-	Networking   Networking    `yaml:"networking,omitempty"`
-	Volumes      []VolumeMount `yaml:"volumes,omitempty"`
+	Image           string        `yaml:"image"`
+	Port            int           `yaml:"port,omitempty"`
+	Replicas        int           `yaml:"replicas,omitempty"`
+	Routing         Routing       `yaml:"routing,omitempty"`
+	Dependencies    []Dependency  `yaml:"dependencies,omitempty"`
+	Env             []EnvVar      `yaml:"env,omitempty"`
+	Networking      Networking    `yaml:"networking,omitempty"`
+	Volumes         []VolumeMount `yaml:"volumes,omitempty"`
+	ImagePullPolicy string        `yaml:"imagePullPolicy,omitempty"`
 }
 
 // Output declares a named value that a Resource exposes to consumers.
@@ -67,12 +75,13 @@ type Output struct {
 }
 
 type ResourceSpec struct {
-	Type       string        `yaml:"type"`
-	Version    string        `yaml:"version"`
-	Image      string        `yaml:"image,omitempty"`
-	Outputs    []Output      `yaml:"outputs,omitempty"`
-	Networking Networking    `yaml:"networking,omitempty"`
-	Volumes    []VolumeMount `yaml:"volumes,omitempty"`
+	Type            string        `yaml:"type"`
+	Version         string        `yaml:"version"`
+	Image           string        `yaml:"image,omitempty"`
+	Outputs         []Output      `yaml:"outputs,omitempty"`
+	Networking      Networking    `yaml:"networking,omitempty"`
+	Volumes         []VolumeMount `yaml:"volumes,omitempty"`
+	ImagePullPolicy string        `yaml:"imagePullPolicy,omitempty"`
 }
 
 type Quotas struct {
@@ -109,4 +118,19 @@ type TeamManifest struct {
 	TypeMeta `yaml:",inline"`
 	Metadata Metadata `yaml:"metadata"`
 	Spec     TeamSpec `yaml:"spec"`
+}
+
+func EffectivePullPolicy(image string, declared string) string {
+	if declared != "" {
+		return declared
+	}
+	colonIdx := strings.LastIndex(image, ":")
+	if colonIdx == -1 {
+		return ImagePullPolicyAlways
+	}
+	tag := image[colonIdx+1:]
+	if tag == "" || tag == "latest" {
+		return ImagePullPolicyAlways
+	}
+	return ImagePullPolicyIfNotPresent
 }
