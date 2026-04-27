@@ -251,16 +251,6 @@ registries:
     password: mytoken
 ```
 
-## Infrastructure (Homelab Reference)
-
-| Component    | Details                                              |
-|--------------|------------------------------------------------------|
-| App server   | 192.168.1.207 — Docker, Watchtower                   |
-| Gateway      | 192.168.1.208 — Traefik v3.3, Tailscale              |
-| Registry     | 192.168.1.206:8080 — unauthenticated mirror          |
-| Traefik dir  | `/opt/traefik/config/` on gateway (file provider)    |
-| AdGuard DNS  | Container 104                                        |
-
 ## Testing
 
 ```bash
