@@ -24,12 +24,10 @@ type RegistryConfig struct {
 	Password string `yaml:"password,omitempty"`
 }
 
-// Load reads the config.yml from the specified directory.
+// Load reads the config file at the given path.
 // If the file does not exist, it returns an empty Config without error.
-func Load(configDir string) (*Config, error) {
-	configPath := filepath.Join(configDir, "config.yml")
-
-	data, err := os.ReadFile(configPath)
+func Load(configFile string) (*Config, error) {
+	data, err := os.ReadFile(configFile)
 	if errors.Is(err, fs.ErrNotExist) {
 		return &Config{}, nil
 	}

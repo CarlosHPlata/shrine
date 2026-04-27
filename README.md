@@ -63,7 +63,17 @@ shrine version
 
 ## Configuration
 
-Shrine reads its configuration from `~/.config/shrine/config.yml` (or the path set by `--config-dir`).
+Shrine searches for its configuration file in the following locations, in order:
+
+| Priority | Path |
+|---|---|
+| 1 | `~/.config/shrine/config.yml` |
+| 2 | `~/.shrine.conf.yml` |
+| 3 | `/etc/shrine/config.yml` |
+
+The first file found is used. If none exist, Shrine starts with an empty configuration (all fields optional).
+
+Override the search entirely with `--config-dir <dir>` (loads `<dir>/config.yml`) or the `SHRINE_CONFIG_DIR` environment variable.
 
 ```yaml
 specsDir: ~/projects/myapp/manifests
