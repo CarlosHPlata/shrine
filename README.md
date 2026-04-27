@@ -77,6 +77,7 @@ Override the search entirely with `--config-dir <dir>` (loads `<dir>/config.yml`
 
 ```yaml
 specsDir: ~/projects/myapp/manifests
+teamsDir: ~/projects/myapp/teams
 registries:
   - host: ghcr.io
     username: myuser
@@ -85,10 +86,11 @@ registries:
 
 | Field | Description |
 |---|---|
-| `specsDir` | Default directory for manifest files. When set, `shrine deploy`, `shrine apply`, and `shrine generate` all resolve specs from this path without needing `--path`. |
+| `specsDir` | Default directory for manifest files. Used by `shrine deploy`, `shrine apply`, and `shrine generate` when `--path` is not provided. |
+| `teamsDir` | Optional dedicated directory for team manifests. When set, `shrine apply teams` scans this path instead of `specsDir`. Falls back to `specsDir` if not set. |
 | `registries` | List of container registry credentials used when pulling or resolving images. |
 
-The `specsDir` value is the most convenient way to avoid repeating `--path` on every command. Any command that accepts `--path`/`-p` will fall back to `specsDir` when the flag is omitted.
+`specsDir` is the most convenient way to avoid repeating `--path` on every command. Set `teamsDir` only when your team manifests live in a separate directory from the rest of your specs.
 
 ---
 
@@ -183,7 +185,7 @@ shrine status app my-api --team my-team   # disambiguate if needed
 shrine teardown my-team
 ```
 
-`shrine deploy` and `shrine apply teams` resolve manifests from `specsDir` in `config.yml`. Pass `--path`/`-p` to override for a single invocation:
+`shrine deploy` resolves manifests from `specsDir`. `shrine apply teams` resolves from `teamsDir` first, then falls back to `specsDir`. Pass `--path`/`-p` to override either for a single invocation:
 
 ```bash
 shrine deploy --path ./manifests/
