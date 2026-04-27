@@ -64,3 +64,7 @@ func (d *DryRunContainerBackend) CreatePlatformNetwork() error {
 	fmt.Fprintf(d.Out, "[DOCKER] CreatePlatformNetwork name=shrine.platform\n")
 	return nil
 }
+
+func (d *DryRunContainerBackend) InspectContainer(containerID string) (engine.ContainerInfo, error) {
+	return engine.ContainerInfo{}, nil
+}

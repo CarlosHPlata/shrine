@@ -22,12 +22,19 @@ type RemoveContainerOp struct {
 	Name string
 }
 
+type ContainerInfo struct {
+	Running bool
+	Status  string
+	ImageID string
+}
+
 type ContainerBackend interface {
 	CreateNetwork(name string) error
 	RemoveNetwork(name string) error
 	CreateContainer(op CreateContainerOp) error
 	RemoveContainer(op RemoveContainerOp) error
 	CreatePlatformNetwork() error
+	InspectContainer(containerID string) (ContainerInfo, error)
 }
 
 type WriteRouteOp struct {
