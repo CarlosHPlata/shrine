@@ -1,7 +1,10 @@
 package cmd
 
 import (
+	"fmt"
+
 	"github.com/CarlosHPlata/shrine/internal/handler"
+	"github.com/CarlosHPlata/shrine/internal/updater"
 	"github.com/spf13/cobra"
 )
 
@@ -14,6 +17,8 @@ var deployCmd = &cobra.Command{
 	Long:  `Parse YAML manifests from the given path, resolve dependencies, and deploy containers, routes, and DNS entries.`,
 	Args:  cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
+		checkForUpdate(cmd)
+
 		dir, err := cfg.ResolveSpecsDir(deployPath)
 		if err != nil {
 			return err
@@ -30,6 +35,16 @@ var deployCmd = &cobra.Command{
 			Paths:       paths,
 		})
 	},
+}
+
+func checkForUpdate(cmd *cobra.Command) {
+	latest, err := updater.LatestVersion()
+	if err != nil {
+		return
+	}
+	if updater.IsNewer(Version, latest) {
+		fmt.Fprintf(cmd.OutOrStdout(), "\n[shrine] Update available: %s → %s. Run 'shrine update' to install.\n\n", Version, latest)
+	}
 }
 
 func init() {

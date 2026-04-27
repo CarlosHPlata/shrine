@@ -29,7 +29,7 @@ var rootCmd = &cobra.Command{
 			return fmt.Errorf("resolving paths: %w", err)
 		}
 
-		cfg, err = config.Load(paths.ConfigDir)
+		cfg, err = config.Load(paths.ConfigFile)
 		if err != nil {
 			return fmt.Errorf("loading config: %w", err)
 		}
@@ -59,6 +59,6 @@ func SetOutput(w io.Writer) {
 }
 
 func init() {
-	rootCmd.PersistentFlags().StringVar(&configDirFlag, "config-dir", "", "Configuration directory (default is ~/.config/shrine or /etc/shrine)")
+	rootCmd.PersistentFlags().StringVar(&configDirFlag, "config-dir", "", "Configuration directory (searched in order: ~/.config/shrine, ~/.shrine.conf.yml, /etc/shrine)")
 	rootCmd.PersistentFlags().StringVar(&stateDirFlag, "state-dir", "", "State directory (default is ~/.local/share/shrine or /var/lib/shrine)")
 }

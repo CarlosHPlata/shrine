@@ -83,3 +83,13 @@ fi
 echo ""
 echo "shrine ${VERSION} installed to ${INSTALL_DIR}/${BINARY}"
 echo "Run 'shrine version' to verify the installation."
+
+if [ "$INSTALL_DIR" != "/usr/local/bin" ]; then
+  echo ""
+  echo "NOTE: ${INSTALL_DIR} may not be in your PATH."
+  echo "Add it by appending this to your shell config (~/.bashrc, ~/.zshrc, etc.):"
+  echo ""
+  echo "  export PATH=\"${INSTALL_DIR}:\$PATH\""
+  echo ""
+  echo "Then reload your shell: source ~/.bashrc  (or ~/.zshrc)"
+fi
