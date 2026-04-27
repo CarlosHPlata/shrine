@@ -2,6 +2,7 @@ package handler
 
 import (
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -63,9 +64,30 @@ func CreateTeam(filepath string, store state.TeamStore) error {
 	return nil
 }
 
-// ApplyTeams scans a directory for team manifests and syncs them all to state.
+func walkYAMLFiles(dir string) ([]string, error) {
+	var files []string
+	err := filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() {
+			return nil
+		}
+		ext := filepath.Ext(path)
+		if ext == ".yml" || ext == ".yaml" {
+			files = append(files, path)
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, fmt.Errorf("scanning manifest directory %q: %w", dir, err)
+	}
+	return files, nil
+}
+
+// ApplyTeams scans a directory recursively for team manifests and syncs them all to state.
 func ApplyTeams(manifestDir string, store state.TeamStore) error {
-	files, err := filepath.Glob(filepath.Join(manifestDir, "*.yml"))
+	files, err := walkYAMLFiles(manifestDir)
 	if err != nil {
 		return fmt.Errorf("searching for manifests: %w", err)
 	}

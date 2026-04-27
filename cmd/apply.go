@@ -34,7 +34,7 @@ var applyTeamsCmd = &cobra.Command{
 	Long:  `Scan a directory for team manifest YAML files and sync them into the platform state.`,
 	Args:  cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		dir, err := cfg.ResolveSpecsDir(applyPath)
+		dir, err := cfg.ResolveTeamsDir(applyPath)
 		if err != nil {
 			return err
 		}

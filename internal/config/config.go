@@ -15,6 +15,7 @@ import (
 type Config struct {
 	Registries []RegistryConfig `yaml:"registries,omitempty"`
 	SpecsDir   string           `yaml:"specsDir,omitempty"`
+	TeamsDir   string           `yaml:"teamsDir,omitempty"`
 }
 
 // RegistryConfig holds credentials and host information for a Docker registry.
@@ -62,6 +63,25 @@ func (c *Config) ResolveSpecsDir(flagValue string) (string, error) {
 	}
 	if raw == "" {
 		return "", fmt.Errorf("no specs directory: set --path/-p flag or specsDir in config.yml")
+	}
+	return expandTilde(raw)
+}
+
+// ResolveTeamsDir returns the directory to scan for team manifests, with priority:
+//  1. flagValue (from --path / -p)
+//  2. c.TeamsDir (from config.yml teamsDir)
+//  3. c.SpecsDir (from config.yml specsDir)
+//  4. error if none is set
+func (c *Config) ResolveTeamsDir(flagValue string) (string, error) {
+	raw := flagValue
+	if raw == "" {
+		raw = c.TeamsDir
+	}
+	if raw == "" {
+		raw = c.SpecsDir
+	}
+	if raw == "" {
+		return "", fmt.Errorf("no specs directory: set --path/-p flag, teamsDir or specsDir in config.yml")
 	}
 	return expandTilde(raw)
 }
