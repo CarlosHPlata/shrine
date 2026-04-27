@@ -20,6 +20,7 @@ var statusCmd = &cobra.Command{
 			return err
 		}
 		if len(args) == 0 {
+			cmd.Println("[shrine] Showing platform status...")
 			teams, err := store.Teams.ListTeams()
 			if err != nil {
 				return err
