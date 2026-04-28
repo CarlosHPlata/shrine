@@ -5,6 +5,8 @@ package testutils
 import (
 	"path/filepath"
 	"testing"
+
+	"github.com/docker/docker/client"
 )
 
 type Suite struct {
@@ -44,10 +46,12 @@ func (s *Suite) Test(name string, fn func(*TestCase)) {
 }
 
 type TestCase struct {
-	t        *testing.T
-	result   *Result
-	tmpDir   string
-	StateDir string
+	t            *testing.T
+	result       *Result
+	tmpDir       string
+	StateDir     string
+	DockerClient *client.Client
+	TeamName     string
 }
 
 func Test(t *testing.T, name string, fn func(*TestCase)) {

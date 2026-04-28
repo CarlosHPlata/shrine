@@ -1,0 +1,18 @@
+apiVersion: shrine/v1
+kind: Application
+metadata:
+  name: whoami-res
+  owner: shrine-deploy-test
+spec:
+  image: traefik/whoami
+  port: 80
+  replicas: 1
+  dependencies:
+    - kind: Resource
+      name: test-cache
+      owner: shrine-deploy-test
+  env:
+    - name: CACHE_URL
+      valueFrom: resource.test-cache.endpoint
+  networking:
+    exposeToPlatform: false

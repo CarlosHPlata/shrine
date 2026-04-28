@@ -1,0 +1,16 @@
+apiVersion: shrine/v1
+kind: Application
+metadata:
+  name: whoami-env
+  owner: shrine-deploy-test
+spec:
+  image: traefik/whoami
+  port: 80
+  replicas: 1
+  env:
+    - name: APP_ENV
+      value: test
+    - name: APP_VERSION
+      value: "1.0"
+  networking:
+    exposeToPlatform: false
