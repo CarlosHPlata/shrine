@@ -286,9 +286,10 @@ func TestResolve(t *testing.T) {
 					Spec: manifest.ResourceSpec{
 						Type:    "postgres",
 						Version: "16",
+						Port:    5432,
 						Outputs: []manifest.Output{
 							{Name: "host"},
-							{Name: "port", Value: "5432"},
+							{Name: "port"},
 							{Name: "password", Generated: true},
 							// Valid: references siblings + built-ins.
 							{Name: "url", Template: "{{.team}}/{{.name}}://{{.host}}:{{.port}}:{{.password}}"},

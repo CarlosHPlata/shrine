@@ -81,6 +81,16 @@ func TestDeploy(t *testing.T) {
 		tc.AssertSecretInState(testTeam, "secret-store", "password")
 	})
 
+	s.Test("should resolve host and port built-ins and inject into container", func(tc *TestCase) {
+		tc.Run("deploy",
+			"--path", fixturesPath("secrets"),
+			"--state-dir", tc.StateDir,
+		).AssertSuccess()
+
+		tc.AssertContainerEnvVar(testTeam+".whoami-secrets", "SECRET_HOST", testTeam+".secret-store")
+		tc.AssertContainerEnvVar(testTeam+".whoami-secrets", "SECRET_PORT", "6379")
+	})
+
 	s.Test("should resolve template output and inject into container", func(tc *TestCase) {
 		tc.Run("deploy",
 			"--path", fixturesPath("secrets"),

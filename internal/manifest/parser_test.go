@@ -173,8 +173,11 @@ func TestParse_ResourceManifest(t *testing.T) {
 	if res.Spec.Outputs[0].Name != "host" {
 		t.Errorf("Outputs[0].Name = %q, want %q", res.Spec.Outputs[0].Name, "host")
 	}
-	if res.Spec.Outputs[1].Value != "5432" {
-		t.Errorf("Outputs[1].Value = %q, want %q", res.Spec.Outputs[1].Value, "5432")
+	if res.Spec.Outputs[1].Name != "port" {
+		t.Errorf("Outputs[1].Name = %q, want %q", res.Spec.Outputs[1].Name, "port")
+	}
+	if res.Spec.Port != 5432 {
+		t.Errorf("Spec.Port = %d, want %d", res.Spec.Port, 5432)
 	}
 	if !res.Spec.Outputs[3].Generated {
 		t.Error("Outputs[3].Generated = false, want true (password)")

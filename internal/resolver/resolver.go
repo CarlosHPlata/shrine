@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"maps"
+	"strconv"
 	"strings"
 	"text/template"
 
@@ -71,13 +72,19 @@ func (r *LiveResolver) ResolveResource(res *manifest.ResourceManifest) (map[stri
 			templates = append(templates, output)
 
 		default:
-			// Bare output: the CLI only knows how to fill `host`.
-			if output.Name == "host" {
+			switch output.Name {
+			case "host":
 				values[output.Name] = res.Metadata.Owner + "." + res.Metadata.Name
-				continue
+			case "port":
+				if res.Spec.Port == 0 {
+					return nil, fmt.Errorf("resource %q: bare output \"port\" requires spec.port to be set",
+						res.Metadata.Name)
+				}
+				values[output.Name] = strconv.Itoa(res.Spec.Port)
+			default:
+				return nil, fmt.Errorf("resource %q: bare output %q is not a recognized CLI built-in (only \"host\" and \"port\" are supported)",
+					res.Metadata.Name, output.Name)
 			}
-			return nil, fmt.Errorf("resource %q: bare output %q is not a recognized CLI built-in (only \"host\" is supported)",
-				res.Metadata.Name, output.Name)
 		}
 	}
 

@@ -4,7 +4,6 @@ package testutils
 
 import (
 	"bufio"
-	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -90,7 +89,7 @@ func (tc *TestCase) SecretFromState(teamName, resourceName, outputName string) s
 	key := resourceName + "." + outputName
 	v, ok := secrets[key]
 	if !ok || v == "" {
-		tc.t.Fatal(fmt.Sprintf("secret %q for team %q is missing or empty", key, teamName))
+		tc.t.Fatalf("secret %q for team %q is missing or empty", key, teamName)
 	}
 	return v
 }
