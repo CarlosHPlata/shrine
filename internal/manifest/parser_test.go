@@ -8,7 +8,7 @@ import (
 
 func testdataPath(name string) string {
 	_, f, _, _ := runtime.Caller(0)
-	return filepath.Join(filepath.Dir(f), "..", "..", "test", "testdata", name)
+	return filepath.Join(filepath.Dir(f), "..", "..", "tests", "testdata", name)
 }
 
 func TestParse_ApplicationManifest(t *testing.T) {

@@ -59,7 +59,7 @@ Keep the subject line under 72 characters. A body is optional but welcome for no
 ## Running tests
 
 ```bash
-# All tests
+# Unit tests
 go test ./...
 
 # A specific package
@@ -67,9 +67,29 @@ go test ./internal/planner/...
 
 # With race detector
 go test -race ./...
+
+# Integration tests (requires Docker running locally)
+make test-integration
+
+# Unit + integration
+make test-all
 ```
 
-There is no test database or external service required. Tests that need Docker use the dry-run engine.
+Integration tests live in `tests/integration/` and are gated behind the `integration` build tag, so `go test ./...` never runs them. They build the real `shrine` binary once and run commands against it as a subprocess.
+
+### Editor setup for integration tests
+
+Because integration test files carry `//go:build integration`, gopls excludes them by default and your editor will show false type errors. Fix it by adding this to `.vscode/settings.json`:
+
+```json
+{
+  "gopls": {
+    "build.buildFlags": ["-tags=integration"]
+  }
+}
+```
+
+For JetBrains GoLand: **Settings → Go → Build Tags**, add `integration`.
 
 ## Reporting bugs
 
