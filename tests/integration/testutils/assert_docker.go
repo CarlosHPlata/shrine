@@ -67,3 +67,24 @@ func (tc *TestCase) AssertContainerEnvVar(containerName, key, expectedValue stri
 	tc.t.Errorf("container %q missing env var %q", containerName, key)
 	return tc
 }
+
+func (tc *TestCase) AssertContainerEnvVarNotEmpty(containerName, key string) *TestCase {
+	tc.t.Helper()
+	ctx := context.Background()
+	info, err := tc.DockerClient.ContainerInspect(ctx, containerName)
+	if err != nil {
+		tc.t.Errorf("container %q not found: %v", containerName, err)
+		return tc
+	}
+	for _, entry := range info.Config.Env {
+		k, v, _ := strings.Cut(entry, "=")
+		if k == key {
+			if v == "" {
+				tc.t.Errorf("container %q env %q is empty", containerName, key)
+			}
+			return tc
+		}
+	}
+	tc.t.Errorf("container %q missing env var %q", containerName, key)
+	return tc
+}
