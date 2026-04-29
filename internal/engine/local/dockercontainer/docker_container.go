@@ -10,6 +10,7 @@ import (
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/mount"
 	"github.com/docker/docker/api/types/network"
+	"github.com/docker/go-connections/nat"
 )
 
 func (backend *DockerBackend) CreateContainer(op engine.CreateContainerOp) error {
@@ -83,14 +84,19 @@ func (backend *DockerBackend) createFreshContainer(ctx context.Context, op engin
 		return err
 	}
 
+	exposedPorts, portBindings := buildPortBindings(op.PortBindings)
+
 	created, err := backend.client.ContainerCreate(ctx,
 		&container.Config{
-			Image:  op.Image,
-			Env:    op.Env,
-			Labels: labels,
+			Image:        op.Image,
+			Env:          op.Env,
+			Labels:       labels,
+			ExposedPorts: exposedPorts,
 		},
 		&container.HostConfig{
-			Mounts: mounts,
+			Mounts:        mounts,
+			PortBindings:  portBindings,
+			RestartPolicy: buildRestartPolicy(op.RestartPolicy),
 		},
 		buildNetwork(op, netName),
 		nil,
@@ -111,21 +117,62 @@ func (backend *DockerBackend) createFreshContainer(ctx context.Context, op engin
 }
 
 func (backend *DockerBackend) buildMounts(ctx context.Context, op engine.CreateContainerOp) ([]mount.Mount, error) {
-	mounts := make([]mount.Mount, len(op.Volumes))
-	for i, v := range op.Volumes {
+	mounts := make([]mount.Mount, 0, len(op.Volumes)+len(op.BindMounts))
+	for _, v := range op.Volumes {
 		if err := backend.ensureVolume(ctx, op, v); err != nil {
 			return nil, err
 		}
-		mounts[i] = mount.Mount{
+		mounts = append(mounts, mount.Mount{
 			Type:   mount.TypeVolume,
 			Source: volumeName(op.Team, op.Name, v.Name),
 			Target: v.MountPath,
-		}
+		})
+	}
+	for _, b := range op.BindMounts {
+		mounts = append(mounts, mount.Mount{
+			Type:   mount.TypeBind,
+			Source: b.Source,
+			Target: b.Target,
+		})
 	}
 	return mounts, nil
 }
 
+func buildRestartPolicy(name string) container.RestartPolicy {
+	if name == "" {
+		return container.RestartPolicy{}
+	}
+	return container.RestartPolicy{Name: container.RestartPolicyMode(name)}
+}
+
+func buildPortBindings(bindings []PortBinding) (nat.PortSet, nat.PortMap) {
+	if len(bindings) == 0 {
+		return nil, nil
+	}
+	exposed := nat.PortSet{}
+	pmap := nat.PortMap{}
+	for _, b := range bindings {
+		proto := b.Protocol
+		if proto == "" {
+			proto = "tcp"
+		}
+		key := nat.Port(b.ContainerPort + "/" + proto)
+		exposed[key] = struct{}{}
+		pmap[key] = append(pmap[key], nat.PortBinding{HostPort: b.HostPort})
+	}
+	return exposed, pmap
+}
+
+// PortBinding mirrors engine.PortBinding to keep the local helper signature
+// independent of the engine import path inside this file.
+type PortBinding = engine.PortBinding
+
 func buildNetwork(op engine.CreateContainerOp, netName string) *network.NetworkingConfig {
+	if op.Team == platformTeam {
+		return &network.NetworkingConfig{EndpointsConfig: map[string]*network.EndpointSettings{
+			platformNetworkName: {},
+		}}
+	}
 	endpoints := map[string]*network.EndpointSettings{
 		netName: {},
 	}

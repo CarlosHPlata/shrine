@@ -16,6 +16,28 @@ type Config struct {
 	Registries []RegistryConfig `yaml:"registries,omitempty"`
 	SpecsDir   string           `yaml:"specsDir,omitempty"`
 	TeamsDir   string           `yaml:"teamsDir,omitempty"`
+	Plugins    PluginsConfig    `yaml:"plugins,omitempty"`
+}
+
+type PluginsConfig struct {
+	Gateway GatewayPluginsConfig `yaml:"gateway,omitempty"`
+}
+
+type GatewayPluginsConfig struct {
+	Traefik *TraefikPluginConfig `yaml:"traefik,omitempty"`
+}
+
+type TraefikPluginConfig struct {
+	Image      string                  `yaml:"image,omitempty"`
+	RoutingDir string                  `yaml:"routing-dir,omitempty"`
+	Port       int                     `yaml:"port,omitempty"`
+	Dashboard  *TraefikDashboardConfig `yaml:"dashboard,omitempty"`
+}
+
+type TraefikDashboardConfig struct {
+	Port     int    `yaml:"port"`
+	Username string `yaml:"username,omitempty"`
+	Password string `yaml:"password,omitempty"`
 }
 
 // RegistryConfig holds credentials and host information for a Docker registry.

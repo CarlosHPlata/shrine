@@ -6,6 +6,7 @@ import (
 	"context"
 	"strings"
 
+	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/network"
 )
 
@@ -21,6 +22,43 @@ func (tc *TestCase) AssertContainerRunning(name string) *TestCase {
 		tc.t.Errorf("container %q status = %q, want \"running\"", name, info.State.Status)
 	}
 	return tc
+}
+
+func (tc *TestCase) AssertContainerNotExists(name string) *TestCase {
+	tc.t.Helper()
+	ctx := context.Background()
+	_, err := tc.DockerClient.ContainerInspect(ctx, name)
+	if err == nil {
+		tc.t.Errorf("expected container %q to NOT exist", name)
+	}
+	return tc
+}
+
+func (tc *TestCase) AssertContainerHasBindMount(containerName, hostSource, target string) *TestCase {
+	tc.t.Helper()
+	ctx := context.Background()
+	info, err := tc.DockerClient.ContainerInspect(ctx, containerName)
+	if err != nil {
+		tc.t.Errorf("container %q not found: %v", containerName, err)
+		return tc
+	}
+	for _, m := range info.Mounts {
+		if m.Type == "bind" && m.Source == hostSource && m.Destination == target {
+			return tc
+		}
+	}
+	tc.t.Errorf("container %q missing bind mount %s → %s\nmounts: %+v", containerName, hostSource, target, info.Mounts)
+	return tc
+}
+
+func (tc *TestCase) RemoveContainerIfExists(name string) {
+	tc.t.Helper()
+	ctx := context.Background()
+	_, err := tc.DockerClient.ContainerInspect(ctx, name)
+	if err != nil {
+		return
+	}
+	_ = tc.DockerClient.ContainerRemove(ctx, name, container.RemoveOptions{Force: true})
 }
 
 func (tc *TestCase) AssertNetworkExists(name string) *TestCase {

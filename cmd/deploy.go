@@ -25,7 +25,7 @@ var deployCmd = &cobra.Command{
 		}
 		cmd.Printf("[shrine] Planning deployment from: %s\n", dir)
 		if dryRun {
-			return handler.DryRun(cmd.OutOrStdout(), dir, store)
+			return handler.DryRun(cmd.OutOrStdout(), dir, store, cfg)
 		}
 		return handler.Deploy(handler.DeployOptions{
 			Out:         cmd.OutOrStdout(),

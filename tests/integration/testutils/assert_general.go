@@ -47,3 +47,23 @@ func (tc *TestCase) AssertFileExists(path string) *TestCase {
 	}
 	return tc
 }
+
+func (tc *TestCase) AssertFileNotExists(path string) *TestCase {
+	tc.t.Helper()
+	if _, err := os.Stat(path); err == nil {
+		tc.t.Fatalf("expected file to NOT exist at %s", path)
+	}
+	return tc
+}
+
+func (tc *TestCase) AssertFileContains(path, want string) *TestCase {
+	tc.t.Helper()
+	data, err := os.ReadFile(path)
+	if err != nil {
+		tc.t.Fatalf("reading %s: %v", path, err)
+	}
+	if !strings.Contains(string(data), want) {
+		tc.t.Fatalf("expected file %s to contain %q\ncontent: %s", path, want, string(data))
+	}
+	return tc
+}

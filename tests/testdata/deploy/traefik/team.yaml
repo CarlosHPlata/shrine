@@ -1,0 +1,11 @@
+apiVersion: shrine/v1
+kind: Team
+metadata:
+  name: shrine-traefik-test
+spec:
+  displayName: "Shrine Traefik Test"
+  contact: "test@shrine-traefik.com"
+  quotas:
+    maxApps: 10
+    maxResources: 10
+  registryUser: shrine-test

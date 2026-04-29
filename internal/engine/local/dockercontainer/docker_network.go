@@ -11,6 +11,7 @@ import (
 const (
 	platformNetworkName = "shrine.platform"
 	platformSubnet      = "10.200.0.0/24"
+	platformTeam        = "platform"
 )
 
 func (backend *DockerBackend) CreateNetwork(team string) error {
