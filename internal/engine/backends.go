@@ -5,6 +5,17 @@ type VolumeMount struct {
 	MountPath string
 }
 
+type BindMount struct {
+	Source string
+	Target string
+}
+
+type PortBinding struct {
+	HostPort      string
+	ContainerPort string
+	Protocol      string
+}
+
 type CreateContainerOp struct {
 	Team             string
 	Name             string
@@ -15,6 +26,9 @@ type CreateContainerOp struct {
 	Volumes          []VolumeMount
 	ExposeToPlatform bool
 	ImagePullPolicy  string
+	RestartPolicy    string
+	BindMounts       []BindMount
+	PortBindings     []PortBinding
 }
 
 type RemoveContainerOp struct {

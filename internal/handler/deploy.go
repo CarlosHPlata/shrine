@@ -9,6 +9,7 @@ import (
 	"github.com/CarlosHPlata/shrine/internal/engine/dryrun"
 	"github.com/CarlosHPlata/shrine/internal/engine/local"
 	"github.com/CarlosHPlata/shrine/internal/planner"
+	"github.com/CarlosHPlata/shrine/internal/plugins/gateway/traefik"
 	"github.com/CarlosHPlata/shrine/internal/state"
 	"github.com/CarlosHPlata/shrine/internal/ui"
 )
@@ -22,7 +23,16 @@ type DeployOptions struct {
 	Paths       *config.Paths
 }
 
-func DryRun(out io.Writer, manifestDir string, store *state.Store) error {
+// DryRun runs a dry-run deploy. When cfg is non-nil the Traefik plugin is
+// constructed (which validates its config); the dry-run engine prints route
+// operations instead of writing files.
+func DryRun(out io.Writer, manifestDir string, store *state.Store, cfg *config.Config) error {
+	if cfg != nil {
+		if _, err := traefik.New(cfg.Plugins.Gateway.Traefik, nil, ""); err != nil {
+			return err
+		}
+	}
+
 	result := planner.Plan(manifestDir, store.Teams)
 
 	if result.Error != nil {
@@ -42,9 +52,8 @@ func DryRun(out io.Writer, manifestDir string, store *state.Store) error {
 		return nil
 	}
 
-	engine := dryrun.NewDryRunEngine(out)
-
-	if err := engine.ExecuteDeploy(result.Steps, result.ManifestSet); err != nil {
+	engineInst := dryrun.NewDryRunEngine(out)
+	if err := engineInst.ExecuteDeploy(result.Steps, result.ManifestSet); err != nil {
 		return err
 	}
 
@@ -52,6 +61,27 @@ func DryRun(out io.Writer, manifestDir string, store *state.Store) error {
 }
 
 func Deploy(opts DeployOptions) error {
+	specsDir, _ := opts.Config.ResolveSpecsDir(opts.ManifestDir)
+
+	terminal := ui.NewTerminalObserver(opts.Out)
+	fileLogger, err := ui.NewFileLogger(opts.Paths.StateDir)
+	if err != nil {
+		return fmt.Errorf("initializing file logger: %w", err)
+	}
+	defer fileLogger.Close()
+
+	observer := engine.MultiObserver{terminal, fileLogger}
+
+	containerBackend, err := local.NewContainerBackend(opts.Store, opts.Config.Registries, observer)
+	if err != nil {
+		return err
+	}
+
+	plugin, err := traefik.New(opts.Config.Plugins.Gateway.Traefik, containerBackend, specsDir)
+	if err != nil {
+		return err
+	}
+
 	result := planner.Plan(opts.ManifestDir, opts.Store.Teams)
 
 	if result.Error != nil {
@@ -71,22 +101,24 @@ func Deploy(opts DeployOptions) error {
 		return nil
 	}
 
-	terminal := ui.NewTerminalObserver(opts.Out)
-	fileLogger, err := ui.NewFileLogger(opts.Paths.StateDir)
-	if err != nil {
-		return fmt.Errorf("initializing file logger: %w", err)
+	var routing engine.RoutingBackend
+	if plugin.IsActive() {
+		routing = plugin.RoutingBackend()
 	}
-	defer fileLogger.Close()
 
-	observer := engine.MultiObserver{terminal, fileLogger}
-
-	deployEngine, err := local.NewLocalEngine(opts.Store, opts.Config.Registries, observer)
+	deployEngine, err := local.NewLocalEngineWithRouting(opts.Store, opts.Config.Registries, observer, routing)
 	if err != nil {
 		return err
 	}
 
 	if err := deployEngine.ExecuteDeploy(result.Steps, result.ManifestSet); err != nil {
 		return err
+	}
+
+	if plugin.IsActive() {
+		if err := plugin.Deploy(); err != nil {
+			return err
+		}
 	}
 
 	return nil

@@ -1,0 +1,14 @@
+apiVersion: shrine/v1
+kind: Application
+metadata:
+  name: hello-eligible
+  owner: shrine-traefik-test
+spec:
+  image: traefik/whoami
+  port: 80
+  replicas: 1
+  networking:
+    exposeToPlatform: true
+  routing:
+    domain: hello-eligible.shrine.lab
+    pathPrefix: /

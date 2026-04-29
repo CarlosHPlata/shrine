@@ -161,7 +161,7 @@ func (engine *Engine) deployApplication(
 	}
 
 	// 4. Write Router
-	if application.Spec.Routing.Domain != "" && engine.Routing != nil {
+	if application.Spec.Routing.Domain != "" && application.Spec.Networking.ExposeToPlatform && engine.Routing != nil {
 		engine.Observer.OnEvent(Event{
 			Name:   "routing.configure",
 			Status: StatusInfo,

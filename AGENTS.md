@@ -174,10 +174,15 @@ shrine/
 │   │   └── apply.go
 │   └── state/                  # Store interfaces + local filesystem implementations
 │       └── local/              # SubnetStore, SecretStore, DeploymentStore
-├── agents/
-│   ├── path.md                 # Session guide for AI build assistants
+├── specs/                      # Provider-agnostic specs (source of truth)
+│   ├── README.md               # How to use the spec system with any AI
 │   ├── progress.md             # Phase checklist, decisions, known gaps
-│   └── prompt.md               # Copy-paste kickstart for new sessions
+│   └── features/               # One file per feature
+│       ├── routing.md          # Phase 9: Traefik route generation + SSH push
+│       ├── logging-observer.md # Decoupled event stream for CLI output
+│       └── integration-tests.md# Integration test suite architecture + phases
+├── agents/                     # Thin AI consumer adapters
+│   └── claude.md               # Claude persona + session kickstart
 └── test/
     └── smock/                  # Integration fixture: aterrizar + backendredis + externaldeps
 ```
@@ -249,7 +254,32 @@ registries:
   - host: ghcr.io
     username: myuser
     password: mytoken
+plugins:
+  gateway:
+    traefik:                          # presence + at least one non-zero field activates the plugin
+      image: traefik:v3.7.0-rc.2      # optional, default v3.7.0-rc.2
+      routing-dir: /var/lib/shrine/traefik   # optional, default {specsDir}/traefik/
+      port: 80                         # optional HTTP entrypoint, default 80
+      dashboard:                       # optional; when present, port + credentials are required
+        port: 8080
+        username: admin
+        password: s3cr3t
 ```
+
+## Plugins
+
+### Gateway: Traefik (`internal/plugins/gateway/traefik/`)
+
+Self-contained gateway plugin. Activates when `plugins.gateway.traefik` is present and has at least one non-zero field. When active:
+
+- writes `traefik.yml` (static config) to the resolved routing-dir
+- registers a `RoutingBackend` that writes `dynamic/{team}-{name}.yml` per app with both `routing.domain` and `networking.exposeToPlatform: true`
+- starts the `platform.traefik` container on `shrine.platform` with `RestartPolicy: always`, the routing-dir bind-mounted to `/etc/traefik`, and host port bindings for the entry point (and dashboard, if enabled)
+- preserves operator-added files in routing-dir (only files matching `{team}-{name}.yml` produced by shrine are managed)
+
+`shrine deploy --dry-run` validates plugin config (failing fast on missing dashboard credentials) but writes no files and starts no container; route operations are emitted as `[ROUTE]` log lines via the dry-run routing backend.
+
+`engine.CreateContainerOp` was extended with three optional fields used by the plugin: `RestartPolicy`, `BindMounts`, and `PortBindings`. Default container behavior is unchanged when these are zero values.
 
 ## Testing
 
