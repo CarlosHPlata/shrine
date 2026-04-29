@@ -14,17 +14,16 @@ import (
 
 // ApplySingleOptions bundles the inputs needed to apply a single manifest file.
 type ApplySingleOptions struct {
-	Out    io.Writer
-	File   string
-	Store  *state.Store
-	Config *config.Config
-	Paths  *config.Paths
+	Out         io.Writer
+	File        string
+	ManifestDir string
+	Store       *state.Store
+	Config      *config.Config
+	Paths       *config.Paths
 }
 
 func ApplySingle(opts ApplySingleOptions) error {
-	specsDir, _ := opts.Config.ResolveSpecsDir("")
-
-	result := planner.PlanSingle(opts.File, specsDir, opts.Store.Teams)
+	result := planner.PlanSingle(opts.File, opts.ManifestDir, opts.Store.Teams)
 
 	if result.Error != nil {
 		return result.Error

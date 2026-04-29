@@ -1,0 +1,4 @@
+apiVersion: shrine/v1
+kind: Application
+metadata:
+  name: test

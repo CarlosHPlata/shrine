@@ -1,0 +1,17 @@
+apiVersion: shrine/v1
+kind: Resource
+metadata:
+  name: shared-cache
+  owner: shrine-teardown-a
+  access:
+    - shrine-teardown-b
+spec:
+  type: cache
+  version: "1"
+  port: 80
+  image: traefik/whoami
+  networking:
+    exposeToPlatform: true
+  outputs:
+    - name: host
+    - name: port

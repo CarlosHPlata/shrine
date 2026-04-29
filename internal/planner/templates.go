@@ -16,6 +16,8 @@ func validateTemplates(res *manifest.ResourceManifest) []error {
 	valid := map[string]struct{}{
 		"team": {},
 		"name": {},
+		"host": {},
+		"port": {},
 	}
 	for _, o := range res.Spec.Outputs {
 		valid[o.Name] = struct{}{}

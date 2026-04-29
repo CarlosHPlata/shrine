@@ -77,6 +77,7 @@ type Output struct {
 type ResourceSpec struct {
 	Type            string        `yaml:"type"`
 	Version         string        `yaml:"version"`
+	Port            int           `yaml:"port,omitempty"`
 	Image           string        `yaml:"image,omitempty"`
 	Outputs         []Output      `yaml:"outputs,omitempty"`
 	Networking      Networking    `yaml:"networking,omitempty"`

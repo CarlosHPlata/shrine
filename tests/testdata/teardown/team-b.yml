@@ -1,0 +1,11 @@
+apiVersion: shrine/v1
+kind: Team
+metadata:
+  name: shrine-teardown-b
+spec:
+  displayName: "Shrine Teardown B"
+  contact: "test@shrine-teardown-b.com"
+  quotas:
+    maxApps: 10
+    maxResources: 10
+  registryUser: shrine-teardown-b

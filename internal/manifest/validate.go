@@ -108,7 +108,7 @@ func validateResourceSpec(spec ResourceSpec) []string {
 
 	// Validate outputs: each must have a name, names must be unique. Every
 	// output must declare exactly one of value/generated/template, except the
-	// built-in `host` which must declare none (the CLI fills it in).
+	// built-ins `host` and `port` which must declare none (the CLI fills them in).
 	seen := make(map[string]bool)
 	for i, o := range spec.Outputs {
 		if o.Name == "" {
@@ -121,7 +121,7 @@ func validateResourceSpec(spec ResourceSpec) []string {
 		seen[o.Name] = true
 
 		kinds := countSet(o.Value != "", o.Generated, o.Template != "")
-		if o.Name == "host" {
+		if o.Name == "host" || o.Name == "port" {
 			if kinds > 0 {
 				errs = append(errs, fmt.Sprintf("spec.outputs[%d]: %q is a CLI built-in and must not set value/generated/template", i, o.Name))
 			}

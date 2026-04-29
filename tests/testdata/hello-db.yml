@@ -8,10 +8,10 @@ metadata:
 spec:
   type: postgres
   version: "16"
+  port: 5432
   outputs:
     - name: host
     - name: port
-      value: "5432"
     - name: database
       value: "hello"
     - name: password
