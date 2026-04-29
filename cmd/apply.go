@@ -16,12 +16,17 @@ var applyCmd = &cobra.Command{
 	Long:  `Declaratively sync manifest files from a directory into the platform state.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if applyFile != "" {
+			dir, err := cfg.ResolveSpecsDir(applyPath)
+			if err != nil {
+				return err
+			}
 			return handler.ApplySingle(handler.ApplySingleOptions{
-				Out:    cmd.OutOrStdout(),
-				File:   applyFile,
-				Store:  store,
-				Config: cfg,
-				Paths:  paths,
+				Out:         cmd.OutOrStdout(),
+				File:        applyFile,
+				ManifestDir: dir,
+				Store:       store,
+				Config:      cfg,
+				Paths:       paths,
 			})
 		}
 		return fmt.Errorf("specify a subcommand (e.g. shrine apply teams) or use --file/-f to apply a single manifest")
