@@ -88,3 +88,27 @@ func (tc *TestCase) AssertContainerEnvVarNotEmpty(containerName, key string) *Te
 	tc.t.Errorf("container %q missing env var %q", containerName, key)
 	return tc
 }
+
+func (tc *TestCase) AssertContainerNotRunning(name string) *TestCase {
+	tc.t.Helper()
+	ctx := context.Background()
+	info, err := tc.DockerClient.ContainerInspect(ctx, name)
+	if err != nil {
+		// Container not found — that's the expected state
+		return tc
+	}
+	if info.State.Status == "running" {
+		tc.t.Errorf("container %q is still running, expected it to be stopped or removed", name)
+	}
+	return tc
+}
+
+func (tc *TestCase) AssertNetworkNotExists(name string) *TestCase {
+	tc.t.Helper()
+	ctx := context.Background()
+	_, err := tc.DockerClient.NetworkInspect(ctx, name, network.InspectOptions{})
+	if err == nil {
+		tc.t.Errorf("network %q still exists, expected it to be removed", name)
+	}
+	return tc
+}

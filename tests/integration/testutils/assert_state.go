@@ -9,6 +9,15 @@ import (
 	"strings"
 )
 
+func (tc *TestCase) AssertTeamNotInState(name string) *TestCase {
+	tc.t.Helper()
+	path := filepath.Join(tc.StateDir, "teams", strings.ToLower(name)+".json")
+	if _, err := os.Stat(path); err == nil {
+		tc.t.Errorf("expected team %q to not be in state, but file exists at %s", name, path)
+	}
+	return tc
+}
+
 func (tc *TestCase) AssertTeamInState(name string) *TestCase {
 	tc.t.Helper()
 	path := filepath.Join(tc.StateDir, "teams", strings.ToLower(name)+".json")

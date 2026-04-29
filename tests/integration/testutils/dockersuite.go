@@ -92,3 +92,10 @@ func cleanupDockerResources(tc *TestCase, teamName string) {
 
 	tc.DockerClient.NetworkRemove(ctx, networkName)
 }
+
+// CleanupTeam removes all containers and the private network for the given
+// team. Use this in BeforeEach when a test suite needs to clean up additional
+// teams beyond the primary one managed by NewDockerSuite.
+func CleanupTeam(tc *TestCase, teamName string) {
+	cleanupDockerResources(tc, teamName)
+}
