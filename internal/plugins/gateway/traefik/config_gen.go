@@ -10,9 +10,37 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"github.com/CarlosHPlata/shrine/internal/config"
+	"github.com/CarlosHPlata/shrine/internal/engine"
 )
 
-func generateStaticConfig(cfg *config.TraefikPluginConfig, routingDir string) error {
+var lstatFn = os.Lstat
+
+func isStaticConfigPresent(routingDir string) (bool, error) {
+	path := filepath.Join(routingDir, "traefik.yml")
+	if _, err := lstatFn(path); err != nil {
+		if os.IsNotExist(err) {
+			return false, nil
+		}
+		return false, fmt.Errorf("traefik plugin: checking traefik.yml at %q: %w", path, err)
+	}
+	return true, nil
+}
+
+func generateStaticConfig(cfg *config.TraefikPluginConfig, routingDir string, observer engine.Observer) error {
+	path := filepath.Join(routingDir, "traefik.yml")
+	present, err := isStaticConfigPresent(routingDir)
+	if err != nil {
+		return err
+	}
+	if present {
+		observer.OnEvent(engine.Event{
+			Name:   "gateway.config.preserved",
+			Status: engine.StatusInfo,
+			Fields: map[string]string{"path": path},
+		})
+		return nil
+	}
+
 	port := cfg.Port
 	if port == 0 {
 		port = defaultPort
@@ -54,7 +82,15 @@ func generateStaticConfig(cfg *config.TraefikPluginConfig, routingDir string) er
 		return fmt.Errorf("marshal traefik static config: %w", err)
 	}
 
-	return os.WriteFile(filepath.Join(routingDir, "traefik.yml"), data, 0o644)
+	if err := os.WriteFile(path, data, 0o644); err != nil {
+		return fmt.Errorf("traefik plugin: writing traefik.yml: %w", err)
+	}
+	observer.OnEvent(engine.Event{
+		Name:   "gateway.config.generated",
+		Status: engine.StatusInfo,
+		Fields: map[string]string{"path": path},
+	})
+	return nil
 }
 
 // htpasswdEntry produces an htpasswd line in the SHA1 format that Traefik

@@ -28,7 +28,7 @@ type DeployOptions struct {
 // operations instead of writing files.
 func DryRun(out io.Writer, manifestDir string, store *state.Store, cfg *config.Config) error {
 	if cfg != nil {
-		if _, err := traefik.New(cfg.Plugins.Gateway.Traefik, nil, ""); err != nil {
+		if _, err := traefik.New(cfg.Plugins.Gateway.Traefik, nil, "", nil); err != nil {
 			return err
 		}
 	}
@@ -77,7 +77,7 @@ func Deploy(opts DeployOptions) error {
 		return err
 	}
 
-	plugin, err := traefik.New(opts.Config.Plugins.Gateway.Traefik, containerBackend, specsDir)
+	plugin, err := traefik.New(opts.Config.Plugins.Gateway.Traefik, containerBackend, specsDir, observer)
 	if err != nil {
 		return err
 	}
