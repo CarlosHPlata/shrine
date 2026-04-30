@@ -55,6 +55,7 @@ func copyFile(_ string, src, dst string) error {
 
 const traefikTestTeam = "shrine-traefik-test"
 const traefikContainerName = "platform.traefik"
+const aliasTestTeam = "shrine-alias-test"
 
 func writeConfig(t *testing.T, configDir, content string) {
 	t.Helper()
@@ -85,6 +86,7 @@ func TestTraefikPlugin(t *testing.T) {
 
 	s.BeforeEach(func(tc *TestCase) {
 		cleanupTraefikContainer(tc)
+		CleanupTeam(tc, aliasTestTeam)
 		tc.StateDir = tc.TempDir()
 		SeedSubnetState(tc)
 		tc.Run("apply", "teams",
@@ -94,6 +96,7 @@ func TestTraefikPlugin(t *testing.T) {
 	})
 	s.AfterEach(func(tc *TestCase) {
 		cleanupTraefikContainer(tc)
+		CleanupTeam(tc, aliasTestTeam)
 	})
 
 	s.Test("should deploy traefik container when plugin block is populated", func(tc *TestCase) {
@@ -703,8 +706,8 @@ func TestTraefikPlugin(t *testing.T) {
 			"--path", aliasFixturePath("prefix"),
 		).AssertSuccess()
 
-		tc.AssertOutputContains("routing.configure")
-		tc.AssertOutputContains("aliases=alias.shrine.lab+/finances")
+		tc.AssertOutputContains("Configuring routing:")
+		tc.AssertOutputContains("Aliases: alias.shrine.lab+/finances")
 	})
 
 	// T014a: re-deploying without aliases must drop alias routers and strip middlewares.

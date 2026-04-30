@@ -52,6 +52,9 @@ func (t *TerminalObserver) OnEvent(e engine.Event) {
 
 	case "routing.configure":
 		fmt.Fprintf(t.out, "  🔗 Configuring routing: %s -> port %s\n", e.Fields["domain"], e.Fields["port"])
+		if aliases := e.Fields["aliases"]; aliases != "" {
+			fmt.Fprintf(t.out, "    ↳ Aliases: %s\n", aliases)
+		}
 
 	case "gateway.config.preserved":
 		fmt.Fprintf(t.out, "  📄 Preserving operator-owned traefik.yml: %s\n", e.Fields["path"])
