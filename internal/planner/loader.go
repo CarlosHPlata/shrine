@@ -2,8 +2,6 @@ package planner
 
 import (
 	"fmt"
-	"io/fs"
-	"path/filepath"
 
 	"github.com/CarlosHPlata/shrine/internal/manifest"
 )
@@ -15,20 +13,19 @@ type ManifestSet struct {
 	Resources    map[string]*manifest.ResourceManifest
 }
 
-// LoadDir scans the provided directory for .yml and .yaml files, parses them,
-// and returns a ManifestSet. It skips Team manifests and errors on duplicate names.
 func LoadDir(dir string) (*ManifestSet, error) {
 	set := &ManifestSet{
 		Applications: make(map[string]*manifest.ApplicationManifest),
 		Resources:    make(map[string]*manifest.ResourceManifest),
 	}
 
-	files, err := getFiles(dir)
+	result, err := manifest.ScanDir(dir)
 	if err != nil {
 		return nil, err
 	}
 
-	for _, path := range files {
+	for _, candidate := range result.Shrine {
+		path := candidate.Path
 		m, err := manifest.Parse(path)
 		if err != nil {
 			// Wrapping errors with the path helps the user locate the broken file
@@ -45,28 +42,11 @@ func LoadDir(dir string) (*ManifestSet, error) {
 		}
 	}
 
-	return set, nil
-}
-
-func getFiles(dir string) ([]string, error) {
-	var files []string
-	err := filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		if d.IsDir() {
-			return nil
-		}
-		ext := filepath.Ext(path)
-		if ext == ".yml" || ext == ".yaml" {
-			files = append(files, path)
-		}
-		return nil
-	})
-	if err != nil {
-		return nil, fmt.Errorf("scanning manifest directory %q: %w", dir, err)
+	if len(result.Foreign) > 0 {
+		manifest.ReportForeignFiles(dir, result.Foreign)
 	}
-	return files, nil
+
+	return set, nil
 }
 
 // mapKind routes a single manifest into the correct map within the set.

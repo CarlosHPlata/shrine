@@ -55,6 +55,28 @@ func TestApplyTeams(t *testing.T) {
 		tc.AssertTeamInState("team-beta")
 		tc.AssertTeamCount(2)
 	})
+
+	s.Test("should succeed when specsDir contains foreign yaml", func(tc *TestCase) {
+		// T024: apply/foreign-yaml contains team.yaml (shrine-apply-test) plus
+		// traefik/traefik.yml (no apiVersion). ApplyTeams must skip the foreign file.
+		tc.Run("apply", "teams",
+			"--path", applyFixturesPath("foreign-yaml"),
+			"--state-dir", tc.StateDir,
+		).AssertSuccess()
+		tc.AssertTeamInState("shrine-apply-test")
+	})
+
+	s.Test("should apply teams fail loudly when shrine manifest has bad kind", func(tc *TestCase) {
+		// ApplyTeams continues past parse errors today (logs to stdout, exit 0). The
+		// regression guard asserts the file path + offending kind are visible in the
+		// output, regardless of exit code — pinning the FR-007 promise without altering
+		// the historical UX.
+		tc.Run("apply", "teams",
+			"--path", applyFixturesPath("bad-kind"),
+			"--state-dir", tc.StateDir,
+		).AssertOutputContains("typo.yaml").
+			AssertOutputContains("Aplication")
+	})
 }
 
 func TestApplyFileErrors(t *testing.T) {
@@ -94,6 +116,23 @@ func TestApplyFileErrors(t *testing.T) {
 			"--path", applyFixturesPath(),
 		).AssertFailure()
 	})
+
+	s.Test("should apply file fail loudly when target is shrine manifest with bad kind", func(tc *TestCase) {
+		// T034: apply -f pointing at typo.yaml (apiVersion: shrine/v1, kind: Aplication).
+		// LoadDir parses the shrine-classified file via manifest.Parse, which returns
+		// "unknown manifest kind: \"Aplication\"". The command must exit non-zero and
+		// stderr must contain both the file name and the offending kind value.
+		// Note: the existing "should show error when the manifest kind is unknown" case
+		// uses unknown-kind.yml (kind: Unknown) and only asserts AssertFailure() without
+		// checking the specific file name or kind value in stderr. T034 adds those
+		// targeted assertions on a separate fixture to explicitly guard FR-003.
+		tc.Run("apply", "-f", applyFixturesPath("bad-kind", "typo.yaml"),
+			"--path", applyFixturesPath("bad-kind"),
+			"--state-dir", tc.TempDir(),
+		).AssertFailure().
+			AssertStderrContains("typo").
+			AssertStderrContains("Aplication")
+	})
 }
 
 func TestApplyFile(t *testing.T) {
@@ -130,5 +169,17 @@ func TestApplyFile(t *testing.T) {
 			"--path", applyFixturesPath("success"),
 		).AssertSuccess()
 		tc.AssertContainerRunning(applyTestTeam + ".whoami-apply-yaml")
+	})
+
+	s.Test("should apply file succeed when specsDir contains foreign yaml", func(tc *TestCase) {
+		// T025: apply/foreign-yaml contains app.yaml (whoami-apply-foreign, owner
+		// shrine-apply-test) plus traefik/traefik.yml (no apiVersion). The team is
+		// already seeded by BeforeEach (from the success fixture). LoadDir is called
+		// with --path applyFixturesPath("foreign-yaml") and must skip the foreign file.
+		tc.Run("apply", "-f", applyFixturesPath("foreign-yaml", "app.yaml"),
+			"--path", applyFixturesPath("foreign-yaml"),
+			"--state-dir", tc.StateDir,
+		).AssertSuccess()
+		tc.AssertContainerRunning(applyTestTeam + ".whoami-apply-foreign")
 	})
 }

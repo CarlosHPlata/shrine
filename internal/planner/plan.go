@@ -45,10 +45,10 @@ func PlanSingle(file, specsDir string, store state.TeamStore) PlanResult {
 	// Step 1: Parse and validate the target manifest.
 	m, err := manifest.Parse(file)
 	if err != nil {
-		return PlanResult{Error: err}
+		return PlanResult{Error: fmt.Errorf("parsing manifest %q: %w", file, err)}
 	}
 	if err := manifest.Validate(m); err != nil {
-		return PlanResult{Error: err}
+		return PlanResult{Error: fmt.Errorf("validating manifest %q: %w", file, err)}
 	}
 
 	// Derive the name from the concrete sub-manifest.
