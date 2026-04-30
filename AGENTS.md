@@ -54,6 +54,10 @@ spec:
   routing:
     domain: hello-api.home.lab
     pathPrefix: /hello-api
+    aliases:                                   # optional; Traefik-only — silently ignored otherwise
+      - host: gateway.tail9a6ddb.ts.net
+        pathPrefix: /finances                  # required to start with `/`; trailing `/` normalized
+        stripPrefix: true                      # default true when pathPrefix is set; set false to forward unchanged
   dependencies:
     - kind: Resource
       name: hello-db

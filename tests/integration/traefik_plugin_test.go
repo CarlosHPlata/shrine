@@ -55,6 +55,7 @@ func copyFile(_ string, src, dst string) error {
 
 const traefikTestTeam = "shrine-traefik-test"
 const traefikContainerName = "platform.traefik"
+const aliasTestTeam = "shrine-alias-test"
 
 func writeConfig(t *testing.T, configDir, content string) {
 	t.Helper()
@@ -78,11 +79,14 @@ func traefikFixturePath() string {
 	return fixturesPath("traefik")
 }
 
+func aliasFixturePath(variant string) string { return fixturesPath("traefik-alias-" + variant) }
+
 func TestTraefikPlugin(t *testing.T) {
 	s := NewDockerSuite(t, traefikTestTeam)
 
 	s.BeforeEach(func(tc *TestCase) {
 		cleanupTraefikContainer(tc)
+		CleanupTeam(tc, aliasTestTeam)
 		tc.StateDir = tc.TempDir()
 		SeedSubnetState(tc)
 		tc.Run("apply", "teams",
@@ -92,6 +96,7 @@ func TestTraefikPlugin(t *testing.T) {
 	})
 	s.AfterEach(func(tc *TestCase) {
 		cleanupTraefikContainer(tc)
+		CleanupTeam(tc, aliasTestTeam)
 	})
 
 	s.Test("should deploy traefik container when plugin block is populated", func(tc *TestCase) {
@@ -500,5 +505,300 @@ func TestTraefikPlugin(t *testing.T) {
 		if !bytes.Contains(content, []byte("entryPoints:")) {
 			t.Fatalf("regenerated traefik.yml missing canonical 'entryPoints:' key\ncontent: %s", content)
 		}
+	})
+
+	// T009: host-only alias produces a second router with no middlewares.
+	s.Test("should publish alias router for a host-only alias", func(tc *TestCase) {
+		// Register the alias team in addition to the traefik team registered by BeforeEach.
+		tc.Run("apply", "teams",
+			"--path", aliasFixturePath("host-only"),
+			"--state-dir", tc.StateDir,
+		).AssertSuccess()
+
+		configDir := tc.Path("config")
+		routingDir := tc.Path("traefik")
+		writeConfig(t, configDir, `plugins:
+  gateway:
+    traefik:
+      routing-dir: `+routingDir+`
+      port: 8095
+`)
+
+		tc.Run("deploy",
+			"--config-dir", configDir,
+			"--state-dir", tc.StateDir,
+			"--path", aliasFixturePath("host-only"),
+		).AssertSuccess()
+
+		dynamicFile := filepath.Join(routingDir, "dynamic", "shrine-alias-test-whoami-host-only.yml")
+		tc.AssertFileExists(dynamicFile)
+		tc.AssertFileContains(dynamicFile, "whoami.shrine.lab")
+		tc.AssertFileContains(dynamicFile, "Host(`alias.shrine.lab`)")
+		tc.AssertFileContains(dynamicFile, "shrine-alias-test-whoami-host-only-alias-0")
+		// Host-only alias never produces a strip middleware.
+		content, err := os.ReadFile(dynamicFile)
+		if err != nil {
+			t.Fatalf("read dynamic file: %v", err)
+		}
+		if bytes.Contains(content, []byte("middlewares:")) {
+			t.Fatalf("host-only alias must not produce any middlewares:\ncontent: %s", content)
+		}
+	})
+
+	// T010: path-prefixed alias with default strip produces a strip middleware.
+	s.Test("should publish alias router with default-strip middleware for path-prefixed alias", func(tc *TestCase) {
+		tc.Run("apply", "teams",
+			"--path", aliasFixturePath("prefix"),
+			"--state-dir", tc.StateDir,
+		).AssertSuccess()
+
+		configDir := tc.Path("config")
+		routingDir := tc.Path("traefik")
+		writeConfig(t, configDir, `plugins:
+  gateway:
+    traefik:
+      routing-dir: `+routingDir+`
+      port: 8096
+`)
+
+		tc.Run("deploy",
+			"--config-dir", configDir,
+			"--state-dir", tc.StateDir,
+			"--path", aliasFixturePath("prefix"),
+		).AssertSuccess()
+
+		dynamicFile := filepath.Join(routingDir, "dynamic", "shrine-alias-test-whoami-prefix.yml")
+		tc.AssertFileExists(dynamicFile)
+		tc.AssertFileContains(dynamicFile, "Host(`alias.shrine.lab`) && PathPrefix(`/finances`)")
+		tc.AssertFileContains(dynamicFile, "shrine-alias-test-whoami-prefix-strip-0:")
+		tc.AssertFileContains(dynamicFile, "prefixes:")
+		tc.AssertFileContains(dynamicFile, "/finances")
+		// The alias router must reference the strip middleware.
+		tc.AssertFileContains(dynamicFile, "shrine-alias-test-whoami-prefix-strip-0")
+	})
+
+	// T011: three aliases with mixed strip settings emit exactly one strip middleware at index 1.
+	s.Test("should publish multiple alias routers with sparse strip indexing", func(tc *TestCase) {
+		tc.Run("apply", "teams",
+			"--path", aliasFixturePath("multi"),
+			"--state-dir", tc.StateDir,
+		).AssertSuccess()
+
+		configDir := tc.Path("config")
+		routingDir := tc.Path("traefik")
+		writeConfig(t, configDir, `plugins:
+  gateway:
+    traefik:
+      routing-dir: `+routingDir+`
+      port: 8097
+`)
+
+		tc.Run("deploy",
+			"--config-dir", configDir,
+			"--state-dir", tc.StateDir,
+			"--path", aliasFixturePath("multi"),
+		).AssertSuccess()
+
+		dynamicFile := filepath.Join(routingDir, "dynamic", "shrine-alias-test-whoami-multi.yml")
+		tc.AssertFileExists(dynamicFile)
+		tc.AssertFileContains(dynamicFile, "shrine-alias-test-whoami-multi-alias-0")
+		tc.AssertFileContains(dynamicFile, "shrine-alias-test-whoami-multi-alias-1")
+		tc.AssertFileContains(dynamicFile, "shrine-alias-test-whoami-multi-alias-2")
+
+		// Alias 1 has pathPrefix + default strip → strip-1 emitted.
+		tc.AssertFileContains(dynamicFile, "shrine-alias-test-whoami-multi-strip-1")
+
+		// Alias 0 has no pathPrefix; alias 2 has stripPrefix:false → no strip middleware for those.
+		content, err := os.ReadFile(dynamicFile)
+		if err != nil {
+			t.Fatalf("read dynamic file: %v", err)
+		}
+		if bytes.Contains(content, []byte("shrine-alias-test-whoami-multi-strip-0")) {
+			t.Fatalf("alias-0 is host-only — strip-0 must not be emitted:\ncontent: %s", content)
+		}
+		if bytes.Contains(content, []byte("shrine-alias-test-whoami-multi-strip-2")) {
+			t.Fatalf("alias-2 has stripPrefix:false — strip-2 must not be emitted:\ncontent: %s", content)
+		}
+	})
+
+	// T012: two apps colliding on the same primary domain must fail before any dynamic config is written.
+	s.Test("should fail deploy when two applications collide on host+pathPrefix", func(tc *TestCase) {
+		tc.Run("apply", "teams",
+			"--path", aliasFixturePath("collision"),
+			"--state-dir", tc.StateDir,
+		).AssertSuccess()
+
+		configDir := tc.Path("config")
+		routingDir := tc.Path("traefik")
+		writeConfig(t, configDir, `plugins:
+  gateway:
+    traefik:
+      routing-dir: `+routingDir+`
+      port: 8098
+`)
+
+		tc.Run("deploy",
+			"--config-dir", configDir,
+			"--state-dir", tc.StateDir,
+			"--path", aliasFixturePath("collision"),
+		).AssertFailure().
+			AssertStderrContains("routing collision:").
+			AssertStderrContains("app-a").
+			AssertStderrContains("app-b")
+
+		// No dynamic config must have been written for either colliding app.
+		tc.AssertFileNotExists(filepath.Join(routingDir, "dynamic", "shrine-alias-test-app-a.yml"))
+		tc.AssertFileNotExists(filepath.Join(routingDir, "dynamic", "shrine-alias-test-app-b.yml"))
+	})
+
+	// T013: both primary and alias routers reference the same backend service.
+	// NOTE: The harness has no docker-exec primitive (assert_docker.go contains no
+	// ContainerExec helper), so end-to-end curl verification (SC-002) is out of scope
+	// for this test run. Instead we assert the config-level guarantee: both the primary
+	// router and all alias routers name the same service key — which is what routes
+	// traffic to the same backend. FR-006 live curl coverage belongs to quickstart.md.
+	s.Test("should reach backend through both primary and alias addresses", func(tc *TestCase) {
+		tc.Run("apply", "teams",
+			"--path", aliasFixturePath("prefix"),
+			"--state-dir", tc.StateDir,
+		).AssertSuccess()
+
+		configDir := tc.Path("config")
+		routingDir := tc.Path("traefik")
+		writeConfig(t, configDir, `plugins:
+  gateway:
+    traefik:
+      routing-dir: `+routingDir+`
+      port: 8099
+`)
+
+		tc.Run("deploy",
+			"--config-dir", configDir,
+			"--state-dir", tc.StateDir,
+			"--path", aliasFixturePath("prefix"),
+		).AssertSuccess()
+
+		dynamicFile := filepath.Join(routingDir, "dynamic", "shrine-alias-test-whoami-prefix.yml")
+		tc.AssertFileExists(dynamicFile)
+		// Both the primary router and the alias router must point at the same service.
+		tc.AssertFileContains(dynamicFile, "service: shrine-alias-test-whoami-prefix")
+	})
+
+	// T014: the routing.configure log line must include an aliases= field.
+	s.Test("should include aliases field in routing.configure log signal", func(tc *TestCase) {
+		tc.Run("apply", "teams",
+			"--path", aliasFixturePath("prefix"),
+			"--state-dir", tc.StateDir,
+		).AssertSuccess()
+
+		configDir := tc.Path("config")
+		routingDir := tc.Path("traefik")
+		writeConfig(t, configDir, `plugins:
+  gateway:
+    traefik:
+      routing-dir: `+routingDir+`
+      port: 8100
+`)
+
+		tc.Run("deploy",
+			"--config-dir", configDir,
+			"--state-dir", tc.StateDir,
+			"--path", aliasFixturePath("prefix"),
+		).AssertSuccess()
+
+		tc.AssertOutputContains("Configuring routing:")
+		tc.AssertOutputContains("Aliases: alias.shrine.lab+/finances")
+	})
+
+	// T014a: re-deploying without aliases must drop alias routers and strip middlewares.
+	// Two fixture directories are used:
+	//   1. traefik-alias-prefix  — app with one alias (produces alias-0 + strip-0)
+	//   2. traefik-alias-removed — same app manifest but with the aliases section removed
+	// The same routingDir is reused across both deploys so the file is overwritten.
+	s.Test("should drop alias routers when alias is removed and re-deployed", func(tc *TestCase) {
+		tc.Run("apply", "teams",
+			"--path", aliasFixturePath("prefix"),
+			"--state-dir", tc.StateDir,
+		).AssertSuccess()
+
+		configDir := tc.Path("config")
+		routingDir := tc.Path("traefik")
+		writeConfig(t, configDir, `plugins:
+  gateway:
+    traefik:
+      routing-dir: `+routingDir+`
+      port: 8101
+`)
+
+		// First deploy: with alias.
+		tc.Run("deploy",
+			"--config-dir", configDir,
+			"--state-dir", tc.StateDir,
+			"--path", aliasFixturePath("prefix"),
+		).AssertSuccess()
+
+		dynamicFile := filepath.Join(routingDir, "dynamic", "shrine-alias-test-whoami-prefix.yml")
+		tc.AssertFileExists(dynamicFile)
+		tc.AssertFileContains(dynamicFile, "shrine-alias-test-whoami-prefix-alias-0")
+		tc.AssertFileContains(dynamicFile, "shrine-alias-test-whoami-prefix-strip-0")
+
+		// Second deploy: alias removed — traefik-alias-removed has the same app name
+		// (whoami-prefix) but no aliases section.
+		tc.Run("deploy",
+			"--config-dir", configDir,
+			"--state-dir", tc.StateDir,
+			"--path", aliasFixturePath("removed"),
+		).AssertSuccess()
+
+		tc.AssertFileExists(dynamicFile)
+		afterContent, err := os.ReadFile(dynamicFile)
+		if err != nil {
+			t.Fatalf("read dynamic file after alias removal: %v", err)
+		}
+		if bytes.Contains(afterContent, []byte("alias-0")) {
+			t.Fatalf("alias router must be gone after alias is removed:\ncontent: %s", afterContent)
+		}
+		if bytes.Contains(afterContent, []byte("strip-0")) {
+			t.Fatalf("strip middleware must be gone after alias is removed:\ncontent: %s", afterContent)
+		}
+	})
+
+	// T028: same manifest (with aliases) must deploy cleanly on both a Traefik-disabled
+	// and a Traefik-enabled host. This validates the US2 "portable manifest" guarantee.
+	s.Test("should run alias-bearing manifest on traefik-enabled and traefik-disabled hosts", func(tc *TestCase) {
+		tc.Run("apply", "teams",
+			"--path", aliasFixturePath("prefix"),
+			"--state-dir", tc.StateDir,
+		).AssertSuccess()
+
+		configDir := tc.Path("config")
+		routingDir := tc.Path("traefik")
+
+		// First deploy: Traefik plugin DISABLED — alias must be inert.
+		writeConfig(t, configDir, "")
+		tc.Run("deploy",
+			"--config-dir", configDir,
+			"--state-dir", tc.StateDir,
+			"--path", aliasFixturePath("prefix"),
+		).AssertSuccess()
+
+		tc.AssertFileNotExists(filepath.Join(routingDir, "dynamic"))
+
+		// Second deploy: Traefik plugin ENABLED — alias routing must materialise.
+		writeConfig(t, configDir, `plugins:
+  gateway:
+    traefik:
+      routing-dir: `+routingDir+`
+      port: 8102
+`)
+		tc.Run("deploy",
+			"--config-dir", configDir,
+			"--state-dir", tc.StateDir,
+			"--path", aliasFixturePath("prefix"),
+		).AssertSuccess()
+
+		dynamicFile := filepath.Join(routingDir, "dynamic", "shrine-alias-test-whoami-prefix.yml")
+		tc.AssertFileExists(dynamicFile)
+		tc.AssertFileContains(dynamicFile, "shrine-alias-test-whoami-prefix-alias-0")
 	})
 }

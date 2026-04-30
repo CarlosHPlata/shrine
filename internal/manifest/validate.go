@@ -90,6 +90,8 @@ func validateApplicationSpec(spec ApplicationSpec) []string {
 		errs = append(errs, validateExclusiveFields("spec.env", i, e.Name, "value/valueFrom/template", kinds)...)
 	}
 
+	errs = append(errs, validateRoutingAliases(spec.Routing)...)
+
 	// validate volumes
 	if spec.Volumes != nil {
 		errs = append(errs, validateVolumeMounts(spec.Volumes)...)
@@ -134,6 +136,66 @@ func validateResourceSpec(spec ResourceSpec) []string {
 	// validate volumes
 	if spec.Volumes != nil {
 		errs = append(errs, validateVolumeMounts(spec.Volumes)...)
+	}
+
+	return errs
+}
+
+func hasInvalidChars(s string) bool {
+	for _, r := range s {
+		if r == ' ' || r < 0x20 || r == 0x7f {
+			return true
+		}
+	}
+	return false
+}
+
+func normalizePathPrefix(p string) string {
+	return strings.TrimRight(p, "/")
+}
+
+func validateRoutingAliases(routing Routing) []string {
+	if len(routing.Aliases) == 0 {
+		return nil
+	}
+
+	var errs []string
+
+	if routing.Domain == "" {
+		errs = append(errs, "spec.routing.aliases is set but spec.routing.domain is empty")
+	}
+
+	type routeKey struct{ host, path string }
+	seen := make(map[routeKey]bool)
+	seen[routeKey{routing.Domain, normalizePathPrefix(routing.PathPrefix)}] = true
+
+	for i, a := range routing.Aliases {
+		if a.Host == "" {
+			errs = append(errs, fmt.Sprintf("spec.routing.aliases[%d].host is required", i))
+			continue
+		}
+
+		if hasInvalidChars(a.Host) {
+			errs = append(errs, fmt.Sprintf("spec.routing.aliases[%d].host %q contains invalid characters", i, a.Host))
+		}
+
+		if a.PathPrefix != "" {
+			normPath := normalizePathPrefix(a.PathPrefix)
+			if !strings.HasPrefix(a.PathPrefix, "/") {
+				errs = append(errs, fmt.Sprintf("spec.routing.aliases[%d].pathPrefix %q must start with \"/\"", i, a.PathPrefix))
+			} else if normPath == "" {
+				errs = append(errs, fmt.Sprintf("spec.routing.aliases[%d].pathPrefix must not be just \"/\"", i))
+			} else if hasInvalidChars(a.PathPrefix) {
+				errs = append(errs, fmt.Sprintf("spec.routing.aliases[%d].pathPrefix %q contains invalid characters", i, a.PathPrefix))
+			}
+		}
+
+		normPath := normalizePathPrefix(a.PathPrefix)
+		key := routeKey{a.Host, normPath}
+		if seen[key] {
+			errs = append(errs, fmt.Sprintf("spec.routing: duplicate route %s%s declared on alias[%d]", a.Host, normPath, i))
+		}
+		seen[key] = true
 	}
 
 	return errs

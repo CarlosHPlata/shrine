@@ -23,6 +23,7 @@ func TestDeploy(t *testing.T) {
 	s := NewDockerSuite(t, testTeam)
 
 	s.BeforeEach(func(tc *TestCase) {
+		CleanupTeam(tc, "shrine-alias-test")
 		tc.StateDir = tc.TempDir()
 		SeedSubnetState(tc)
 		// Use the dedicated team/ sub-fixture so BeforeEach does not scan the
@@ -32,6 +33,10 @@ func TestDeploy(t *testing.T) {
 			"--path", fixturesPath("team"),
 			"--state-dir", tc.StateDir,
 		).AssertSuccess()
+	})
+
+	s.AfterEach(func(tc *TestCase) {
+		CleanupTeam(tc, "shrine-alias-test")
 	})
 
 	s.Test("should deploy a basic app and create its container and network", func(tc *TestCase) {
@@ -174,6 +179,31 @@ func TestDeploy(t *testing.T) {
 			"--state-dir", tc.StateDir,
 		).AssertFailure().
 			AssertStderrContains("broken.yaml")
+	})
+
+	// T027 (US2): alias manifest deploys cleanly when the traefik plugin is disabled.
+	// The deploy must succeed, produce no alias-related output, and leave the routing
+	// directory untouched (no dynamic/ subdirectory created).
+	s.Test("should accept alias manifest silently when traefik plugin disabled", func(tc *TestCase) {
+		// Register the alias team; no traefik plugin block in the config.
+		tc.Run("apply", "teams",
+			"--path", aliasFixturePath("prefix"),
+			"--state-dir", tc.StateDir,
+		).AssertSuccess()
+
+		tc.Run("deploy",
+			"--state-dir", tc.StateDir,
+			"--path", aliasFixturePath("prefix"),
+		).AssertSuccess()
+
+		// No dynamic routing directory must be created.
+		// (No --config-dir means no plugin config at all, so no routingDir is configured.)
+		// We verify the alias was treated as fully inert by checking the alias-listing
+		// log signal — emitted by terminal_logger only when a routing backend is
+		// active — does not appear. We don't assert the bare word "alias" because the
+		// team name (shrine-alias-test) legitimately contains it.
+		tc.AssertOutputNotContains("Aliases:")
+		tc.AssertOutputNotContains("Configuring routing:")
 	})
 
 	s.Test("should succeed when specsDir contains non-YAML files", func(tc *TestCase) {

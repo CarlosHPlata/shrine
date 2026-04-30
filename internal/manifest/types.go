@@ -36,10 +36,17 @@ type EnvVar struct {
 	Template  string `yaml:"template,omitempty" json:"template,omitempty"`
 }
 
+type RoutingAlias struct {
+	Host        string `yaml:"host"`
+	PathPrefix  string `yaml:"pathPrefix,omitempty"`
+	StripPrefix *bool  `yaml:"stripPrefix,omitempty"`
+}
+
 // Used in Application spec
 type Routing struct {
-	Domain     string `yaml:"domain"`
-	PathPrefix string `yaml:"pathPrefix,omitempty"`
+	Domain     string         `yaml:"domain"`
+	PathPrefix string         `yaml:"pathPrefix,omitempty"`
+	Aliases    []RoutingAlias `yaml:"aliases,omitempty"`
 }
 
 // Used in App and Res spec

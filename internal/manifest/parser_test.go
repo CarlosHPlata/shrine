@@ -82,6 +82,81 @@ func TestParse_ApplicationManifest(t *testing.T) {
 	}
 }
 
+func TestParse_ApplicationManifest_WithAliases(t *testing.T) {
+	m, err := Parse(testdataPath("hello-api-aliased.yml"))
+	if err != nil {
+		t.Fatalf("Parse returned error: %v", err)
+	}
+	if m.Application == nil {
+		t.Fatal("Application is nil")
+	}
+
+	app := m.Application
+	aliases := app.Spec.Routing.Aliases
+
+	if len(aliases) != 1 {
+		t.Fatalf("len(Aliases) = %d, want 1", len(aliases))
+	}
+	if aliases[0].Host != "gateway.tail9a6ddb.ts.net" {
+		t.Errorf("Aliases[0].Host = %q, want %q", aliases[0].Host, "gateway.tail9a6ddb.ts.net")
+	}
+	if aliases[0].PathPrefix != "/finances" {
+		t.Errorf("Aliases[0].PathPrefix = %q, want %q", aliases[0].PathPrefix, "/finances")
+	}
+	if aliases[0].StripPrefix != nil {
+		t.Errorf("Aliases[0].StripPrefix = %v, want nil", aliases[0].StripPrefix)
+	}
+}
+
+func TestParse_ApplicationManifest_MultiAlias(t *testing.T) {
+	m, err := Parse(testdataPath("hello-api-multi-alias.yml"))
+	if err != nil {
+		t.Fatalf("Parse returned error: %v", err)
+	}
+	if m.Application == nil {
+		t.Fatal("Application is nil")
+	}
+
+	app := m.Application
+	aliases := app.Spec.Routing.Aliases
+
+	if len(aliases) != 3 {
+		t.Fatalf("len(Aliases) = %d, want 3", len(aliases))
+	}
+	if aliases[0].Host != "lan.home.lab" {
+		t.Errorf("Aliases[0].Host = %q, want %q", aliases[0].Host, "lan.home.lab")
+	}
+	if aliases[0].PathPrefix != "" {
+		t.Errorf("Aliases[0].PathPrefix = %q, want %q", aliases[0].PathPrefix, "")
+	}
+	if aliases[0].StripPrefix != nil {
+		t.Errorf("Aliases[0].StripPrefix = %v, want nil", aliases[0].StripPrefix)
+	}
+
+	if aliases[1].Host != "gateway.tail9a6ddb.ts.net" {
+		t.Errorf("Aliases[1].Host = %q, want %q", aliases[1].Host, "gateway.tail9a6ddb.ts.net")
+	}
+	if aliases[1].PathPrefix != "/notes" {
+		t.Errorf("Aliases[1].PathPrefix = %q, want %q", aliases[1].PathPrefix, "/notes")
+	}
+	if aliases[1].StripPrefix != nil {
+		t.Errorf("Aliases[1].StripPrefix = %v, want nil", aliases[1].StripPrefix)
+	}
+
+	if aliases[2].Host != "gateway.tail9a6ddb.ts.net" {
+		t.Errorf("Aliases[2].Host = %q, want %q", aliases[2].Host, "gateway.tail9a6ddb.ts.net")
+	}
+	if aliases[2].PathPrefix != "/notes-raw" {
+		t.Errorf("Aliases[2].PathPrefix = %q, want %q", aliases[2].PathPrefix, "/notes-raw")
+	}
+	if aliases[2].StripPrefix == nil {
+		t.Fatal("Aliases[2].StripPrefix is nil, want *false")
+	}
+	if *aliases[2].StripPrefix != false {
+		t.Errorf("*Aliases[2].StripPrefix = %v, want false", *aliases[2].StripPrefix)
+	}
+}
+
 func TestParse_TeamManifest(t *testing.T) {
 	m, err := Parse(testdataPath("hello-team.yml"))
 	if err != nil {
