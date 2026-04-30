@@ -268,6 +268,29 @@ func TestTraefikPlugin(t *testing.T) {
 		tc.AssertContainerNotExists(traefikContainerName)
 	})
 
+	s.Test("should not fail when routing-dir starts with tilde", func(tc *TestCase) {
+		tc.Setenv("HOME", tc.TempDir())
+
+		configDir := tc.Path("config")
+		routingDir := filepath.Join("~", "traefik")
+		writeConfig(t, configDir, `plugins:
+  gateway:
+    traefik:
+      routing-dir: `+routingDir+`
+      port: 8082
+`)
+
+		tc.Run("deploy",
+			"--config-dir", configDir,
+			"--state-dir", tc.StateDir,
+			"--path", traefikFixturePath(),
+		).AssertSuccess()
+
+		tc.AssertContainerRunning(traefikContainerName)
+		tc.AssertContainerInNetwork(traefikContainerName, "shrine.platform")
+		tc.AssertFileExists(filepath.Join(routingDir, "traefik.yml"))
+	})
+
 	s.Test("should deploy succeed when routing-dir is inside specsDir", func(tc *TestCase) {
 		// SC-001 regression: when routing-dir is a subdirectory of specsDir, the
 		// first deploy generates Traefik YAML files (no apiVersion) inside specsDir.

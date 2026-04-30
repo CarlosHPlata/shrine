@@ -103,7 +103,9 @@ func Deploy(opts DeployOptions) error {
 
 	var routing engine.RoutingBackend
 	if plugin.IsActive() {
-		routing = plugin.RoutingBackend()
+		if routing, err = plugin.RoutingBackend(); err != nil {
+			return err
+		}
 	}
 
 	deployEngine, err := local.NewLocalEngineWithRouting(opts.Store, opts.Config.Registries, observer, routing)

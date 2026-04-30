@@ -78,3 +78,8 @@ func (tc *TestCase) Run(args ...string) *TestCase {
 	tc.result = Execute(tc.t, args...)
 	return tc
 }
+
+func (tc *TestCase) Setenv(key, value string) {
+	tc.t.Helper()
+	tc.t.Setenv(key, value)
+}

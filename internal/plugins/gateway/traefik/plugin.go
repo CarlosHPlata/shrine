@@ -90,11 +90,12 @@ func (p *Plugin) resolvedPort() int {
 	return p.cfg.Port
 }
 
-func (p *Plugin) resolvedRoutingDir() string {
-	if p.cfg != nil && p.cfg.RoutingDir != "" {
-		return p.cfg.RoutingDir
+func (p *Plugin) resolvedRoutingDir() (string, error) {
+	routingDir, err := p.cfg.ResolveRoutingDir(filepath.Join(p.specsDir, "traefik"))
+	if err != nil {
+		return "", fmt.Errorf("traefik plugin: resolving routing directory: %w", err)
 	}
-	return filepath.Join(p.specsDir, "traefik")
+	return routingDir, nil
 }
 
 func (p *Plugin) Deploy() error {
@@ -102,7 +103,10 @@ func (p *Plugin) Deploy() error {
 		return nil
 	}
 
-	routingDir := p.resolvedRoutingDir()
+	routingDir, err := p.resolvedRoutingDir()
+	if err != nil {
+		return err
+	}
 	if err := os.MkdirAll(routingDir, 0o755); err != nil {
 		return fmt.Errorf("traefik plugin: creating routing dir %q: %w", routingDir, err)
 	}
@@ -147,6 +151,10 @@ func (p *Plugin) portBindings() []engine.PortBinding {
 	return bindings
 }
 
-func (p *Plugin) RoutingBackend() engine.RoutingBackend {
-	return &RoutingBackend{routingDir: p.resolvedRoutingDir()}
+func (p *Plugin) RoutingBackend() (engine.RoutingBackend, error) {
+	routingDir, err := p.resolvedRoutingDir()
+	if err != nil {
+		return nil, err
+	}
+	return &RoutingBackend{routingDir: routingDir}, nil
 }
