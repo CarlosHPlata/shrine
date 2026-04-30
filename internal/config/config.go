@@ -2,11 +2,8 @@ package config
 
 import (
 	"errors"
-	"fmt"
 	"io/fs"
 	"os"
-	"path/filepath"
-	"strings"
 
 	"gopkg.in/yaml.v3"
 )
@@ -25,19 +22,6 @@ type PluginsConfig struct {
 
 type GatewayPluginsConfig struct {
 	Traefik *TraefikPluginConfig `yaml:"traefik,omitempty"`
-}
-
-type TraefikPluginConfig struct {
-	Image      string                  `yaml:"image,omitempty"`
-	RoutingDir string                  `yaml:"routing-dir,omitempty"`
-	Port       int                     `yaml:"port,omitempty"`
-	Dashboard  *TraefikDashboardConfig `yaml:"dashboard,omitempty"`
-}
-
-type TraefikDashboardConfig struct {
-	Port     int    `yaml:"port"`
-	Username string `yaml:"username,omitempty"`
-	Password string `yaml:"password,omitempty"`
 }
 
 // RegistryConfig holds credentials and host information for a Docker registry.
@@ -79,14 +63,10 @@ func Load(configFile string) (*Config, error) {
 //
 // Tilde (~) at the start of a path is expanded to the user's home directory.
 func (c *Config) ResolveSpecsDir(flagValue string) (string, error) {
-	raw := flagValue
-	if raw == "" {
-		raw = c.SpecsDir
-	}
-	if raw == "" {
-		return "", fmt.Errorf("no specs directory: set --path/-p flag or specsDir in config.yml")
-	}
-	return expandTilde(raw)
+	return resolvePath(
+		[]string{flagValue, c.SpecsDir},
+		"no specs directory: set --path/-p flag or specsDir in config.yml",
+	)
 }
 
 // ResolveTeamsDir returns the directory to scan for team manifests, with priority:
@@ -95,26 +75,8 @@ func (c *Config) ResolveSpecsDir(flagValue string) (string, error) {
 //  3. c.SpecsDir (from config.yml specsDir)
 //  4. error if none is set
 func (c *Config) ResolveTeamsDir(flagValue string) (string, error) {
-	raw := flagValue
-	if raw == "" {
-		raw = c.TeamsDir
-	}
-	if raw == "" {
-		raw = c.SpecsDir
-	}
-	if raw == "" {
-		return "", fmt.Errorf("no specs directory: set --path/-p flag, teamsDir or specsDir in config.yml")
-	}
-	return expandTilde(raw)
-}
-
-func expandTilde(path string) (string, error) {
-	if path != "~" && !strings.HasPrefix(path, "~/") {
-		return path, nil
-	}
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return "", fmt.Errorf("expanding ~: %w", err)
-	}
-	return filepath.Join(home, path[1:]), nil
+	return resolvePath(
+		[]string{flagValue, c.TeamsDir, c.SpecsDir},
+		"no specs directory: set --path/-p flag, teamsDir or specsDir in config.yml",
+	)
 }

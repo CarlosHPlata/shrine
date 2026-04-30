@@ -3,7 +3,9 @@
 package testutils
 
 import (
+	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 )
 
@@ -42,28 +44,51 @@ func (tc *TestCase) AssertStderrContains(s string) *TestCase {
 
 func (tc *TestCase) AssertFileExists(path string) *TestCase {
 	tc.t.Helper()
-	if _, err := os.Stat(path); err != nil {
-		tc.t.Fatalf("expected file to exist at %s: %v", path, err)
+	resolved, err := expandTilde(path)
+	if err != nil {
+		tc.t.Fatalf("expanding tilde for %s: %v", path, err)
+	}
+	if _, err := os.Stat(resolved); err != nil {
+		tc.t.Fatalf("expected file to exist at %s: %v", resolved, err)
 	}
 	return tc
 }
 
 func (tc *TestCase) AssertFileNotExists(path string) *TestCase {
 	tc.t.Helper()
-	if _, err := os.Stat(path); err == nil {
-		tc.t.Fatalf("expected file to NOT exist at %s", path)
+	resolved, err := expandTilde(path)
+	if err != nil {
+		tc.t.Fatalf("expanding tilde for %s: %v", path, err)
+	}
+	if _, err := os.Stat(resolved); err == nil {
+		tc.t.Fatalf("expected file to NOT exist at %s", resolved)
 	}
 	return tc
 }
 
 func (tc *TestCase) AssertFileContains(path, want string) *TestCase {
 	tc.t.Helper()
-	data, err := os.ReadFile(path)
+	resolved, err := expandTilde(path)
 	if err != nil {
-		tc.t.Fatalf("reading %s: %v", path, err)
+		tc.t.Fatalf("expanding tilde for %s: %v", path, err)
+	}
+	data, err := os.ReadFile(resolved)
+	if err != nil {
+		tc.t.Fatalf("reading %s: %v", resolved, err)
 	}
 	if !strings.Contains(string(data), want) {
-		tc.t.Fatalf("expected file %s to contain %q\ncontent: %s", path, want, string(data))
+		tc.t.Fatalf("expected file %s to contain %q\ncontent: %s", resolved, want, string(data))
 	}
 	return tc
+}
+
+func expandTilde(path string) (string, error) {
+	if path != "~" && !strings.HasPrefix(path, "~/") {
+		return path, nil
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", fmt.Errorf("expanding ~: %w", err)
+	}
+	return filepath.Join(home, path[1:]), nil
 }
