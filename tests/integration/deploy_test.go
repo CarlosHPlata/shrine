@@ -3,6 +3,7 @@
 package integration_test
 
 import (
+	"os"
 	"path/filepath"
 	"runtime"
 	"testing"
@@ -24,8 +25,11 @@ func TestDeploy(t *testing.T) {
 	s.BeforeEach(func(tc *TestCase) {
 		tc.StateDir = tc.TempDir()
 		SeedSubnetState(tc)
+		// Use the dedicated team/ sub-fixture so BeforeEach does not scan the
+		// entire deploy testdata tree, which now contains bad-kind/ and
+		// malformed-yaml/ subdirectories that cause ScanDir to error.
 		tc.Run("apply", "teams",
-			"--path", fixturesPath(),
+			"--path", fixturesPath("team"),
 			"--state-dir", tc.StateDir,
 		).AssertSuccess()
 	})
@@ -123,5 +127,80 @@ func TestDeploy(t *testing.T) {
 		).AssertSuccess()
 
 		tc.AssertSecretValueInState(testTeam, "secret-store", "password", first)
+	})
+
+	s.Test("should deploy succeed when specsDir contains foreign YAML files", func(tc *TestCase) {
+		// foreign-yaml fixture contains team.yaml + app.yaml (valid shrine) plus
+		// traefik/traefik.yml and traefik/dynamic/team-foo-app.yml (no apiVersion)
+		// and notes.json. The scanner MUST skip the foreign files silently.
+		tc.Run("deploy",
+			"--path", fixturesPath("foreign-yaml"),
+			"--state-dir", tc.StateDir,
+		).AssertSuccess()
+
+		// The shrine Application named "whoami" should be running.
+		tc.AssertContainerRunning(testTeam + ".whoami")
+
+		// No container must have been created from the foreign Traefik YAML.
+		tc.AssertContainerNotExists(testTeam + ".traefik")
+	})
+
+	// T022: intentionally the same scenario as T016 above — covered by the existing
+	// "should deploy succeed when specsDir contains foreign YAML files" test (T016).
+	// T022 would assert deploy exits 0 and whoami is running, which is a strict subset
+	// of T016's assertions. Adding a duplicate would provide no additional coverage.
+	// STATUS: already-covered-by-T016.
+
+	s.Test("should deploy fail loudly when shrine manifest has bad kind", func(tc *TestCase) {
+		// T031: bad-kind fixture contains team.yaml + typo.yaml (apiVersion: shrine/v1,
+		// kind: Aplication — typo). LoadDir parses the shrine-classified file and
+		// manifest.Parse returns "unknown manifest kind: \"Aplication\"". The command
+		// must exit non-zero and the error message must name both the file and the kind.
+		tc.Run("deploy",
+			"--path", fixturesPath("bad-kind"),
+			"--state-dir", tc.StateDir,
+		).AssertFailure().
+			AssertStderrContains("typo.yaml").
+			AssertStderrContains("Aplication")
+	})
+
+	s.Test("should deploy fail loudly when yaml is malformed", func(tc *TestCase) {
+		// T032: malformed-yaml fixture contains team.yaml + app.yaml (valid) plus
+		// broken.yaml (apiVersion: shrine/v1, kind: [unclosed — unparseable YAML).
+		// ScanDir returns an error wrapping the file path; deploy must exit non-zero
+		// and the error message must name the offending file.
+		tc.Run("deploy",
+			"--path", fixturesPath("malformed-yaml"),
+			"--state-dir", tc.StateDir,
+		).AssertFailure().
+			AssertStderrContains("broken.yaml")
+	})
+
+	s.Test("should succeed when specsDir contains non-YAML files", func(tc *TestCase) {
+		// T023: proves the extension filter never opens .json files (FR-001a).
+		// Copy the basic fixture into a writable temp dir so we can add siblings.
+		specsDir := tc.Path("specs")
+		if err := copyDir(t, fixturesPath("basic"), specsDir); err != nil {
+			t.Fatalf("copy fixture: %v", err)
+		}
+
+		// Add a plain JSON file — must be silently ignored by the scanner.
+		if err := os.WriteFile(filepath.Join(specsDir, "notes.json"),
+			[]byte(`{"note": "scratchpad"}`), 0o644); err != nil {
+			t.Fatalf("write notes.json: %v", err)
+		}
+
+		// Add a chmod-000 JSON file — the extension filter must never open it.
+		configPath := filepath.Join(specsDir, "config.json")
+		if err := os.WriteFile(configPath, []byte(`{}`), 0o000); err != nil {
+			t.Fatalf("write config.json: %v", err)
+		}
+
+		tc.Run("deploy",
+			"--path", specsDir,
+			"--state-dir", tc.StateDir,
+		).AssertSuccess()
+
+		tc.AssertContainerRunning(testTeam + ".whoami")
 	})
 }

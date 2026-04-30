@@ -4,6 +4,8 @@ package integration_test
 
 import (
 	"context"
+	"io"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"testing"
@@ -12,6 +14,43 @@ import (
 
 	. "github.com/CarlosHPlata/shrine/tests/integration/testutils"
 )
+
+// copyDir recursively copies the contents of src into dst, creating dst if needed.
+func copyDir(t *testing.T, src, dst string) error {
+	t.Helper()
+	return filepath.WalkDir(src, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		rel, err := filepath.Rel(src, path)
+		if err != nil {
+			return err
+		}
+		target := filepath.Join(dst, rel)
+		if d.IsDir() {
+			return os.MkdirAll(target, 0o755)
+		}
+		return copyFile(src, path, target)
+	})
+}
+
+func copyFile(_ string, src, dst string) error {
+	in, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer in.Close()
+	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
+		return err
+	}
+	out, err := os.Create(dst)
+	if err != nil {
+		return err
+	}
+	defer out.Close()
+	_, err = io.Copy(out, in)
+	return err
+}
 
 const traefikTestTeam = "shrine-traefik-test"
 const traefikContainerName = "platform.traefik"
@@ -227,5 +266,44 @@ func TestTraefikPlugin(t *testing.T) {
 		).AssertFailure()
 
 		tc.AssertContainerNotExists(traefikContainerName)
+	})
+
+	s.Test("should deploy succeed when routing-dir is inside specsDir", func(tc *TestCase) {
+		// SC-001 regression: when routing-dir is a subdirectory of specsDir, the
+		// first deploy generates Traefik YAML files (no apiVersion) inside specsDir.
+		// The second deploy then scans specsDir again and must NOT crash on those
+		// foreign files. We reproduce this by copying the fixture into a temp dir
+		// so that both --path and routing-dir point at the same mutable tree.
+		specsDir := tc.Path("specs")
+		if err := copyDir(t, traefikFixturePath(), specsDir); err != nil {
+			t.Fatalf("copy fixture: %v", err)
+		}
+
+		configDir := tc.Path("config")
+		// routing-dir is specsDir/traefik — a subdirectory of the scanned path.
+		routingDir := filepath.Join(specsDir, "traefik")
+		writeConfig(t, configDir, `plugins:
+  gateway:
+    traefik:
+      routing-dir: `+routingDir+`
+      port: 8087
+`)
+
+		// First run: generates Traefik routing files into specsDir/traefik/.
+		tc.Run("deploy",
+			"--config-dir", configDir,
+			"--state-dir", tc.StateDir,
+			"--path", specsDir,
+		).AssertSuccess()
+
+		// Second run: specsDir/traefik/ now contains generated files with no
+		// apiVersion. This is the canonical SC-001 path — must succeed.
+		tc.Run("deploy",
+			"--config-dir", configDir,
+			"--state-dir", tc.StateDir,
+			"--path", specsDir,
+		).AssertSuccess()
+
+		tc.AssertContainerRunning(traefikContainerName)
 	})
 }

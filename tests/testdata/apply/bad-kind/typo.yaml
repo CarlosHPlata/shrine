@@ -1,0 +1,9 @@
+apiVersion: shrine/v1
+kind: Aplication
+metadata:
+  name: typo-app-apply
+  owner: shrine-apply-test
+spec:
+  image: traefik/whoami
+  port: 80
+  replicas: 1

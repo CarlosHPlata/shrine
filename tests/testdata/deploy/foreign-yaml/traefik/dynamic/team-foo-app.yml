@@ -1,0 +1,12 @@
+http:
+  routers:
+    team-foo-app:
+      rule: "Host(`foo.example.com`)"
+      service: team-foo-app-service
+      entryPoints:
+        - web
+  services:
+    team-foo-app-service:
+      loadBalancer:
+        servers:
+          - url: "http://team-foo-app:80"

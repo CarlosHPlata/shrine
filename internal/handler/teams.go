@@ -2,7 +2,6 @@ package handler
 
 import (
 	"fmt"
-	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -64,41 +63,23 @@ func CreateTeam(filepath string, store state.TeamStore) error {
 	return nil
 }
 
-func walkYAMLFiles(dir string) ([]string, error) {
-	var files []string
-	err := filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		if d.IsDir() {
-			return nil
-		}
-		ext := filepath.Ext(path)
-		if ext == ".yml" || ext == ".yaml" {
-			files = append(files, path)
-		}
-		return nil
-	})
-	if err != nil {
-		return nil, fmt.Errorf("scanning manifest directory %q: %w", dir, err)
-	}
-	return files, nil
-}
-
 // ApplyTeams scans a directory recursively for team manifests and syncs them all to state.
+// Foreign YAML files (those without a shrine apiVersion) are silently skipped; a notice
+// is printed to stdout when foreign files are found (FR-006).
 func ApplyTeams(manifestDir string, store state.TeamStore) error {
-	files, err := walkYAMLFiles(manifestDir)
+	result, err := manifest.ScanDir(manifestDir)
 	if err != nil {
 		return fmt.Errorf("searching for manifests: %w", err)
 	}
 
-	if len(files) == 0 {
+	if len(result.Shrine) == 0 {
 		fmt.Printf("No team manifests found in %q directory.\n", manifestDir)
 		return nil
 	}
 
 	count := 0
-	for _, file := range files {
+	for _, candidate := range result.Shrine {
+		file := candidate.Path
 		m, err := manifest.Parse(file)
 		if err != nil {
 			fmt.Printf("Error parsing %s: %v\n", file, err)
@@ -119,6 +100,12 @@ func ApplyTeams(manifestDir string, store state.TeamStore) error {
 	}
 
 	fmt.Printf("Successfully synced %d teams to state.\n", count)
+
+	if len(result.Foreign) > 0 {
+		fmt.Printf("shrine: ignored %d non-shrine YAML file(s) under %s: %s\n",
+			len(result.Foreign), manifestDir, strings.Join(result.Foreign, ", "))
+	}
+
 	return nil
 }
 

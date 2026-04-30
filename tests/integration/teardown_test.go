@@ -25,8 +25,10 @@ func TestTeardown(t *testing.T) {
 	s.BeforeEach(func(tc *TestCase) {
 		tc.StateDir = tc.TempDir()
 		SeedSubnetState(tc)
+		// Use the dedicated team/ sub-fixture to avoid scanning bad-kind/ and
+		// malformed-yaml/ siblings that cause ScanDir to error.
 		tc.Run("apply", "teams",
-			"--path", fixturesPath(),
+			"--path", fixturesPath("team"),
 			"--state-dir", tc.StateDir,
 		).AssertSuccess()
 		tc.Run("deploy",
