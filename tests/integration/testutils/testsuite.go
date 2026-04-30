@@ -83,3 +83,8 @@ func (tc *TestCase) Setenv(key, value string) {
 	tc.t.Helper()
 	tc.t.Setenv(key, value)
 }
+
+func (tc *TestCase) Skip(reason string) {
+	tc.t.Helper()
+	tc.t.Skip(reason)
+}

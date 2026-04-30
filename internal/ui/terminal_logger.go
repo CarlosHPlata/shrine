@@ -53,6 +53,12 @@ func (t *TerminalObserver) OnEvent(e engine.Event) {
 	case "routing.configure":
 		fmt.Fprintf(t.out, "  🔗 Configuring routing: %s -> port %s\n", e.Fields["domain"], e.Fields["port"])
 
+	case "gateway.config.preserved":
+		fmt.Fprintf(t.out, "  📄 Preserving operator-owned traefik.yml: %s\n", e.Fields["path"])
+
+	case "gateway.config.generated":
+		fmt.Fprintf(t.out, "  📝 Generated default traefik.yml: %s\n", e.Fields["path"])
+
 	case "dns.register":
 		fmt.Fprintf(t.out, "  🌍 Registering DNS: %s\n", e.Fields["domain"])
 

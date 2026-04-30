@@ -25,13 +25,17 @@ type Plugin struct {
 	cfg      *config.TraefikPluginConfig
 	backend  engine.ContainerBackend
 	specsDir string
+	observer engine.Observer
 }
 
 // New constructs and validates a Traefik plugin. It returns an error if the
 // supplied config is invalid (e.g. dashboard.port without credentials), so
 // callers don't need a separate Validate step.
-func New(cfg *config.TraefikPluginConfig, backend engine.ContainerBackend, specsDir string) (*Plugin, error) {
-	p := &Plugin{cfg: cfg, backend: backend, specsDir: specsDir}
+func New(cfg *config.TraefikPluginConfig, backend engine.ContainerBackend, specsDir string, observer engine.Observer) (*Plugin, error) {
+	if observer == nil {
+		observer = engine.NoopObserver{}
+	}
+	p := &Plugin{cfg: cfg, backend: backend, specsDir: specsDir, observer: observer}
 	if err := p.validate(); err != nil {
 		return nil, err
 	}
@@ -114,8 +118,8 @@ func (p *Plugin) Deploy() error {
 		return fmt.Errorf("traefik plugin: creating dynamic dir: %w", err)
 	}
 
-	if err := generateStaticConfig(p.cfg, routingDir); err != nil {
-		return fmt.Errorf("traefik plugin: generating static config: %w", err)
+	if err := generateStaticConfig(p.cfg, routingDir, p.observer); err != nil {
+		return err
 	}
 
 	op := engine.CreateContainerOp{

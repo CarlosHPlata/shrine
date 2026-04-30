@@ -3,6 +3,7 @@
 package integration_test
 
 import (
+	"bytes"
 	"context"
 	"io"
 	"io/fs"
@@ -112,6 +113,7 @@ func TestTraefikPlugin(t *testing.T) {
 		tc.AssertContainerRunning(traefikContainerName)
 		tc.AssertContainerInNetwork(traefikContainerName, "shrine.platform")
 		tc.AssertFileExists(filepath.Join(routingDir, "traefik.yml"))
+		tc.AssertOutputContains("Generated default traefik.yml")
 	})
 
 	s.Test("should not deploy traefik when plugin block is absent", func(tc *TestCase) {
@@ -328,5 +330,201 @@ func TestTraefikPlugin(t *testing.T) {
 		).AssertSuccess()
 
 		tc.AssertContainerRunning(traefikContainerName)
+	})
+
+	// T004: operator-edited traefik.yml must survive a redeploy unchanged.
+	s.Test("should preserve operator-edited traefik.yml across redeploys", func(tc *TestCase) {
+		configDir := tc.Path("config")
+		routingDir := tc.Path("traefik")
+		writeConfig(t, configDir, `plugins:
+  gateway:
+    traefik:
+      routing-dir: `+routingDir+`
+      port: 8090
+`)
+
+		tc.Run("deploy",
+			"--config-dir", configDir,
+			"--state-dir", tc.StateDir,
+			"--path", traefikFixturePath(),
+		).AssertSuccess()
+
+		traefikYML := filepath.Join(routingDir, "traefik.yml")
+		originalContent, err := os.ReadFile(traefikYML)
+		if err != nil {
+			t.Fatalf("read traefik.yml after first deploy: %v", err)
+		}
+		markedContent := append(originalContent, []byte("\n# OPERATOR_MARKER_T004\n")...)
+		if err := os.WriteFile(traefikYML, markedContent, 0o644); err != nil {
+			t.Fatalf("write operator marker: %v", err)
+		}
+
+		tc.Run("deploy",
+			"--config-dir", configDir,
+			"--state-dir", tc.StateDir,
+			"--path", traefikFixturePath(),
+		).AssertSuccess()
+		tc.AssertOutputContains("Preserving operator-owned traefik.yml")
+
+		afterContent, err := os.ReadFile(traefikYML)
+		if err != nil {
+			t.Fatalf("read traefik.yml after second deploy: %v", err)
+		}
+		if !bytes.Contains(afterContent, []byte("# OPERATOR_MARKER_T004")) {
+			t.Fatalf("operator marker was removed from traefik.yml after redeploy\ncontent: %s", afterContent)
+		}
+	})
+
+	// T005: a broken symlink at the traefik.yml path must be left untouched.
+	s.Test("should preserve a broken symlink at traefik.yml across deploy", func(tc *TestCase) {
+		configDir := tc.Path("config")
+		routingDir := tc.Path("traefik")
+		writeConfig(t, configDir, `plugins:
+  gateway:
+    traefik:
+      routing-dir: `+routingDir+`
+      port: 8091
+`)
+
+		if err := os.MkdirAll(routingDir, 0o755); err != nil {
+			t.Fatalf("mkdir routing dir: %v", err)
+		}
+		symlinkPath := filepath.Join(routingDir, "traefik.yml")
+		symlinkTarget := "/nonexistent/path/sentinel-t005"
+		if err := os.Symlink(symlinkTarget, symlinkPath); err != nil {
+			t.Fatalf("create broken symlink: %v", err)
+		}
+
+		tc.Run("deploy",
+			"--config-dir", configDir,
+			"--state-dir", tc.StateDir,
+			"--path", traefikFixturePath(),
+		).AssertSuccess()
+		tc.AssertOutputContains("Preserving operator-owned traefik.yml")
+
+		gotTarget, err := os.Readlink(symlinkPath)
+		if err != nil {
+			t.Fatalf("readlink traefik.yml: %v", err)
+		}
+		if gotTarget != symlinkTarget {
+			t.Fatalf("symlink target changed: want %q, got %q", symlinkTarget, gotTarget)
+		}
+
+		_, statErr := os.Stat(symlinkTarget)
+		if !os.IsNotExist(statErr) {
+			t.Fatalf("expected %q to not exist on disk, but stat returned: %v", symlinkTarget, statErr)
+		}
+	})
+
+	// T006: a directory at the traefik.yml path must be left untouched.
+	s.Test("should preserve a directory at the traefik.yml path", func(tc *TestCase) {
+		configDir := tc.Path("config")
+		routingDir := tc.Path("traefik")
+		writeConfig(t, configDir, `plugins:
+  gateway:
+    traefik:
+      routing-dir: `+routingDir+`
+      port: 8092
+`)
+
+		dirAtYMLPath := filepath.Join(routingDir, "traefik.yml")
+		if err := os.MkdirAll(dirAtYMLPath, 0o755); err != nil {
+			t.Fatalf("mkdir at traefik.yml path: %v", err)
+		}
+
+		tc.Run("deploy",
+			"--config-dir", configDir,
+			"--state-dir", tc.StateDir,
+			"--path", traefikFixturePath(),
+		).AssertSuccess()
+
+		info, err := os.Stat(dirAtYMLPath)
+		if err != nil {
+			t.Fatalf("stat traefik.yml after deploy: %v", err)
+		}
+		if !info.IsDir() {
+			t.Fatalf("expected traefik.yml to still be a directory after deploy, but it is not")
+		}
+	})
+
+	// T007: an unreadable routing dir must cause deploy to fail with a clear error.
+	s.Test("should fail deploy with a clear error when stat on traefik.yml fails for a reason other than NotExist", func(tc *TestCase) {
+		if os.Geteuid() == 0 {
+			tc.Skip("chmod 0o000 cannot block root; non-IsNotExist stat path is covered by the unit test in config_gen_test.go")
+		}
+		configDir := tc.Path("config")
+		routingDir := tc.Path("traefik")
+		writeConfig(t, configDir, `plugins:
+  gateway:
+    traefik:
+      routing-dir: `+routingDir+`
+      port: 8093
+`)
+
+		if err := os.MkdirAll(routingDir, 0o755); err != nil {
+			t.Fatalf("mkdir routing dir: %v", err)
+		}
+		placeholder := filepath.Join(routingDir, "traefik.yml")
+		if err := os.WriteFile(placeholder, []byte("placeholder"), 0o644); err != nil {
+			t.Fatalf("write placeholder: %v", err)
+		}
+		if err := os.Chmod(routingDir, 0o000); err != nil {
+			t.Fatalf("chmod routing dir: %v", err)
+		}
+		t.Cleanup(func() { os.Chmod(routingDir, 0o755) })
+
+		tc.Run("deploy",
+			"--config-dir", configDir,
+			"--state-dir", tc.StateDir,
+			"--path", traefikFixturePath(),
+		).AssertFailure()
+
+		tc.AssertOutputContains("traefik.yml")
+		tc.AssertOutputContains("permission denied")
+	})
+
+	// T014: deleting traefik.yml and redeploying must regenerate it with valid content.
+	s.Test("should regenerate default traefik.yml after operator deletes the file", func(tc *TestCase) {
+		configDir := tc.Path("config")
+		routingDir := tc.Path("traefik")
+		writeConfig(t, configDir, `plugins:
+  gateway:
+    traefik:
+      routing-dir: `+routingDir+`
+      port: 8094
+`)
+
+		tc.Run("deploy",
+			"--config-dir", configDir,
+			"--state-dir", tc.StateDir,
+			"--path", traefikFixturePath(),
+		).AssertSuccess()
+
+		traefikYML := filepath.Join(routingDir, "traefik.yml")
+		tc.AssertFileExists(traefikYML)
+
+		if err := os.Remove(traefikYML); err != nil {
+			t.Fatalf("remove traefik.yml: %v", err)
+		}
+
+		tc.Run("deploy",
+			"--config-dir", configDir,
+			"--state-dir", tc.StateDir,
+			"--path", traefikFixturePath(),
+		).AssertSuccess()
+		tc.AssertOutputContains("Generated default traefik.yml")
+
+		tc.AssertFileExists(traefikYML)
+
+		content, err := os.ReadFile(traefikYML)
+		if err != nil {
+			t.Fatalf("read regenerated traefik.yml: %v", err)
+		}
+		if len(content) == 0 {
+			t.Fatalf("regenerated traefik.yml is empty")
+		}
+		if !bytes.Contains(content, []byte("entryPoints:")) {
+			t.Fatalf("regenerated traefik.yml missing canonical 'entryPoints:' key\ncontent: %s", content)
+		}
 	})
 }
