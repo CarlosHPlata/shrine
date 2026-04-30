@@ -63,9 +63,6 @@ func CreateTeam(filepath string, store state.TeamStore) error {
 	return nil
 }
 
-// ApplyTeams scans a directory recursively for team manifests and syncs them all to state.
-// Foreign YAML files (those without a shrine apiVersion) are silently skipped; a notice
-// is printed to stdout when foreign files are found (FR-006).
 func ApplyTeams(manifestDir string, store state.TeamStore) error {
 	result, err := manifest.ScanDir(manifestDir)
 	if err != nil {
@@ -102,8 +99,7 @@ func ApplyTeams(manifestDir string, store state.TeamStore) error {
 	fmt.Printf("Successfully synced %d teams to state.\n", count)
 
 	if len(result.Foreign) > 0 {
-		fmt.Printf("shrine: ignored %d non-shrine YAML file(s) under %s: %s\n",
-			len(result.Foreign), manifestDir, strings.Join(result.Foreign, ", "))
+		manifest.ReportForeignFiles(manifestDir, result.Foreign)
 	}
 
 	return nil

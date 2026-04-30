@@ -2,7 +2,6 @@ package planner
 
 import (
 	"fmt"
-	"strings"
 
 	"github.com/CarlosHPlata/shrine/internal/manifest"
 )
@@ -14,10 +13,6 @@ type ManifestSet struct {
 	Resources    map[string]*manifest.ResourceManifest
 }
 
-// LoadDir scans the provided directory for .yml and .yaml files, parses them,
-// and returns a ManifestSet. It skips Team manifests and errors on duplicate names.
-// Files that are not shrine manifests (foreign YAML) are silently skipped; a notice
-// is printed to stdout when foreign files are found (FR-006).
 func LoadDir(dir string) (*ManifestSet, error) {
 	set := &ManifestSet{
 		Applications: make(map[string]*manifest.ApplicationManifest),
@@ -48,8 +43,7 @@ func LoadDir(dir string) (*ManifestSet, error) {
 	}
 
 	if len(result.Foreign) > 0 {
-		fmt.Printf("shrine: ignored %d non-shrine YAML file(s) under %s: %s\n",
-			len(result.Foreign), dir, strings.Join(result.Foreign, ", "))
+		manifest.ReportForeignFiles(dir, result.Foreign)
 	}
 
 	return set, nil

@@ -87,6 +87,12 @@ func TestScanDir(t *testing.T) {
 		if len(result.Shrine) == 1 && result.Shrine[0].Path != shrinePath {
 			t.Errorf("Shrine[0].Path = %q, want %q", result.Shrine[0].Path, shrinePath)
 		}
+		if len(result.Shrine) == 1 && result.Shrine[0].TypeMeta.Kind != "Application" {
+			t.Errorf("Shrine[0].TypeMeta.Kind = %q, want %q", result.Shrine[0].TypeMeta.Kind, "Application")
+		}
+		if len(result.Shrine) == 1 && result.Shrine[0].TypeMeta.APIVersion != "shrine/v1" {
+			t.Errorf("Shrine[0].TypeMeta.APIVersion = %q, want %q", result.Shrine[0].TypeMeta.APIVersion, "shrine/v1")
+		}
 		if len(result.Foreign) == 1 && result.Foreign[0] != foreignPath {
 			t.Errorf("Foreign[0] = %q, want %q", result.Foreign[0], foreignPath)
 		}

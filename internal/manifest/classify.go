@@ -20,32 +20,17 @@ const (
 // shrine/v1beta1, shrine/v10alpha7.
 var shrineAPIVersionRe = regexp.MustCompile(`^shrine/v\d+([a-z]+\d+)?$`)
 
-// IsShrineAPIVersion reports whether s matches the shrine apiVersion pattern
-// ^shrine/v\d+([a-z]+\d+)?$. This is a pure function over the string value —
-// it does not read any files.
+// IsShrineAPIVersion reports whether s matches ^shrine/v\d+([a-z]+\d+)?$.
 func IsShrineAPIVersion(s string) bool {
 	return shrineAPIVersionRe.MatchString(s)
 }
 
-// Classify reads the file at path, unmarshals its top-level YAML to extract
-// apiVersion and kind, and returns the file's Class.
-//
-// Returns (ClassForeign, nil, nil) when apiVersion is absent or does not match
-// the shrine regex — this covers foreign YAML, empty files, and comment-only files.
-//
-// Returns (ClassShrine, &meta, nil) when apiVersion matches; meta carries the
-// probed APIVersion and Kind (kind is NOT validated here — that is the caller's
-// responsibility via manifest.Parse / manifest.Validate).
-//
-// Returns (0, nil, error) when the file cannot be parsed as YAML at all. The
-// error wraps the file path so operators can identify the offending file.
-//
-// Note: the yaml.Unmarshal probe is duplicated from parser.go's probeKind to
-// avoid coupling classify.go to the parsing pipeline mid-refactor (lower churn).
+// Classify returns the Class of the YAML file at path.
+// Note: yaml.Unmarshal probe duplicated from parser.go's probeKind to avoid coupling classify to the parse pipeline mid-refactor.
 func Classify(path string) (Class, *TypeMeta, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
-		return 0, nil, fmt.Errorf("parsing manifest %q: %w", path, err)
+		return 0, nil, fmt.Errorf("reading manifest %q: %w", path, err)
 	}
 
 	var meta TypeMeta

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io/fs"
 	"path/filepath"
+	"strings"
 )
 
 // ShrineCandidate holds the path and already-probed TypeMeta of a file that
@@ -22,18 +23,7 @@ type ScanResult struct {
 	Foreign []string          // .yaml/.yml paths whose apiVersion failed the shrine regex
 }
 
-// ScanDir walks dir recursively and classifies every .yaml / .yml file it finds.
-//
-// Extension filter: files whose extension is not exactly ".yaml" or ".yml"
-// (case-sensitive) are silently skipped without opening them — this is
-// invariant 1 of the scanner contract.
-//
-// For admitted files, Classify is called. A malformed-YAML error aborts the
-// entire scan and is returned wrapped with the directory path.
-//
-// Walk order is the deterministic order provided by filepath.WalkDir (lexical
-// within each directory level), so two calls on the same unchanged tree return
-// identical slices.
+// ScanDir walks dir recursively and classifies every .yaml/.yml file.
 func ScanDir(dir string) (*ScanResult, error) {
 	result := &ScanResult{}
 
@@ -75,4 +65,11 @@ func ScanDir(dir string) (*ScanResult, error) {
 	}
 
 	return result, nil
+}
+
+// ReportForeignFiles prints the standard foreign-files notice to stdout.
+// Called by every ScanDir consumer that finds non-empty Foreign results.
+func ReportForeignFiles(dir string, paths []string) {
+	fmt.Printf("shrine: ignored %d non-shrine YAML file(s) under %s: %s\n",
+		len(paths), dir, strings.Join(paths, ", "))
 }
