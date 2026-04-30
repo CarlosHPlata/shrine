@@ -51,12 +51,19 @@ type ContainerBackend interface {
 	InspectContainer(containerID string) (ContainerInfo, error)
 }
 
-type WriteRouteOp struct {
-	Team        string
-	Domain      string
-	ServiceName string
-	ServicePort int
+type AliasRoute struct {
+	Host        string
 	PathPrefix  string
+	StripPrefix bool
+}
+
+type WriteRouteOp struct {
+	Team             string
+	Domain           string
+	ServiceName      string
+	ServicePort      int
+	PathPrefix       string
+	AdditionalRoutes []AliasRoute
 }
 
 type RoutingBackend interface {

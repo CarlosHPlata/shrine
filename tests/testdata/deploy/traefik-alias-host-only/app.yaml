@@ -1,0 +1,15 @@
+apiVersion: shrine/v1
+kind: Application
+metadata:
+  name: whoami-host-only
+  owner: shrine-alias-test
+spec:
+  image: traefik/whoami
+  port: 80
+  replicas: 1
+  networking:
+    exposeToPlatform: true
+  routing:
+    domain: whoami.shrine.lab
+    aliases:
+      - host: alias.shrine.lab

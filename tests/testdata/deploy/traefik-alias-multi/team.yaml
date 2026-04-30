@@ -1,0 +1,11 @@
+apiVersion: shrine/v1
+kind: Team
+metadata:
+  name: shrine-alias-test
+spec:
+  displayName: "Shrine Alias Test"
+  contact: "test@shrine-alias.com"
+  quotas:
+    maxApps: 10
+    maxResources: 10
+  registryUser: shrine-test

@@ -108,6 +108,12 @@ func Deploy(opts DeployOptions) error {
 		}
 	}
 
+	if routing != nil {
+		if err := planner.DetectRoutingCollisions(result.ManifestSet); err != nil {
+			return err
+		}
+	}
+
 	deployEngine, err := local.NewLocalEngineWithRouting(opts.Store, opts.Config.Registries, observer, routing)
 	if err != nil {
 		return err

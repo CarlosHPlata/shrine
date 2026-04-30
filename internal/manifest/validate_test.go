@@ -208,6 +208,128 @@ func TestValidate_ApplicationEnvRules(t *testing.T) {
 	}
 }
 
+func TestValidate_RoutingAliasRules(t *testing.T) {
+	boolPtr := func(b bool) *bool { return &b }
+
+	validBase := func(routing Routing) *Manifest {
+		return &Manifest{
+			TypeMeta: TypeMeta{Kind: ApplicationKind, APIVersion: "shrine/v1"},
+			Application: &ApplicationManifest{
+				Metadata: Metadata{Name: "a", Owner: "team-a"},
+				Spec:     ApplicationSpec{Image: "img", Port: 80, Routing: routing},
+			},
+		}
+	}
+
+	cases := []struct {
+		name    string
+		routing Routing
+		wantErr string
+	}{
+		{
+			name: "V1: aliases set but domain empty",
+			routing: Routing{
+				Domain:  "",
+				Aliases: []RoutingAlias{{Host: "x.example.com"}},
+			},
+			wantErr: "aliases is set but spec.routing.domain is empty",
+		},
+		{
+			name: "V2: alias with empty host",
+			routing: Routing{
+				Domain:  "app.home.lab",
+				Aliases: []RoutingAlias{{Host: ""}},
+			},
+			wantErr: "aliases[0].host is required",
+		},
+		{
+			name: "V3: alias host containing a space",
+			routing: Routing{
+				Domain:  "app.home.lab",
+				Aliases: []RoutingAlias{{Host: "bad host"}},
+			},
+			wantErr: "contains invalid characters",
+		},
+		{
+			name: "V4: alias pathPrefix missing leading slash",
+			routing: Routing{
+				Domain:  "app.home.lab",
+				Aliases: []RoutingAlias{{Host: "x.example.com", PathPrefix: "finances"}},
+			},
+			wantErr: "must start with \"/\"",
+		},
+		{
+			name: "V5: alias pathPrefix is exactly /",
+			routing: Routing{
+				Domain:  "app.home.lab",
+				Aliases: []RoutingAlias{{Host: "x.example.com", PathPrefix: "/"}},
+			},
+			wantErr: "must not be just \"/\"",
+		},
+		{
+			name: "V6: alias pathPrefix containing a tab",
+			routing: Routing{
+				Domain:  "app.home.lab",
+				Aliases: []RoutingAlias{{Host: "x.example.com", PathPrefix: "/has\ttab"}},
+			},
+			wantErr: "contains invalid characters",
+		},
+		{
+			name: "V7: alias vs primary same host+pathPrefix",
+			routing: Routing{
+				Domain:     "gateway.tail9a6ddb.ts.net",
+				PathPrefix: "/finances",
+				Aliases:    []RoutingAlias{{Host: "gateway.tail9a6ddb.ts.net", PathPrefix: "/finances"}},
+			},
+			wantErr: "duplicate route",
+		},
+		{
+			name: "V7: alias vs alias duplicate",
+			routing: Routing{
+				Domain: "app.home.lab",
+				Aliases: []RoutingAlias{
+					{Host: "gateway.tail9a6ddb.ts.net", PathPrefix: "/finances"},
+					{Host: "gateway.tail9a6ddb.ts.net", PathPrefix: "/finances"},
+				},
+			},
+			wantErr: "alias[1]",
+		},
+		{
+			name: "V7: trailing slash normalized collision",
+			routing: Routing{
+				Domain:     "app.home.lab",
+				PathPrefix: "/x",
+				Aliases:    []RoutingAlias{{Host: "app.home.lab", PathPrefix: "/x/"}},
+			},
+			wantErr: "duplicate route",
+		},
+		{
+			name: "valid alias with explicit stripPrefix false",
+			routing: Routing{
+				Domain:  "app.home.lab",
+				Aliases: []RoutingAlias{{Host: "gw.example.com", PathPrefix: "/api", StripPrefix: boolPtr(false)}},
+			},
+			wantErr: "",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			m := validBase(tc.routing)
+			err := Validate(m)
+			if tc.wantErr == "" {
+				if err != nil {
+					t.Errorf("expected no error, got: %v", err)
+				}
+				return
+			}
+			if err == nil || !strings.Contains(err.Error(), tc.wantErr) {
+				t.Errorf("expected error containing %q, got: %v", tc.wantErr, err)
+			}
+		})
+	}
+}
+
 func TestValidate_InvalidTeam(t *testing.T) {
 	m, err := Parse(testdataPath("invalid-team.yml"))
 	if err != nil {

@@ -1,0 +1,14 @@
+apiVersion: shrine/v1
+kind: Application
+metadata:
+  name: collider
+  owner: team-b
+spec:
+  image: nginx
+  port: 80
+  replicas: 1
+  routing:
+    domain: hello-api.home.lab
+    pathPrefix: /hello-api
+  networking:
+    exposeToplatform: false

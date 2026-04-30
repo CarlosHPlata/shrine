@@ -31,11 +31,16 @@ type httpConfig struct {
 }
 
 type middleware struct {
-	BasicAuth *basicAuth `yaml:"basicAuth,omitempty"`
+	BasicAuth   *basicAuth   `yaml:"basicAuth,omitempty"`
+	StripPrefix *stripPrefix `yaml:"stripPrefix,omitempty"`
 }
 
 type basicAuth struct {
 	Users []string `yaml:"users"`
+}
+
+type stripPrefix struct {
+	Prefixes []string `yaml:"prefixes"`
 }
 
 type router struct {

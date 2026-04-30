@@ -82,6 +82,14 @@ func (tc *TestCase) AssertFileContains(path, want string) *TestCase {
 	return tc
 }
 
+func (tc *TestCase) AssertOutputNotContains(s string) *TestCase {
+	tc.t.Helper()
+	if strings.Contains(tc.result.Stdout, s) {
+		tc.t.Fatalf("expected stdout NOT to contain %q\nstdout: %s", s, tc.result.Stdout)
+	}
+	return tc
+}
+
 func expandTilde(path string) (string, error) {
 	if path != "~" && !strings.HasPrefix(path, "~/") {
 		return path, nil

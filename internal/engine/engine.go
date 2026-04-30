@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"sort"
 	"strconv"
+	"strings"
 
 	"github.com/CarlosHPlata/shrine/internal/manifest"
 	"github.com/CarlosHPlata/shrine/internal/planner"
@@ -162,20 +163,27 @@ func (engine *Engine) deployApplication(
 
 	// 4. Write Router
 	if application.Spec.Routing.Domain != "" && application.Spec.Networking.ExposeToPlatform && engine.Routing != nil {
+		aliasRoutes := resolveAliasRoutes(application.Spec.Routing.Aliases)
+
+		eventFields := map[string]string{
+			"domain": application.Spec.Routing.Domain,
+			"port":   fmt.Sprintf("%d", application.Spec.Port),
+		}
+		if len(application.Spec.Routing.Aliases) > 0 {
+			eventFields["aliases"] = formatAliasesForLog(aliasRoutes)
+		}
 		engine.Observer.OnEvent(Event{
 			Name:   "routing.configure",
 			Status: StatusInfo,
-			Fields: map[string]string{
-				"domain": application.Spec.Routing.Domain,
-				"port":   fmt.Sprintf("%d", application.Spec.Port),
-			},
+			Fields: eventFields,
 		})
 		routingOp := WriteRouteOp{
-			Team:        application.Metadata.Owner,
-			Domain:      application.Spec.Routing.Domain,
-			ServiceName: application.Metadata.Name,
-			ServicePort: application.Spec.Port,
-			PathPrefix:  application.Spec.Routing.PathPrefix,
+			Team:             application.Metadata.Owner,
+			Domain:           application.Spec.Routing.Domain,
+			ServiceName:      application.Metadata.Name,
+			ServicePort:      application.Spec.Port,
+			PathPrefix:       application.Spec.Routing.PathPrefix,
+			AdditionalRoutes: aliasRoutes,
 		}
 
 		if err := engine.Routing.WriteRoute(routingOp); err != nil {
@@ -292,6 +300,38 @@ func flattenEnv(env map[string]string) []string {
 		out = append(out, k+"="+env[k])
 	}
 	return out
+}
+
+func resolveAliasRoutes(aliases []manifest.RoutingAlias) []AliasRoute {
+	routes := make([]AliasRoute, 0, len(aliases))
+	for _, alias := range aliases {
+		prefix := strings.TrimRight(alias.PathPrefix, "/")
+		var strip bool
+		if alias.StripPrefix != nil {
+			strip = *alias.StripPrefix
+		} else {
+			strip = prefix != ""
+		}
+		routes = append(routes, AliasRoute{
+			Host:        alias.Host,
+			PathPrefix:  prefix,
+			StripPrefix: strip,
+		})
+	}
+	return routes
+}
+
+func formatAliasesForLog(routes []AliasRoute) string {
+	entries := make([]string, 0, len(routes))
+	for _, r := range routes {
+		if r.PathPrefix != "" {
+			entries = append(entries, r.Host+"+"+r.PathPrefix)
+		} else {
+			entries = append(entries, r.Host)
+		}
+	}
+	sort.Strings(entries)
+	return strings.Join(entries, ",")
 }
 
 // flattenOutputs is like flattenEnv but skips built-in keys that aren't part
