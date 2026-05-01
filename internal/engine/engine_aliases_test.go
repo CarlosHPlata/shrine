@@ -80,17 +80,36 @@ func TestFormatAliasesForLog(t *testing.T) {
 		},
 		{
 			name:   "one alias with prefix",
-			routes: []AliasRoute{{Host: "gateway.x.y", PathPrefix: "/finances"}},
+			routes: []AliasRoute{{Host: "gateway.x.y", PathPrefix: "/finances", StripPrefix: true}},
 			want:   "gateway.x.y+/finances",
 		},
 		{
 			name: "multiple sorted",
 			routes: []AliasRoute{
-				{Host: "z.example.com", PathPrefix: "/z"},
+				{Host: "z.example.com", PathPrefix: "/z", StripPrefix: true},
 				{Host: "a.example.com", PathPrefix: ""},
-				{Host: "m.example.com", PathPrefix: "/m"},
+				{Host: "m.example.com", PathPrefix: "/m", StripPrefix: true},
 			},
 			want: "a.example.com,m.example.com+/m,z.example.com+/z",
+		},
+		{
+			name:   "single alias with no-strip marker",
+			routes: []AliasRoute{{Host: "gateway.x.y", PathPrefix: "/finances", StripPrefix: false}},
+			want:   "gateway.x.y+/finances (no strip)",
+		},
+		{
+			name: "mixed strip across three aliases",
+			routes: []AliasRoute{
+				{Host: "lan.home.lab", PathPrefix: ""},
+				{Host: "gateway.tail9a6ddb.ts.net", PathPrefix: "/notes", StripPrefix: true},
+				{Host: "gateway.tail9a6ddb.ts.net", PathPrefix: "/notes-raw", StripPrefix: false},
+			},
+			want: "gateway.tail9a6ddb.ts.net+/notes,gateway.tail9a6ddb.ts.net+/notes-raw (no strip),lan.home.lab",
+		},
+		{
+			name:   "host-only alias with stripPrefix=false is no-op",
+			routes: []AliasRoute{{Host: "gateway.x.y", PathPrefix: "", StripPrefix: false}},
+			want:   "gateway.x.y",
 		},
 	}
 

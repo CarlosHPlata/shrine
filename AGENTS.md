@@ -87,6 +87,8 @@ Each `env` entry uses exactly one of `value` / `valueFrom` / `template`. `templa
 
 Applications expose exactly two built-in outputs to other manifests: `host` (`<owner>.<name>`, the container DNS name) and `port` (`spec.port`). There is no `url` built-in — scheme composition is the consumer's job via `template`.
 
+If the backend handles the path prefix itself (Next.js with `basePath`, Grafana with `root_url`, JupyterLab with `base_url`), set `stripPrefix: false` on the alias — otherwise Shrine strips the prefix before the request reaches the backend, causing redirect loops and asset 404s. The deploy log's `routing.configure` event annotates affected aliases with `(no strip)` so you can confirm the opt-out took effect. See `specs/008-alias-strip-prefix/quickstart.md` for the full diagnosis-and-fix walkthrough.
+
 ### Resource
 
 A managed dependency (postgres, redis, rabbitmq, …). Declares an image and named outputs that apps can reference via `valueFrom`.
