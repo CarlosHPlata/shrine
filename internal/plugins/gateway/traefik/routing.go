@@ -1,9 +1,7 @@
 package traefik
 
 import (
-	"errors"
 	"fmt"
-	"io/fs"
 	"os"
 	"path/filepath"
 
@@ -14,9 +12,11 @@ import (
 
 var writeFileFn = os.WriteFile
 var mkdirAllFn = os.MkdirAll
+var removeFileFn = os.Remove
 
 type RoutingBackend struct {
 	routingDir string
+	observer   engine.Observer
 }
 
 func (r *RoutingBackend) dynamicDir() string {
@@ -37,6 +37,34 @@ func stripMiddlewareName(team, service string, aliasIndex int) string {
 func (r *RoutingBackend) WriteRoute(op engine.WriteRouteOp) error {
 	if err := mkdirAllFn(r.dynamicDir(), 0o755); err != nil {
 		return fmt.Errorf("traefik routing: creating dynamic dir: %w", err)
+	}
+
+	path := filepath.Join(r.dynamicDir(), routeFileName(op.Team, op.ServiceName))
+	present, err := isPathPresent(path)
+	if err != nil {
+		r.observer.OnEvent(engine.Event{
+			Name:   "gateway.route.stat_error",
+			Status: engine.StatusWarning,
+			Fields: map[string]string{
+				"team":  op.Team,
+				"name":  op.ServiceName,
+				"path":  path,
+				"error": err.Error(),
+			},
+		})
+		return nil
+	}
+	if present {
+		r.observer.OnEvent(engine.Event{
+			Name:   "gateway.route.preserved",
+			Status: engine.StatusInfo,
+			Fields: map[string]string{
+				"team": op.Team,
+				"name": op.ServiceName,
+				"path": path,
+			},
+		})
+		return nil
 	}
 
 	name := fmt.Sprintf("%s-%s", op.Team, op.ServiceName)
@@ -91,13 +119,48 @@ func (r *RoutingBackend) WriteRoute(op engine.WriteRouteOp) error {
 		return fmt.Errorf("marshal traefik route: %w", err)
 	}
 
-	return writeFileFn(filepath.Join(r.dynamicDir(), routeFileName(op.Team, op.ServiceName)), data, 0o644)
+	if err := writeFileFn(path, data, 0o644); err != nil {
+		return err
+	}
+	r.observer.OnEvent(engine.Event{
+		Name:   "gateway.route.generated",
+		Status: engine.StatusInfo,
+		Fields: map[string]string{
+			"team": op.Team,
+			"name": op.ServiceName,
+			"path": path,
+		},
+	})
+	return nil
 }
 
 func (r *RoutingBackend) RemoveRoute(team string, host string) error {
 	path := filepath.Join(r.dynamicDir(), routeFileName(team, host))
-	if err := os.Remove(path); err != nil && !errors.Is(err, fs.ErrNotExist) {
-		return fmt.Errorf("traefik routing: removing %s: %w", path, err)
+	present, err := isPathPresent(path)
+	if err != nil {
+		r.observer.OnEvent(engine.Event{
+			Name:   "gateway.route.stat_error",
+			Status: engine.StatusWarning,
+			Fields: map[string]string{
+				"team":  team,
+				"name":  host,
+				"path":  path,
+				"error": err.Error(),
+			},
+		})
+		return nil
+	}
+	if present {
+		r.observer.OnEvent(engine.Event{
+			Name:   "gateway.route.orphan",
+			Status: engine.StatusWarning,
+			Fields: map[string]string{
+				"team": team,
+				"name": host,
+				"path": path,
+			},
+		})
+		return nil
 	}
 	return nil
 }

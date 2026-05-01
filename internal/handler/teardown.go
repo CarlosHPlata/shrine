@@ -8,6 +8,7 @@ import (
 	"github.com/CarlosHPlata/shrine/internal/engine"
 	"github.com/CarlosHPlata/shrine/internal/engine/local"
 	"github.com/CarlosHPlata/shrine/internal/planner"
+	"github.com/CarlosHPlata/shrine/internal/plugins/gateway/traefik"
 	"github.com/CarlosHPlata/shrine/internal/state"
 	"github.com/CarlosHPlata/shrine/internal/ui"
 )
@@ -35,7 +36,23 @@ func Teardown(opts TeardownOptions) error {
 
 	observer := engine.MultiObserver{terminal, fileLogger}
 
-	localEngine, err := local.NewLocalEngine(opts.Store, opts.Config.Registries, observer)
+	// Wire the routing backend so RemoveRoute can emit gateway.route.orphan
+	// when an operator-edited per-app file is left on disk. Best-effort: if the
+	// plugin is inactive or no routing dir is resolvable, no orphan warning fires
+	// — but there's no per-app file in that case either.
+	specsDir, _ := opts.Config.ResolveSpecsDir("")
+	plugin, err := traefik.New(opts.Config.Plugins.Gateway.Traefik, nil, specsDir, observer)
+	if err != nil {
+		return err
+	}
+	var routing engine.RoutingBackend
+	if plugin.IsActive() {
+		if routing, err = plugin.RoutingBackend(); err != nil {
+			return err
+		}
+	}
+
+	localEngine, err := local.NewLocalEngineWithRouting(opts.Store, opts.Config.Registries, observer, routing)
 	if err != nil {
 		return err
 	}

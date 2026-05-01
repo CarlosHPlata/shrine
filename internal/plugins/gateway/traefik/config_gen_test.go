@@ -11,15 +11,6 @@ import (
 	"github.com/CarlosHPlata/shrine/internal/engine"
 )
 
-// recordingObserver collects events emitted during a call.
-type recordingObserver struct {
-	events []engine.Event
-}
-
-func (r *recordingObserver) OnEvent(e engine.Event) {
-	r.events = append(r.events, e)
-}
-
 // stubLstat replaces lstatFn for the duration of the test and restores it on cleanup.
 func stubLstat(t *testing.T, fn func(string) (os.FileInfo, error)) {
 	t.Helper()
