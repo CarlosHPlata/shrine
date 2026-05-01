@@ -62,6 +62,18 @@ func (t *TerminalObserver) OnEvent(e engine.Event) {
 	case "gateway.config.generated":
 		fmt.Fprintf(t.out, "  📝 Generated default traefik.yml: %s\n", e.Fields["path"])
 
+	case "gateway.config.legacy_http_block":
+		fmt.Fprintf(t.out, "  ⚠️  Legacy http block in traefik.yml at %s — %s\n", e.Fields["path"], e.Fields["hint"])
+
+	case "gateway.config.legacy_probe_error":
+		fmt.Fprintf(t.out, "  ⚠️  Could not probe traefik.yml for legacy http block (deploy continues): %s (%s)\n", e.Fields["path"], e.Fields["error"])
+
+	case "gateway.dashboard.generated":
+		fmt.Fprintf(t.out, "  📝 Generated dashboard dynamic file: %s\n", e.Fields["path"])
+
+	case "gateway.dashboard.preserved":
+		fmt.Fprintf(t.out, "  📄 Preserving operator-owned dashboard dynamic file: %s\n", e.Fields["path"])
+
 	case "gateway.route.generated":
 		fmt.Fprintf(t.out, "  📝 Generated route file: %s\n", e.Fields["path"])
 

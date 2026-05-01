@@ -3,7 +3,9 @@ package traefik
 import (
 	"crypto/sha1"
 	"encoding/base64"
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 
@@ -13,7 +15,10 @@ import (
 	"github.com/CarlosHPlata/shrine/internal/engine"
 )
 
-var lstatFn = os.Lstat
+var (
+	lstatFn    = os.Lstat
+	readFileFn = os.ReadFile
+)
 
 // isPathPresent treats any directory entry at path as present, including
 // symlinks and non-regular files. Lstat (not Stat) is used so a broken
@@ -44,6 +49,7 @@ func generateStaticConfig(cfg *config.TraefikPluginConfig, routingDir string, ob
 		return err
 	}
 	if present {
+		emitLegacyHTTPBlockSignal(path, routingDir, observer)
 		observer.OnEvent(engine.Event{
 			Name:   "gateway.config.preserved",
 			Status: engine.StatusInfo,
@@ -69,23 +75,6 @@ func generateStaticConfig(cfg *config.TraefikPluginConfig, routingDir string, ob
 	if cfg.Dashboard != nil && cfg.Dashboard.Port > 0 {
 		spec.EntryPoints["traefik"] = entryPoint{Address: fmt.Sprintf(":%d", cfg.Dashboard.Port)}
 		spec.API = &apiConfig{Dashboard: true}
-		spec.HTTP = &httpConfig{
-			Middlewares: map[string]middleware{
-				"dashboard-auth": {
-					BasicAuth: &basicAuth{
-						Users: []string{htpasswdEntry(cfg.Dashboard.Username, cfg.Dashboard.Password)},
-					},
-				},
-			},
-			Routers: map[string]router{
-				"dashboard": {
-					Rule:        "PathPrefix(`/dashboard`) || PathPrefix(`/api`)",
-					Service:     "api@internal",
-					EntryPoints: []string{"traefik"},
-					Middlewares: []string{"dashboard-auth"},
-				},
-			},
-		}
 	}
 
 	data, err := yaml.Marshal(spec)
@@ -104,6 +93,103 @@ func generateStaticConfig(cfg *config.TraefikPluginConfig, routingDir string, ob
 	return nil
 }
 
+func generateDashboardDynamicConfig(cfg *config.TraefikPluginConfig, routingDir string, observer engine.Observer) error {
+	path := filepath.Join(routingDir, "dynamic", dashboardDynamicFileName())
+	present, err := isPathPresent(path)
+	if err != nil {
+		return fmt.Errorf("traefik plugin: checking dashboard dynamic file at %q: %w", path, err)
+	}
+	if present {
+		observer.OnEvent(engine.Event{
+			Name:   "gateway.dashboard.preserved",
+			Status: engine.StatusInfo,
+			Fields: map[string]string{"path": path},
+		})
+		return nil
+	}
+
+	doc := dashboardDynamicDoc{
+		HTTP: httpConfig{
+			Middlewares: map[string]middleware{
+				"dashboard-auth": {
+					BasicAuth: &basicAuth{
+						Users: []string{htpasswdEntry(cfg.Dashboard.Username, cfg.Dashboard.Password)},
+					},
+				},
+			},
+			Routers: map[string]router{
+				"dashboard": {
+					Rule:        "PathPrefix(`/dashboard`) || PathPrefix(`/api`)",
+					Service:     "api@internal",
+					EntryPoints: []string{"traefik"},
+					Middlewares: []string{"dashboard-auth"},
+				},
+			},
+		},
+	}
+
+	data, err := yaml.Marshal(doc)
+	if err != nil {
+		return fmt.Errorf("traefik plugin: marshal dashboard dynamic config: %w", err)
+	}
+
+	if err := os.WriteFile(path, data, 0o644); err != nil {
+		return fmt.Errorf("traefik plugin: writing dashboard dynamic file: %w", err)
+	}
+	observer.OnEvent(engine.Event{
+		Name:   "gateway.dashboard.generated",
+		Status: engine.StatusInfo,
+		Fields: map[string]string{"path": path},
+	})
+	return nil
+}
+
+// hasLegacyDashboardHTTPBlock returns whether path contains a top-level `http:`
+// section. It is meant to flag the artefact left behind by an earlier buggy
+// version of this plugin, which emitted the dashboard router into the static
+// config where Traefik silently drops it.
+func hasLegacyDashboardHTTPBlock(path string) (bool, error) {
+	data, err := readFileFn(path)
+	if err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			return false, nil
+		}
+		return false, fmt.Errorf("traefik plugin: probing legacy http block at %q: %w", path, err)
+	}
+	var probe legacyHTTPProbe
+	if err := yaml.Unmarshal(data, &probe); err != nil {
+		return false, fmt.Errorf("traefik plugin: probing legacy http block at %q: %w", path, err)
+	}
+	return probe.HTTP != nil, nil
+}
+
+func emitLegacyHTTPBlockSignal(staticPath, routingDir string, observer engine.Observer) {
+	hit, err := hasLegacyDashboardHTTPBlock(staticPath)
+	if err != nil {
+		observer.OnEvent(engine.Event{
+			Name:   "gateway.config.legacy_probe_error",
+			Status: engine.StatusWarning,
+			Fields: map[string]string{
+				"path":  staticPath,
+				"error": err.Error(),
+			},
+		})
+		return
+	}
+	if !hit {
+		return
+	}
+	dynamicPath := filepath.Join(routingDir, "dynamic", dashboardDynamicFileName())
+	observer.OnEvent(engine.Event{
+		Name:   "gateway.config.legacy_http_block",
+		Status: engine.StatusWarning,
+		Fields: map[string]string{
+			"path": staticPath,
+			"hint": fmt.Sprintf("Remove the top-level http: block from this file; the dashboard now lives in %s.", dynamicPath),
+		},
+	})
+}
+
 // htpasswdEntry produces an htpasswd line in the SHA1 format that Traefik
 // basicAuth accepts: user:{SHA}base64(sha1(password)).
 func htpasswdEntry(user, password string) string {
@@ -113,4 +199,16 @@ func htpasswdEntry(user, password string) string {
 
 func routeFileName(team, name string) string {
 	return fmt.Sprintf("%s-%s.yml", team, name)
+}
+
+func dashboardDynamicFileName() string {
+	return "__shrine-dashboard.yml"
+}
+
+type dashboardDynamicDoc struct {
+	HTTP httpConfig `yaml:"http"`
+}
+
+type legacyHTTPProbe struct {
+	HTTP *yaml.Node `yaml:"http"`
 }

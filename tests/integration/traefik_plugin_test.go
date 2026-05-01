@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	"github.com/docker/docker/api/types/container"
+	"gopkg.in/yaml.v3"
 
 	. "github.com/CarlosHPlata/shrine/tests/integration/testutils"
 )
@@ -855,5 +856,183 @@ func TestTraefikPlugin(t *testing.T) {
 		if !bytes.Equal(afterContent, markedContent) {
 			t.Fatalf("per-app file was mutated across redeploys\nwant:\n%s\ngot:\n%s", markedContent, afterContent)
 		}
+	})
+
+	s.Test("should expose dashboard via dynamic config and keep static traefik.yml http-block free", func(tc *TestCase) {
+		configDir := tc.Path("config")
+		routingDir := tc.Path("traefik")
+		writeConfig(t, configDir, `plugins:
+  gateway:
+    traefik:
+      routing-dir: `+routingDir+`
+      port: 8101
+      dashboard:
+        port: 8102
+        username: admin
+        password: hunter2
+`)
+
+		tc.Run("deploy",
+			"--config-dir", configDir,
+			"--state-dir", tc.StateDir,
+			"--path", traefikFixturePath(),
+		).AssertSuccess()
+
+		dashboardPath := filepath.Join(routingDir, "dynamic", "__shrine-dashboard.yml")
+		tc.AssertFileExists(dashboardPath)
+		tc.AssertFileContains(dashboardPath, "dashboard-auth")
+		tc.AssertFileContains(dashboardPath, "api@internal")
+
+		traefikYML := filepath.Join(routingDir, "traefik.yml")
+		tc.AssertFileExists(traefikYML)
+		staticBytes, err := os.ReadFile(traefikYML)
+		if err != nil {
+			t.Fatalf("read traefik.yml: %v", err)
+		}
+		var staticDoc map[string]any
+		if err := yaml.Unmarshal(staticBytes, &staticDoc); err != nil {
+			t.Fatalf("parse traefik.yml: %v\ncontent: %s", err, staticBytes)
+		}
+		if _, ok := staticDoc["http"]; ok {
+			t.Fatalf("traefik.yml MUST NOT contain a top-level http: key (Traefik silently drops it in static config)\ncontent: %s", staticBytes)
+		}
+		if _, ok := staticDoc["entryPoints"]; !ok {
+			t.Fatalf("traefik.yml missing entryPoints: key\ncontent: %s", staticBytes)
+		}
+		if _, ok := staticDoc["api"]; !ok {
+			t.Fatalf("traefik.yml missing api: key (dashboard requires api.dashboard=true)\ncontent: %s", staticBytes)
+		}
+	})
+
+	s.Test("should not generate dashboard dynamic file when no dashboard configured", func(tc *TestCase) {
+		configDir := tc.Path("config")
+		routingDir := tc.Path("traefik")
+		writeConfig(t, configDir, `plugins:
+  gateway:
+    traefik:
+      routing-dir: `+routingDir+`
+      port: 8103
+`)
+
+		tc.Run("deploy",
+			"--config-dir", configDir,
+			"--state-dir", tc.StateDir,
+			"--path", traefikFixturePath(),
+		).AssertSuccess()
+
+		tc.AssertFileNotExists(filepath.Join(routingDir, "dynamic", "__shrine-dashboard.yml"))
+	})
+
+	s.Test("should warn but not modify pre-existing traefik.yml containing http block", func(tc *TestCase) {
+		configDir := tc.Path("config")
+		routingDir := tc.Path("traefik")
+		if err := os.MkdirAll(routingDir, 0o755); err != nil {
+			t.Fatalf("mkdir routing dir: %v", err)
+		}
+		traefikYML := filepath.Join(routingDir, "traefik.yml")
+		buggyContent := []byte(`entryPoints:
+  web:
+    address: ":80"
+  traefik:
+    address: ":8080"
+api:
+  dashboard: true
+providers:
+  file:
+    directory: /etc/traefik/dynamic
+    watch: true
+http:
+  middlewares:
+    dashboard-auth:
+      basicAuth:
+        users:
+          - "admin:{SHA}old-hash"
+  routers:
+    dashboard:
+      rule: "PathPrefix(` + "`/dashboard`" + `)"
+      service: api@internal
+      entryPoints: [traefik]
+      middlewares: [dashboard-auth]
+`)
+		if err := os.WriteFile(traefikYML, buggyContent, 0o644); err != nil {
+			t.Fatalf("pre-stage buggy traefik.yml: %v", err)
+		}
+
+		writeConfig(t, configDir, `plugins:
+  gateway:
+    traefik:
+      routing-dir: `+routingDir+`
+      port: 8104
+      dashboard:
+        port: 8105
+        username: admin
+        password: hunter2
+`)
+
+		tc.Run("deploy",
+			"--config-dir", configDir,
+			"--state-dir", tc.StateDir,
+			"--path", traefikFixturePath(),
+		).AssertSuccess()
+
+		afterContent, err := os.ReadFile(traefikYML)
+		if err != nil {
+			t.Fatalf("read traefik.yml after deploy: %v", err)
+		}
+		if !bytes.Equal(afterContent, buggyContent) {
+			t.Fatalf("pre-existing traefik.yml was mutated by deploy\nwant:\n%s\ngot:\n%s", buggyContent, afterContent)
+		}
+
+		tc.AssertFileExists(filepath.Join(routingDir, "dynamic", "__shrine-dashboard.yml"))
+		tc.AssertOutputContains("Legacy http block in traefik.yml")
+	})
+
+	s.Test("should preserve operator edits to dashboard dynamic file across redeploys", func(tc *TestCase) {
+		configDir := tc.Path("config")
+		routingDir := tc.Path("traefik")
+		writeConfig(t, configDir, `plugins:
+  gateway:
+    traefik:
+      routing-dir: `+routingDir+`
+      port: 8106
+      dashboard:
+        port: 8107
+        username: admin
+        password: hunter2
+`)
+
+		tc.Run("deploy",
+			"--config-dir", configDir,
+			"--state-dir", tc.StateDir,
+			"--path", traefikFixturePath(),
+		).AssertSuccess()
+
+		dashboardPath := filepath.Join(routingDir, "dynamic", "__shrine-dashboard.yml")
+		tc.AssertFileExists(dashboardPath)
+
+		original, err := os.ReadFile(dashboardPath)
+		if err != nil {
+			t.Fatalf("read dashboard dynamic file: %v", err)
+		}
+		sentinel := []byte("\n# operator sentinel — must survive\n")
+		marked := append(original, sentinel...)
+		if err := os.WriteFile(dashboardPath, marked, 0o644); err != nil {
+			t.Fatalf("write operator sentinel: %v", err)
+		}
+
+		tc.Run("deploy",
+			"--config-dir", configDir,
+			"--state-dir", tc.StateDir,
+			"--path", traefikFixturePath(),
+		).AssertSuccess()
+
+		after, err := os.ReadFile(dashboardPath)
+		if err != nil {
+			t.Fatalf("read dashboard dynamic file after second deploy: %v", err)
+		}
+		if !bytes.Equal(after, marked) {
+			t.Fatalf("dashboard dynamic file was mutated across redeploys\nwant:\n%s\ngot:\n%s", marked, after)
+		}
+		tc.AssertOutputContains("Preserving operator-owned dashboard dynamic file")
 	})
 }
