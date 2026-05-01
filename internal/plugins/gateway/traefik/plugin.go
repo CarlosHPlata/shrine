@@ -122,6 +122,12 @@ func (p *Plugin) Deploy() error {
 		return err
 	}
 
+	if p.hasDashboard() {
+		if err := generateDashboardDynamicConfig(p.cfg, routingDir, p.observer); err != nil {
+			return err
+		}
+	}
+
 	op := engine.CreateContainerOp{
 		Team:             containerTeam,
 		Name:             containerName,

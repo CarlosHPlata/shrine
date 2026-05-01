@@ -4,7 +4,6 @@ type staticConfig struct {
 	EntryPoints map[string]entryPoint `yaml:"entryPoints"`
 	API         *apiConfig            `yaml:"api,omitempty"`
 	Providers   providersConfig       `yaml:"providers"`
-	HTTP        *httpConfig           `yaml:"http,omitempty"`
 }
 
 type entryPoint struct {
