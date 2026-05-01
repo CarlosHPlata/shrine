@@ -62,6 +62,18 @@ func (t *TerminalObserver) OnEvent(e engine.Event) {
 	case "gateway.config.generated":
 		fmt.Fprintf(t.out, "  📝 Generated default traefik.yml: %s\n", e.Fields["path"])
 
+	case "gateway.route.generated":
+		fmt.Fprintf(t.out, "  📝 Generated route file: %s\n", e.Fields["path"])
+
+	case "gateway.route.preserved":
+		fmt.Fprintf(t.out, "  📄 Preserving operator-owned route file: %s\n", e.Fields["path"])
+
+	case "gateway.route.stat_error":
+		fmt.Fprintf(t.out, "  ⚠️  Could not stat route file (deploy continues): %s (%s)\n", e.Fields["path"], e.Fields["error"])
+
+	case "gateway.route.orphan":
+		fmt.Fprintf(t.out, "  ⚠️  Orphan route file left on disk; remove with: rm %s\n", e.Fields["path"])
+
 	case "dns.register":
 		fmt.Fprintf(t.out, "  🌍 Registering DNS: %s\n", e.Fields["domain"])
 

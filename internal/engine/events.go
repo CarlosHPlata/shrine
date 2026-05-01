@@ -6,6 +6,7 @@ const (
 	StatusStarted  EventStatus = "started"
 	StatusFinished EventStatus = "finished"
 	StatusInfo     EventStatus = "info"
+	StatusWarning  EventStatus = "warning"
 	StatusError    EventStatus = "error"
 )
 

@@ -15,15 +15,26 @@ import (
 
 var lstatFn = os.Lstat
 
-func isStaticConfigPresent(routingDir string) (bool, error) {
-	path := filepath.Join(routingDir, "traefik.yml")
+// isPathPresent treats any directory entry at path as present, including
+// symlinks and non-regular files. Lstat (not Stat) is used so a broken
+// symlink still counts as present and is left untouched.
+func isPathPresent(path string) (bool, error) {
 	if _, err := lstatFn(path); err != nil {
 		if os.IsNotExist(err) {
 			return false, nil
 		}
-		return false, fmt.Errorf("traefik plugin: checking traefik.yml at %q: %w", path, err)
+		return false, fmt.Errorf("checking path %q: %w", path, err)
 	}
 	return true, nil
+}
+
+func isStaticConfigPresent(routingDir string) (bool, error) {
+	path := filepath.Join(routingDir, "traefik.yml")
+	present, err := isPathPresent(path)
+	if err != nil {
+		return false, fmt.Errorf("traefik plugin: checking traefik.yml at %q: %w", path, err)
+	}
+	return present, nil
 }
 
 func generateStaticConfig(cfg *config.TraefikPluginConfig, routingDir string, observer engine.Observer) error {

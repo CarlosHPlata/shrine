@@ -229,6 +229,13 @@ func (engine *Engine) teardownKind(kind string, team string, step planner.Planne
 			fmt.Errorf("%s %q: %w", kind, step.Name, err))
 	}
 
+	if step.Kind == manifest.ApplicationKind && engine.Routing != nil {
+		if err := engine.Routing.RemoveRoute(team, step.Name); err != nil {
+			return engine.emitErr(kind+".routing_remove", map[string]string{"team": team, "name": step.Name},
+				fmt.Errorf("%s %q routing: %w", kind, step.Name, err))
+		}
+	}
+
 	return nil
 }
 

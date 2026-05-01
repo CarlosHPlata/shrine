@@ -710,11 +710,10 @@ func TestTraefikPlugin(t *testing.T) {
 		tc.AssertOutputContains("Aliases: alias.shrine.lab+/finances")
 	})
 
-	// T014a: re-deploying without aliases must drop alias routers and strip middlewares.
-	// Two fixture directories are used:
-	//   1. traefik-alias-prefix  — app with one alias (produces alias-0 + strip-0)
-	//   2. traefik-alias-removed — same app manifest but with the aliases section removed
-	// The same routingDir is reused across both deploys so the file is overwritten.
+	// T014a: re-deploying without aliases must drop alias routers and strip middlewares,
+	// once the operator has removed the per-app file (spec 009 preserve policy: a fresh
+	// write only happens when the path is Absent — operator rm is the manifest-change
+	// trigger).
 	s.Test("should drop alias routers when alias is removed and re-deployed", func(tc *TestCase) {
 		tc.Run("apply", "teams",
 			"--path", aliasFixturePath("prefix"),
@@ -742,8 +741,15 @@ func TestTraefikPlugin(t *testing.T) {
 		tc.AssertFileContains(dynamicFile, "shrine-alias-test-whoami-prefix-alias-0")
 		tc.AssertFileContains(dynamicFile, "shrine-alias-test-whoami-prefix-strip-0")
 
+		// Operator rm: the spec-009 preserve policy requires the file to be Absent
+		// before a manifest change can land. Without this rm, the next deploy emits
+		// gateway.route.preserved and leaves the alias-bearing file untouched.
+		if err := os.Remove(dynamicFile); err != nil {
+			t.Fatalf("rm per-app file before manifest-change deploy: %v", err)
+		}
+
 		// Second deploy: alias removed — traefik-alias-removed has the same app name
-		// (whoami-prefix) but no aliases section.
+		// (whoami-prefix) but no aliases section. The Absent file path forces regeneration.
 		tc.Run("deploy",
 			"--config-dir", configDir,
 			"--state-dir", tc.StateDir,
@@ -800,5 +806,54 @@ func TestTraefikPlugin(t *testing.T) {
 		dynamicFile := filepath.Join(routingDir, "dynamic", "shrine-alias-test-whoami-prefix.yml")
 		tc.AssertFileExists(dynamicFile)
 		tc.AssertFileContains(dynamicFile, "shrine-alias-test-whoami-prefix-alias-0")
+	})
+
+	// T005 (spec 009): per-app routing file must be preserved byte-for-byte across redeploys.
+	s.Test("should preserve operator-edited per-app routing file across redeploys", func(tc *TestCase) {
+		configDir := tc.Path("config")
+		routingDir := tc.Path("traefik")
+		writeConfig(t, configDir, `plugins:
+  gateway:
+    traefik:
+      routing-dir: `+routingDir+`
+      port: 8103
+`)
+
+		// First deploy creates the per-app routing file.
+		tc.Run("deploy",
+			"--config-dir", configDir,
+			"--state-dir", tc.StateDir,
+			"--path", traefikFixturePath(),
+		).AssertSuccess()
+
+		perAppFile := filepath.Join(routingDir, "dynamic", traefikTestTeam+"-hello-eligible.yml")
+		tc.AssertFileExists(perAppFile)
+
+		originalContent, err := os.ReadFile(perAppFile)
+		if err != nil {
+			t.Fatalf("read per-app file after first deploy: %v", err)
+		}
+
+		// Operator hand-edits the file.
+		sentinel := []byte("\n# operator sentinel — must survive\n")
+		markedContent := append(originalContent, sentinel...)
+		if err := os.WriteFile(perAppFile, markedContent, 0o644); err != nil {
+			t.Fatalf("write operator sentinel: %v", err)
+		}
+
+		// Second deploy must NOT clobber the file.
+		tc.Run("deploy",
+			"--config-dir", configDir,
+			"--state-dir", tc.StateDir,
+			"--path", traefikFixturePath(),
+		).AssertSuccess()
+
+		afterContent, err := os.ReadFile(perAppFile)
+		if err != nil {
+			t.Fatalf("read per-app file after second deploy: %v", err)
+		}
+		if !bytes.Equal(afterContent, markedContent) {
+			t.Fatalf("per-app file was mutated across redeploys\nwant:\n%s\ngot:\n%s", markedContent, afterContent)
+		}
 	})
 }
