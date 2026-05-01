@@ -64,6 +64,8 @@ Controls whether the matched `pathPrefix` is removed from the request path befor
 - No effect when `pathPrefix` is empty or omitted.
 - Set to `false` when the backend expects the prefix on the wire (e.g., it serves at `/finances/...` natively).
 
+Set to `false` when the backend has a basePath / sub-path / context-path configured internally (Next.js `basePath`, Grafana `[server] root_url`, JupyterLab `--ServerApp.base_url`, etc.) — these backends generate redirects and asset URLs that include the prefix and will 404 / loop if Shrine strips it before forwarding. See **Symptom → fix** below for the canonical diagnosis.
+
 ---
 
 ## Examples
@@ -126,6 +128,27 @@ When `shrine apply` or `shrine deploy` rejects a manifest because of alias misus
 | Two different apps collide on `(host, pathPrefix)` | `routing collision: host="gateway.tail9a6ddb.ts.net" pathPrefix="/finances" declared by "team-a/finances" and "team-b/notes"` (one bullet per colliding pair, joined as a multi-error if more than one) |
 
 All error formats include the offending application's `<owner>/<name>` (or alias index) so operators can locate the bad manifest in seconds.
+
+---
+
+## Symptom → fix: redirect loops / asset 404s on basePath-aware backends
+
+Reported in [issue #9](https://github.com/CarlosHPlata/shrine/issues/9). If you publish a Next.js (or Grafana, JupyterLab, similar) app behind a `routing.aliases[]` entry with a `pathPrefix` and see any of:
+
+- The page at `<host>/<prefix>` redirects to `<host>/_next/static/...` (no prefix) and 404s.
+- Static assets (`/_next/static/chunks/main-*.js`, `/_next/image/*`) all 404 even though the page HTML loads.
+- Backend logs show requests with the prefix already stripped (e.g., `/api/balance` instead of `/<prefix>/api/balance`).
+
+You're hitting the default-strip path against a backend that owns its prefix internally. The fix is one line — set `stripPrefix: false` on the alias entry:
+
+```yaml
+aliases:
+  - host: gateway.tail9a6ddb.ts.net
+    pathPrefix: /finances
+    stripPrefix: false
+```
+
+After re-deploy, the deploy log's `routing.configure` event annotates the alias with `(no strip)` so you can confirm the gateway is now forwarding the prefix unchanged. See `specs/008-alias-strip-prefix/quickstart.md` for the full diagnosis-and-fix walkthrough.
 
 ---
 

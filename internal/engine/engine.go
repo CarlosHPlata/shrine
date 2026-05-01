@@ -324,11 +324,14 @@ func resolveAliasRoutes(aliases []manifest.RoutingAlias) []AliasRoute {
 func formatAliasesForLog(routes []AliasRoute) string {
 	entries := make([]string, 0, len(routes))
 	for _, r := range routes {
+		entry := r.Host
 		if r.PathPrefix != "" {
-			entries = append(entries, r.Host+"+"+r.PathPrefix)
-		} else {
-			entries = append(entries, r.Host)
+			entry += "+" + r.PathPrefix
 		}
+		if r.PathPrefix != "" && !r.StripPrefix {
+			entry += " (no strip)"
+		}
+		entries = append(entries, entry)
 	}
 	sort.Strings(entries)
 	return strings.Join(entries, ",")
