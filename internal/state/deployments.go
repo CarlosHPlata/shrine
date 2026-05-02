@@ -21,9 +21,10 @@ type DeploymentStore interface {
 }
 
 // ConfigHash produces a stable sha256 fingerprint of the container config.
-// volSpecs must be "name:mountPath" strings; env must be "KEY=VALUE" strings.
-// Both slices are sorted internally so call order does not matter.
-func ConfigHash(image string, env []string, volSpecs []string, exposeToPlatform bool) string {
+// volSpecs must be "name:mountPath" strings; env must be "KEY=VALUE" strings;
+// portSpecs must be "<hostPort>:<containerPort>/<proto>" strings.
+// All slices are sorted internally so call order does not matter.
+func ConfigHash(image string, env, volSpecs, portSpecs []string, exposeToPlatform bool) string {
 	sortedEnv := make([]string, len(env))
 	copy(sortedEnv, env)
 	sort.Strings(sortedEnv)
@@ -31,6 +32,10 @@ func ConfigHash(image string, env []string, volSpecs []string, exposeToPlatform 
 	sortedVols := make([]string, len(volSpecs))
 	copy(sortedVols, volSpecs)
 	sort.Strings(sortedVols)
+
+	sortedPorts := make([]string, len(portSpecs))
+	copy(sortedPorts, portSpecs)
+	sort.Strings(sortedPorts)
 
 	platform := "false"
 	if exposeToPlatform {
@@ -41,6 +46,7 @@ func ConfigHash(image string, env []string, volSpecs []string, exposeToPlatform 
 		image,
 		strings.Join(sortedEnv, "\n"),
 		strings.Join(sortedVols, "\n"),
+		strings.Join(sortedPorts, "\n"),
 		platform,
 	}, "\n---\n")
 

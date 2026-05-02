@@ -4,6 +4,7 @@ type TraefikPluginConfig struct {
 	Image      string                  `yaml:"image,omitempty"`
 	RoutingDir string                  `yaml:"routing-dir,omitempty"`
 	Port       int                     `yaml:"port,omitempty"`
+	TLSPort    int                     `yaml:"tlsPort,omitempty"`
 	Dashboard  *TraefikDashboardConfig `yaml:"dashboard,omitempty"`
 }
 

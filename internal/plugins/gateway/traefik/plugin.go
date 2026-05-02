@@ -47,7 +47,7 @@ func (p *Plugin) isActive() bool {
 		return false
 	}
 	c := p.cfg
-	if c.Image != "" || c.RoutingDir != "" || c.Port != 0 {
+	if c.Image != "" || c.RoutingDir != "" || c.Port != 0 || c.TLSPort != 0 {
 		return true
 	}
 	if c.Dashboard != nil {
@@ -76,6 +76,17 @@ func (p *Plugin) validate() error {
 	}
 	if p.hasDashboard() && !p.hasCredentials() {
 		return fmt.Errorf("traefik plugin: dashboard.port is set but username and password are required")
+	}
+	if p.cfg.TLSPort != 0 {
+		if p.cfg.TLSPort < 1 || p.cfg.TLSPort > 65535 {
+			return fmt.Errorf("traefik plugin: tlsPort %d is out of range (1-65535)", p.cfg.TLSPort)
+		}
+		if p.cfg.TLSPort == p.resolvedPort() {
+			return fmt.Errorf("traefik plugin: tlsPort %d collides with port %d", p.cfg.TLSPort, p.resolvedPort())
+		}
+		if p.hasDashboard() && p.cfg.TLSPort == p.cfg.Dashboard.Port {
+			return fmt.Errorf("traefik plugin: tlsPort %d collides with dashboard.port %d", p.cfg.TLSPort, p.cfg.Dashboard.Port)
+		}
 	}
 	return nil
 }
@@ -153,6 +164,10 @@ func (p *Plugin) portBindings() []engine.PortBinding {
 	port := strconv.Itoa(p.resolvedPort())
 	bindings := []engine.PortBinding{
 		{HostPort: port, ContainerPort: port, Protocol: "tcp"},
+	}
+	if p.cfg != nil && p.cfg.TLSPort > 0 {
+		tp := strconv.Itoa(p.cfg.TLSPort)
+		bindings = append(bindings, engine.PortBinding{HostPort: tp, ContainerPort: "443", Protocol: "tcp"})
 	}
 	if p.hasDashboard() {
 		dp := strconv.Itoa(p.cfg.Dashboard.Port)

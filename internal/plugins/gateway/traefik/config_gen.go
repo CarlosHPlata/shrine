@@ -50,6 +50,7 @@ func generateStaticConfig(cfg *config.TraefikPluginConfig, routingDir string, ob
 	}
 	if present {
 		emitLegacyHTTPBlockSignal(path, routingDir, observer)
+		emitTLSPortNoWebsecureSignal(path, cfg, observer)
 		observer.OnEvent(engine.Event{
 			Name:   "gateway.config.preserved",
 			Status: engine.StatusInfo,
@@ -75,6 +76,9 @@ func generateStaticConfig(cfg *config.TraefikPluginConfig, routingDir string, ob
 	if cfg.Dashboard != nil && cfg.Dashboard.Port > 0 {
 		spec.EntryPoints["traefik"] = entryPoint{Address: fmt.Sprintf(":%d", cfg.Dashboard.Port)}
 		spec.API = &apiConfig{Dashboard: true}
+	}
+	if cfg.TLSPort > 0 {
+		spec.EntryPoints["websecure"] = entryPoint{Address: ":443"}
 	}
 
 	data, err := yaml.Marshal(spec)
@@ -211,4 +215,57 @@ type dashboardDynamicDoc struct {
 
 type legacyHTTPProbe struct {
 	HTTP *yaml.Node `yaml:"http"`
+}
+
+// Detects when a preserved traefik.yml is missing the websecure entrypoint
+// while tlsPort is set (FR-008). Operators routing on websecure rely on this
+// nudge to know their hand-edited static config and the new tlsPort field
+// have drifted apart.
+func hasWebsecureEntrypoint(path string) (bool, error) {
+	data, err := readFileFn(path)
+	if err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			return false, nil
+		}
+		return false, fmt.Errorf("traefik plugin: probing websecure entrypoint at %q: %w", path, err)
+	}
+	var probe websecureProbe
+	if err := yaml.Unmarshal(data, &probe); err != nil {
+		return false, fmt.Errorf("traefik plugin: probing websecure entrypoint at %q: %w", path, err)
+	}
+	_, ok := probe.EntryPoints["websecure"]
+	return ok, nil
+}
+
+func emitTLSPortNoWebsecureSignal(staticPath string, cfg *config.TraefikPluginConfig, observer engine.Observer) {
+	if cfg.TLSPort == 0 {
+		return
+	}
+	ok, err := hasWebsecureEntrypoint(staticPath)
+	if err != nil {
+		observer.OnEvent(engine.Event{
+			Name:   "gateway.config.tls_port_probe_error",
+			Status: engine.StatusWarning,
+			Fields: map[string]string{
+				"path":  staticPath,
+				"error": err.Error(),
+			},
+		})
+		return
+	}
+	if ok {
+		return
+	}
+	observer.OnEvent(engine.Event{
+		Name:   "gateway.config.tls_port_no_websecure",
+		Status: engine.StatusWarning,
+		Fields: map[string]string{
+			"path": staticPath,
+			"hint": "Add an entryPoints.websecure listening on :443, or delete the file so Shrine regenerates it.",
+		},
+	})
+}
+
+type websecureProbe struct {
+	EntryPoints map[string]*yaml.Node `yaml:"entryPoints"`
 }
