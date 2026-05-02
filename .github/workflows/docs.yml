@@ -69,11 +69,12 @@ jobs:
         run: echo "VERSION=$(git describe --tags --always)" >> $GITHUB_ENV
 
       - name: Build site
+        env:
+          HUGO_PARAMS_VERSION: ${{ env.VERSION }}
         run: |
           cd docs && $(go env GOPATH)/bin/hugo \
             --gc --minify \
-            --baseURL "${{ steps.pages.outputs.base_url }}/" \
-            --param "version=${VERSION}"
+            --baseURL "${{ steps.pages.outputs.base_url }}/"
 
       - name: Verify per-page Markdown companions exist
         run: bash scripts/check-md-companions.sh docs/public
