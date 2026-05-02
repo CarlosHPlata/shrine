@@ -451,6 +451,35 @@ func TestEmitTLSPortNoWebsecureSignal_NoEvent_WhenTLSPortUnset(t *testing.T) {
 	}
 }
 
+// Probe-error path: malformed YAML in the preserved file emits a dedicated
+// gateway.config.tls_port_probe_error event so the terminal renderer can
+// attribute the failure to the websecure probe (not the legacy http-block probe).
+func TestEmitTLSPortNoWebsecureSignal_EmitsProbeError_WhenReadFails(t *testing.T) {
+	stubReadFile(t, func(path string) ([]byte, error) {
+		return []byte(":::not yaml"), nil
+	})
+
+	rec := &recordingObserver{}
+	emitTLSPortNoWebsecureSignal("/fake/path", &config.TraefikPluginConfig{TLSPort: 443}, rec)
+
+	if len(rec.events) != 1 {
+		t.Fatalf("expected exactly 1 event, got %d: %+v", len(rec.events), rec.events)
+	}
+	ev := rec.events[0]
+	if ev.Name != "gateway.config.tls_port_probe_error" {
+		t.Errorf("expected event name 'gateway.config.tls_port_probe_error', got %q", ev.Name)
+	}
+	if ev.Status != engine.StatusWarning {
+		t.Errorf("expected StatusWarning, got %q", ev.Status)
+	}
+	if ev.Fields["path"] != "/fake/path" {
+		t.Errorf("expected path '/fake/path', got %q", ev.Fields["path"])
+	}
+	if !strings.Contains(ev.Fields["error"], "websecure") {
+		t.Errorf("error field should mention 'websecure': %q", ev.Fields["error"])
+	}
+}
+
 // TestStaticConfigMarshal_HasBareWebsecureEntryPoint_WhenTLSPortSet asserts
 // that a staticConfig with a websecure entrypoint marshals to YAML containing
 // the entrypoint address and NO TLS-specific keys (tls:, certResolver, http.tls).

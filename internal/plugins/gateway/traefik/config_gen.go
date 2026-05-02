@@ -217,9 +217,10 @@ type legacyHTTPProbe struct {
 	HTTP *yaml.Node `yaml:"http"`
 }
 
-// hasWebsecureEntrypoint returns whether path contains an entryPoints.websecure
-// key. It is used to detect when a preserved traefik.yml is missing the
-// websecure entrypoint while tlsPort is set (FR-008).
+// Detects when a preserved traefik.yml is missing the websecure entrypoint
+// while tlsPort is set (FR-008). Operators routing on websecure rely on this
+// nudge to know their hand-edited static config and the new tlsPort field
+// have drifted apart.
 func hasWebsecureEntrypoint(path string) (bool, error) {
 	data, err := readFileFn(path)
 	if err != nil {
@@ -243,7 +244,7 @@ func emitTLSPortNoWebsecureSignal(staticPath string, cfg *config.TraefikPluginCo
 	ok, err := hasWebsecureEntrypoint(staticPath)
 	if err != nil {
 		observer.OnEvent(engine.Event{
-			Name:   "gateway.config.legacy_probe_error",
+			Name:   "gateway.config.tls_port_probe_error",
 			Status: engine.StatusWarning,
 			Fields: map[string]string{
 				"path":  staticPath,
@@ -260,10 +261,7 @@ func emitTLSPortNoWebsecureSignal(staticPath string, cfg *config.TraefikPluginCo
 		Status: engine.StatusWarning,
 		Fields: map[string]string{
 			"path": staticPath,
-			"hint": fmt.Sprintf(
-				"tlsPort=%d publishes host port %d→443/tcp on the Traefik container, but this preserved traefik.yml has no entryPoints.websecure listening on :443. Add the entrypoint, or delete the file so Shrine regenerates it.",
-				cfg.TLSPort, cfg.TLSPort,
-			),
+			"hint": "Add an entryPoints.websecure listening on :443, or delete the file so Shrine regenerates it.",
 		},
 	})
 }

@@ -71,6 +71,9 @@ func (t *TerminalObserver) OnEvent(e engine.Event) {
 	case "gateway.config.legacy_probe_error":
 		fmt.Fprintf(t.out, "  ⚠️  Could not probe traefik.yml for legacy http block (deploy continues): %s (%s)\n", e.Fields["path"], e.Fields["error"])
 
+	case "gateway.config.tls_port_probe_error":
+		fmt.Fprintf(t.out, "  ⚠️  Could not probe traefik.yml for websecure entrypoint (deploy continues): %s (%s)\n", e.Fields["path"], e.Fields["error"])
+
 	case "gateway.dashboard.generated":
 		fmt.Fprintf(t.out, "  📝 Generated dashboard dynamic file: %s\n", e.Fields["path"])
 

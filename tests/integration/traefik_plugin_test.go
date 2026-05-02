@@ -936,7 +936,7 @@ func TestTraefikPlugin(t *testing.T) {
 			"--path", traefikFixturePath(),
 		).AssertFailure().
 			AssertStderrContains("tlsPort").
-			AssertStderrContains("port").
+			AssertStderrContains("collides with port").
 			AssertStderrContains("443")
 
 		tc.AssertContainerNotExists(traefikContainerName)
@@ -1325,6 +1325,50 @@ providers:
 		).AssertSuccess()
 
 		tc.AssertOutputContains("tlsPort set but traefik.yml is missing websecure entrypoint")
+	})
+
+	// Probe-error path: a preserved traefik.yml that fails to parse must emit
+	// gateway.config.tls_port_probe_error (rendered as "Could not probe traefik.yml
+	// for websecure entrypoint") rather than reusing the legacy-block probe-error
+	// renderer, which would mis-attribute the failure to the unrelated http-block path.
+	s.Test("should emit tls_port_probe_error when preserved traefik.yml is malformed", func(tc *TestCase) {
+		configDir := tc.Path("config")
+		routingDir := tc.Path("traefik")
+
+		if err := os.MkdirAll(routingDir, 0o755); err != nil {
+			t.Fatalf("mkdir routing dir: %v", err)
+		}
+		malformed := []byte(":::not yaml\n")
+		traefikYML := filepath.Join(routingDir, "traefik.yml")
+		if err := os.WriteFile(traefikYML, malformed, 0o644); err != nil {
+			t.Fatalf("pre-stage malformed traefik.yml: %v", err)
+		}
+
+		writeConfig(t, configDir, `plugins:
+  gateway:
+    traefik:
+      routing-dir: `+routingDir+`
+      port: 8116
+      tlsPort: 8446
+`)
+
+		tc.Run("deploy",
+			"--config-dir", configDir,
+			"--state-dir", tc.StateDir,
+			"--path", traefikFixturePath(),
+		).AssertSuccess()
+
+		// The deploy must NOT block on a probe error; the warning is advisory.
+		tc.AssertOutputContains("Could not probe traefik.yml for websecure entrypoint")
+
+		// The malformed file must still be byte-for-byte unchanged (FR-007).
+		postDeploy, err := os.ReadFile(traefikYML)
+		if err != nil {
+			t.Fatalf("read traefik.yml after deploy: %v", err)
+		}
+		if !bytes.Equal(malformed, postDeploy) {
+			t.Fatalf("malformed traefik.yml was mutated by deploy\nwant:\n%s\ngot:\n%s", malformed, postDeploy)
+		}
 	})
 
 	s.Test("should preserve operator edits to dashboard dynamic file across redeploys", func(tc *TestCase) {

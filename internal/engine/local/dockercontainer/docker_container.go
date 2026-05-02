@@ -152,15 +152,18 @@ func buildPortBindings(bindings []PortBinding) (nat.PortSet, nat.PortMap) {
 	exposed := nat.PortSet{}
 	pmap := nat.PortMap{}
 	for _, b := range bindings {
-		proto := b.Protocol
-		if proto == "" {
-			proto = "tcp"
-		}
-		key := nat.Port(b.ContainerPort + "/" + proto)
+		key := nat.Port(b.ContainerPort + "/" + resolvedProto(b))
 		exposed[key] = struct{}{}
 		pmap[key] = append(pmap[key], nat.PortBinding{HostPort: b.HostPort})
 	}
 	return exposed, pmap
+}
+
+func resolvedProto(b PortBinding) string {
+	if b.Protocol == "" {
+		return "tcp"
+	}
+	return b.Protocol
 }
 
 // PortBinding mirrors engine.PortBinding to keep the local helper signature
@@ -240,11 +243,7 @@ func configHash(op engine.CreateContainerOp, digest string) string {
 	}
 	portSpecs := make([]string, len(op.PortBindings))
 	for i, b := range op.PortBindings {
-		proto := b.Protocol
-		if proto == "" {
-			proto = "tcp"
-		}
-		portSpecs[i] = fmt.Sprintf("%s:%s/%s", b.HostPort, b.ContainerPort, proto)
+		portSpecs[i] = fmt.Sprintf("%s:%s/%s", b.HostPort, b.ContainerPort, resolvedProto(b))
 	}
 	return state.ConfigHash(digest, op.Env, volSpecs, portSpecs, op.ExposeToPlatform)
 }
