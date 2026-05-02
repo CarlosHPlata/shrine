@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	"github.com/docker/docker/api/types/container"
+	"github.com/docker/go-connections/nat"
 	"gopkg.in/yaml.v3"
 
 	. "github.com/CarlosHPlata/shrine/tests/integration/testutils"
@@ -858,6 +859,244 @@ func TestTraefikPlugin(t *testing.T) {
 		}
 	})
 
+	// T012 (spec 011): clean deploy with tlsPort must publish host→443/tcp and add websecure entrypoint.
+	s.Test("should publish tlsPort to container 443 and add websecure entrypoint on clean deploy", func(tc *TestCase) {
+		configDir := tc.Path("config")
+		routingDir := tc.Path("traefik")
+		writeConfig(t, configDir, `plugins:
+  gateway:
+    traefik:
+      routing-dir: `+routingDir+`
+      port: 8108
+      tlsPort: 8443
+`)
+
+		tc.Run("deploy",
+			"--config-dir", configDir,
+			"--state-dir", tc.StateDir,
+			"--path", traefikFixturePath(),
+		).AssertSuccess()
+
+		tc.AssertContainerRunning(traefikContainerName)
+		tc.AssertContainerPublishesPort(traefikContainerName, "8443", "443", "tcp")
+		tc.AssertContainerPublishesPort(traefikContainerName, "8108", "8108", "tcp") // regression: HTTP port still bound
+
+		traefikYML := filepath.Join(routingDir, "traefik.yml")
+		staticBytes, err := os.ReadFile(traefikYML)
+		if err != nil {
+			t.Fatalf("read traefik.yml: %v", err)
+		}
+		var staticDoc map[string]any
+		if err := yaml.Unmarshal(staticBytes, &staticDoc); err != nil {
+			t.Fatalf("parse traefik.yml: %v\ncontent: %s", err, staticBytes)
+		}
+		entryPointsRaw, ok := staticDoc["entryPoints"]
+		if !ok {
+			t.Fatalf("traefik.yml missing entryPoints key\ncontent: %s", staticBytes)
+		}
+		entryPoints, ok := entryPointsRaw.(map[string]any)
+		if !ok {
+			t.Fatalf("entryPoints is not a map[string]any\ncontent: %s", staticBytes)
+		}
+		websecureRaw, ok := entryPoints["websecure"]
+		if !ok {
+			t.Fatalf("entryPoints.websecure missing\ncontent: %s", staticBytes)
+		}
+		websecure, ok := websecureRaw.(map[string]any)
+		if !ok {
+			t.Fatalf("entryPoints.websecure is not a map[string]any\ncontent: %s", staticBytes)
+		}
+		if len(websecure) != 1 {
+			t.Fatalf("entryPoints.websecure must have exactly one key (address), got %d keys: %v\ncontent: %s", len(websecure), websecure, staticBytes)
+		}
+		addrRaw, ok := websecure["address"]
+		if !ok {
+			t.Fatalf("entryPoints.websecure missing address key\ncontent: %s", staticBytes)
+		}
+		if addrRaw != ":443" {
+			t.Fatalf("entryPoints.websecure.address = %q, want \":443\"\ncontent: %s", addrRaw, staticBytes)
+		}
+	})
+
+	// T013 (spec 011): tlsPort that collides with port must be rejected at validation time.
+	s.Test("should reject tlsPort that collides with port at validation time", func(tc *TestCase) {
+		configDir := tc.Path("config")
+		routingDir := tc.Path("traefik")
+		writeConfig(t, configDir, `plugins:
+  gateway:
+    traefik:
+      routing-dir: `+routingDir+`
+      port: 443
+      tlsPort: 443
+`)
+
+		tc.Run("deploy",
+			"--config-dir", configDir,
+			"--state-dir", tc.StateDir,
+			"--path", traefikFixturePath(),
+		).AssertFailure().
+			AssertStderrContains("tlsPort").
+			AssertStderrContains("port").
+			AssertStderrContains("443")
+
+		tc.AssertContainerNotExists(traefikContainerName)
+	})
+
+	// T014 (spec 011): changing tlsPort between deploys must recreate the traefik container.
+	s.Test("should recreate traefik container when tlsPort value changes between deploys", func(tc *TestCase) {
+		configDir := tc.Path("config")
+		routingDir := tc.Path("traefik")
+
+		// Stage 1: initial deploy with tlsPort: 8443.
+		writeConfig(t, configDir, `plugins:
+  gateway:
+    traefik:
+      routing-dir: `+routingDir+`
+      port: 8110
+      tlsPort: 8443
+`)
+
+		tc.Run("deploy",
+			"--config-dir", configDir,
+			"--state-dir", tc.StateDir,
+			"--path", traefikFixturePath(),
+		).AssertSuccess()
+
+		infoBefore, err := tc.DockerClient.ContainerInspect(context.Background(), traefikContainerName)
+		if err != nil {
+			t.Fatalf("inspect container after first deploy: %v", err)
+		}
+		firstID := infoBefore.ID
+		if firstID == "" {
+			t.Fatalf("container ID is empty after first deploy")
+		}
+
+		// Stage 2: redeploy with tlsPort: 9443 — only tlsPort changes.
+		writeConfig(t, configDir, `plugins:
+  gateway:
+    traefik:
+      routing-dir: `+routingDir+`
+      port: 8110
+      tlsPort: 9443
+`)
+
+		tc.Run("deploy",
+			"--config-dir", configDir,
+			"--state-dir", tc.StateDir,
+			"--path", traefikFixturePath(),
+		).AssertSuccess()
+
+		infoAfter, err := tc.DockerClient.ContainerInspect(context.Background(), traefikContainerName)
+		if err != nil {
+			t.Fatalf("inspect container after second deploy: %v", err)
+		}
+		if infoAfter.ID == firstID {
+			t.Fatalf("container was NOT recreated after tlsPort change: ID before=%s, ID after=%s", firstID, infoAfter.ID)
+		}
+		tc.AssertContainerPublishesPort(traefikContainerName, "9443", "443", "tcp")
+	})
+
+	// T020 (spec 011 US2): no tlsPort → container must not publish 443/tcp and
+	// generated traefik.yml must not contain a websecure entrypoint.
+	s.Test("should not publish 443 nor add websecure entrypoint when tlsPort is unset", func(tc *TestCase) {
+		configDir := tc.Path("config")
+		routingDir := tc.Path("traefik")
+		writeConfig(t, configDir, `plugins:
+  gateway:
+    traefik:
+      routing-dir: `+routingDir+`
+      port: 8112
+`)
+
+		tc.Run("deploy",
+			"--config-dir", configDir,
+			"--state-dir", tc.StateDir,
+			"--path", traefikFixturePath(),
+		).AssertSuccess()
+
+		// Assert container does not publish 443/tcp.
+		info, err := tc.DockerClient.ContainerInspect(context.Background(), traefikContainerName)
+		if err != nil {
+			t.Fatalf("inspect container: %v", err)
+		}
+		if _, has443 := info.HostConfig.PortBindings[nat.Port("443/tcp")]; has443 {
+			var keys []string
+			for k := range info.HostConfig.PortBindings {
+				keys = append(keys, string(k))
+			}
+			t.Fatalf("container must not publish 443/tcp when tlsPort is unset; actual bindings: %v", keys)
+		}
+
+		// Assert traefik.yml has no websecure entrypoint.
+		traefikYML := filepath.Join(routingDir, "traefik.yml")
+		staticBytes, err := os.ReadFile(traefikYML)
+		if err != nil {
+			t.Fatalf("read traefik.yml: %v", err)
+		}
+		var staticDoc map[string]any
+		if err := yaml.Unmarshal(staticBytes, &staticDoc); err != nil {
+			t.Fatalf("parse traefik.yml: %v\ncontent: %s", err, staticBytes)
+		}
+		entryPointsRaw, ok := staticDoc["entryPoints"]
+		if !ok {
+			t.Fatalf("traefik.yml missing entryPoints key\ncontent: %s", staticBytes)
+		}
+		entryPoints, ok := entryPointsRaw.(map[string]any)
+		if !ok {
+			t.Fatalf("entryPoints is not map[string]any\ncontent: %s", staticBytes)
+		}
+		if _, hasWebsecure := entryPoints["websecure"]; hasWebsecure {
+			t.Fatalf("entryPoints.websecure must not exist when tlsPort is unset\ncontent: %s", staticBytes)
+		}
+	})
+
+	// T021 (spec 011 US2): no-op redeploy must not recreate the traefik container.
+	// This is the regression guard for ConfigHash stability: if the hash feeds
+	// unstable input (e.g., random iteration over PortBindings), the container ID
+	// changes between identical deploys.
+	s.Test("should not recreate traefik container on no-op redeploy", func(tc *TestCase) {
+		configDir := tc.Path("config")
+		routingDir := tc.Path("traefik")
+		writeConfig(t, configDir, `plugins:
+  gateway:
+    traefik:
+      routing-dir: `+routingDir+`
+      port: 8113
+`)
+
+		// Stage 1: initial deploy.
+		tc.Run("deploy",
+			"--config-dir", configDir,
+			"--state-dir", tc.StateDir,
+			"--path", traefikFixturePath(),
+		).AssertSuccess()
+
+		infoFirst, err := tc.DockerClient.ContainerInspect(context.Background(), traefikContainerName)
+		if err != nil {
+			t.Fatalf("inspect container after first deploy: %v", err)
+		}
+		firstID := infoFirst.ID
+		if firstID == "" {
+			t.Fatalf("container ID is empty after first deploy")
+		}
+
+		// Stage 2: identical redeploy — no config changes.
+		tc.Run("deploy",
+			"--config-dir", configDir,
+			"--state-dir", tc.StateDir,
+			"--path", traefikFixturePath(),
+		).AssertSuccess()
+
+		infoSecond, err := tc.DockerClient.ContainerInspect(context.Background(), traefikContainerName)
+		if err != nil {
+			t.Fatalf("inspect container after second deploy: %v", err)
+		}
+		secondID := infoSecond.ID
+		if firstID != secondID {
+			t.Fatalf("container was unexpectedly recreated on no-op redeploy\nfirst ID:  %s\nsecond ID: %s", firstID, secondID)
+		}
+	})
+
 	s.Test("should expose dashboard via dynamic config and keep static traefik.yml http-block free", func(tc *TestCase) {
 		configDir := tc.Path("config")
 		routingDir := tc.Path("traefik")
@@ -985,6 +1224,107 @@ http:
 
 		tc.AssertFileExists(filepath.Join(routingDir, "dynamic", "__shrine-dashboard.yml"))
 		tc.AssertOutputContains("Legacy http block in traefik.yml")
+	})
+
+	// T028 (spec 011 US3): preserved traefik.yml with no websecure entrypoint and tlsPort set
+	// must produce a warning, leave the file untouched, and still publish the TLS port.
+	s.Test("should warn but not modify preserved traefik.yml lacking websecure entrypoint when tlsPort is set", func(tc *TestCase) {
+		configDir := tc.Path("config")
+		routingDir := tc.Path("traefik")
+
+		// Pre-stage the routing dir and a hand-written traefik.yml (no websecure).
+		if err := os.MkdirAll(routingDir, 0o755); err != nil {
+			t.Fatalf("mkdir routing dir: %v", err)
+		}
+		staged := []byte(`entryPoints:
+  web:
+    address: :8114
+providers:
+  file:
+    directory: /etc/traefik/dynamic
+    watch: true
+`)
+		traefikYML := filepath.Join(routingDir, "traefik.yml")
+		if err := os.WriteFile(traefikYML, staged, 0o644); err != nil {
+			t.Fatalf("pre-stage traefik.yml: %v", err)
+		}
+
+		writeConfig(t, configDir, `plugins:
+  gateway:
+    traefik:
+      routing-dir: `+routingDir+`
+      port: 8114
+      tlsPort: 8444
+`)
+
+		tc.Run("deploy",
+			"--config-dir", configDir,
+			"--state-dir", tc.StateDir,
+			"--path", traefikFixturePath(),
+		).AssertSuccess()
+
+		// File must be byte-for-byte unchanged (FR-007).
+		postDeploy, err := os.ReadFile(traefikYML)
+		if err != nil {
+			t.Fatalf("read traefik.yml after deploy: %v", err)
+		}
+		if !bytes.Equal(staged, postDeploy) {
+			t.Fatalf("preserved traefik.yml was mutated by deploy\nwant:\n%s\ngot:\n%s", staged, postDeploy)
+		}
+
+		// TLS port must still be published (FR-007).
+		tc.AssertContainerPublishesPort(traefikContainerName, "8444", "443", "tcp")
+
+		// Warning must appear in output.
+		tc.AssertOutputContains("tlsPort set but traefik.yml is missing websecure entrypoint")
+	})
+
+	// T029 (spec 011 US3): the websecure-missing warning must be re-emitted on every
+	// deploy where the mismatch persists (idempotent — FR-008).
+	s.Test("should re-emit the websecure-missing warning on every deploy where the mismatch persists", func(tc *TestCase) {
+		configDir := tc.Path("config")
+		routingDir := tc.Path("traefik")
+
+		// Pre-stage a preserved traefik.yml with no websecure entrypoint.
+		if err := os.MkdirAll(routingDir, 0o755); err != nil {
+			t.Fatalf("mkdir routing dir: %v", err)
+		}
+		staged := []byte(`entryPoints:
+  web:
+    address: :8115
+providers:
+  file:
+    directory: /etc/traefik/dynamic
+    watch: true
+`)
+		traefikYML := filepath.Join(routingDir, "traefik.yml")
+		if err := os.WriteFile(traefikYML, staged, 0o644); err != nil {
+			t.Fatalf("pre-stage traefik.yml: %v", err)
+		}
+
+		writeConfig(t, configDir, `plugins:
+  gateway:
+    traefik:
+      routing-dir: `+routingDir+`
+      port: 8115
+      tlsPort: 8445
+`)
+
+		// First deploy.
+		tc.Run("deploy",
+			"--config-dir", configDir,
+			"--state-dir", tc.StateDir,
+			"--path", traefikFixturePath(),
+		).AssertSuccess()
+
+		// Second deploy — warning must fire again (idempotent).
+		tc.Run("deploy",
+			"--config-dir", configDir,
+			"--state-dir", tc.StateDir,
+			"--path", traefikFixturePath(),
+		).AssertSuccess()
+
+		tc.AssertOutputContains("tlsPort set but traefik.yml is missing websecure entrypoint")
 	})
 
 	s.Test("should preserve operator edits to dashboard dynamic file across redeploys", func(tc *TestCase) {

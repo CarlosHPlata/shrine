@@ -198,6 +198,32 @@ func TestStaticConfigMarshal_HasNoHTTPKey(t *testing.T) {
 	}
 }
 
+// TestStaticConfigMarshal_OmitsWebsecureEntryPoint_WhenAbsent asserts that a
+// staticConfig with no websecure entrypoint marshals to YAML that does NOT
+// contain the string "websecure". This is the US2 regression guard: when the
+// operator has not set tlsPort, the generated config must remain unchanged.
+// No filesystem access — pure in-memory struct + marshal, mirroring T010.
+func TestStaticConfigMarshal_OmitsWebsecureEntryPoint_WhenAbsent(t *testing.T) {
+	spec := staticConfig{
+		EntryPoints: map[string]entryPoint{
+			"web": {Address: ":80"},
+		},
+		Providers: providersConfig{
+			File: fileProvider{Directory: "/etc/traefik/dynamic", Watch: true},
+		},
+	}
+
+	data, err := yamlMarshal(spec)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	out := string(data)
+
+	if strings.Contains(out, "websecure") {
+		t.Fatalf("marshalled output must not contain %q when no websecure entrypoint was added\noutput:\n%s", "websecure", out)
+	}
+}
+
 // --- generateDashboardDynamicConfig tests ---
 
 func TestGenerateDashboardDynamicConfig_Skip_WhenPresent(t *testing.T) {
@@ -311,5 +337,152 @@ func TestHasLegacyDashboardHTTPBlock_ParseError(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "probing legacy http block") {
 		t.Errorf("error should include 'probing legacy http block': %v", err)
+	}
+}
+
+// --- hasWebsecureEntrypoint tests (T022-T024) ---
+
+// T022: stub returns YAML with entryPoints.websecure — should detect it.
+func TestHasWebsecureEntrypoint_Detected(t *testing.T) {
+	stubReadFile(t, func(path string) ([]byte, error) {
+		return []byte("entryPoints:\n  web:\n    address: \":80\"\n  websecure:\n    address: \":443\"\n"), nil
+	})
+
+	got, err := hasWebsecureEntrypoint("any/path")
+	if err != nil {
+		t.Fatalf("expected nil error, got %v", err)
+	}
+	if !got {
+		t.Fatal("expected true (websecure detected), got false")
+	}
+}
+
+// T023: stub returns YAML with only web and traefik entrypoints — should NOT detect websecure.
+func TestHasWebsecureEntrypoint_Missing(t *testing.T) {
+	stubReadFile(t, func(path string) ([]byte, error) {
+		return []byte("entryPoints:\n  web:\n    address: \":80\"\n  traefik:\n    address: \":8080\"\n"), nil
+	})
+
+	got, err := hasWebsecureEntrypoint("any/path")
+	if err != nil {
+		t.Fatalf("expected nil error, got %v", err)
+	}
+	if got {
+		t.Fatal("expected false (websecure missing), got true")
+	}
+}
+
+// T024: stub returns malformed YAML — should return error referencing path and "websecure".
+func TestHasWebsecureEntrypoint_ParseError(t *testing.T) {
+	stubReadFile(t, func(path string) ([]byte, error) {
+		return []byte(":::not yaml"), nil
+	})
+
+	_, err := hasWebsecureEntrypoint("/fake/traefik.yml")
+	if err == nil {
+		t.Fatal("expected non-nil error on malformed yaml, got nil")
+	}
+	if !strings.Contains(err.Error(), "/fake/traefik.yml") {
+		t.Errorf("error should include path: %v", err)
+	}
+	if !strings.Contains(err.Error(), "websecure") {
+		t.Errorf("error should include 'websecure': %v", err)
+	}
+}
+
+// --- emitTLSPortNoWebsecureSignal tests (T025-T027) ---
+
+// T025: preserved file has no websecure and tlsPort is set — should emit warning.
+func TestEmitTLSPortNoWebsecureSignal_EmitsWarning_WhenMismatch(t *testing.T) {
+	stubReadFile(t, func(path string) ([]byte, error) {
+		return []byte("entryPoints:\n  web:\n    address: \":80\"\n"), nil
+	})
+
+	rec := &recordingObserver{}
+	emitTLSPortNoWebsecureSignal("/fake/path", &config.TraefikPluginConfig{TLSPort: 443}, rec)
+
+	if len(rec.events) != 1 {
+		t.Fatalf("expected exactly 1 event, got %d: %+v", len(rec.events), rec.events)
+	}
+	ev := rec.events[0]
+	if ev.Name != "gateway.config.tls_port_no_websecure" {
+		t.Errorf("expected event name 'gateway.config.tls_port_no_websecure', got %q", ev.Name)
+	}
+	if ev.Status != engine.StatusWarning {
+		t.Errorf("expected StatusWarning, got %q", ev.Status)
+	}
+	if ev.Fields["path"] != "/fake/path" {
+		t.Errorf("expected path '/fake/path', got %q", ev.Fields["path"])
+	}
+	hint := ev.Fields["hint"]
+	if hint == "" {
+		t.Fatal("expected non-empty hint field")
+	}
+	if !strings.Contains(hint, "websecure") {
+		t.Errorf("hint should contain 'websecure': %q", hint)
+	}
+}
+
+// T026: preserved file HAS websecure — no event should be emitted.
+func TestEmitTLSPortNoWebsecureSignal_NoEvent_WhenWebsecurePresent(t *testing.T) {
+	stubReadFile(t, func(path string) ([]byte, error) {
+		return []byte("entryPoints:\n  web:\n    address: \":80\"\n  websecure:\n    address: \":443\"\n"), nil
+	})
+
+	rec := &recordingObserver{}
+	emitTLSPortNoWebsecureSignal("/fake/path", &config.TraefikPluginConfig{TLSPort: 443}, rec)
+
+	if len(rec.events) != 0 {
+		t.Fatalf("expected 0 events when websecure is present, got %d: %+v", len(rec.events), rec.events)
+	}
+}
+
+// T027: tlsPort is 0 (unset) — helper short-circuits before reading; zero events.
+func TestEmitTLSPortNoWebsecureSignal_NoEvent_WhenTLSPortUnset(t *testing.T) {
+	stubReadFile(t, func(path string) ([]byte, error) {
+		return []byte("entryPoints:\n  web:\n    address: \":80\"\n"), nil
+	})
+
+	rec := &recordingObserver{}
+	emitTLSPortNoWebsecureSignal("/fake/path", &config.TraefikPluginConfig{TLSPort: 0}, rec)
+
+	if len(rec.events) != 0 {
+		t.Fatalf("expected 0 events when TLSPort is 0, got %d: %+v", len(rec.events), rec.events)
+	}
+}
+
+// TestStaticConfigMarshal_HasBareWebsecureEntryPoint_WhenTLSPortSet asserts
+// that a staticConfig with a websecure entrypoint marshals to YAML containing
+// the entrypoint address and NO TLS-specific keys (tls:, certResolver, http.tls).
+// This is a regression guard for FR-010: the websecure entrypoint must be bare.
+// No filesystem access — pure in-memory struct + marshal, mirroring
+// TestStaticConfigMarshal_HasNoHTTPKey.
+func TestStaticConfigMarshal_HasBareWebsecureEntryPoint_WhenTLSPortSet(t *testing.T) {
+	spec := staticConfig{
+		EntryPoints: map[string]entryPoint{
+			"web":       {Address: ":80"},
+			"websecure": {Address: ":443"},
+		},
+		Providers: providersConfig{
+			File: fileProvider{Directory: "/etc/traefik/dynamic", Watch: true},
+		},
+	}
+
+	data, err := yamlMarshal(spec)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	out := string(data)
+
+	if !strings.Contains(out, "websecure:") {
+		t.Fatalf("marshalled output does not contain %q\noutput:\n%s", "websecure:", out)
+	}
+	if !strings.Contains(out, "address: :443") {
+		t.Fatalf("marshalled output does not contain %q\noutput:\n%s", "address: :443", out)
+	}
+	for _, forbidden := range []string{"tls:", "certResolver", "http.tls"} {
+		if strings.Contains(out, forbidden) {
+			t.Fatalf("marshalled output must not contain %q (bare entrypoint regression)\noutput:\n%s", forbidden, out)
+		}
 	}
 }

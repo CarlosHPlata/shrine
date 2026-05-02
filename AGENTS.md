@@ -266,6 +266,7 @@ plugins:
       image: traefik:v3.7.0-rc.2      # optional, default v3.7.0-rc.2
       routing-dir: /var/lib/shrine/traefik   # optional, default {specsDir}/traefik/
       port: 80                         # optional HTTP entrypoint, default 80
+      tlsPort: 443                    # optional HTTPS host port; publishes <tlsPort>:443/tcp and adds websecure entrypoint
       dashboard:                       # optional; when present, port + credentials are required
         port: 8080
         username: admin

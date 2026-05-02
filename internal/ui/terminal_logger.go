@@ -65,6 +65,9 @@ func (t *TerminalObserver) OnEvent(e engine.Event) {
 	case "gateway.config.legacy_http_block":
 		fmt.Fprintf(t.out, "  ⚠️  Legacy http block in traefik.yml at %s — %s\n", e.Fields["path"], e.Fields["hint"])
 
+	case "gateway.config.tls_port_no_websecure":
+		fmt.Fprintf(t.out, "  ⚠️  tlsPort set but traefik.yml is missing websecure entrypoint at %s — %s\n", e.Fields["path"], e.Fields["hint"])
+
 	case "gateway.config.legacy_probe_error":
 		fmt.Fprintf(t.out, "  ⚠️  Could not probe traefik.yml for legacy http block (deploy continues): %s (%s)\n", e.Fields["path"], e.Fields["error"])
 

@@ -238,7 +238,15 @@ func configHash(op engine.CreateContainerOp, digest string) string {
 	for i, v := range op.Volumes {
 		volSpecs[i] = v.Name + ":" + v.MountPath
 	}
-	return state.ConfigHash(digest, op.Env, volSpecs, op.ExposeToPlatform)
+	portSpecs := make([]string, len(op.PortBindings))
+	for i, b := range op.PortBindings {
+		proto := b.Protocol
+		if proto == "" {
+			proto = "tcp"
+		}
+		portSpecs[i] = fmt.Sprintf("%s:%s/%s", b.HostPort, b.ContainerPort, proto)
+	}
+	return state.ConfigHash(digest, op.Env, volSpecs, portSpecs, op.ExposeToPlatform)
 }
 
 func (backend *DockerBackend) removeDeployment(op engine.RemoveContainerOp) error {
