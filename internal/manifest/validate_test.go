@@ -330,6 +330,66 @@ func TestValidate_RoutingAliasRules(t *testing.T) {
 	}
 }
 
+func TestValidateRoutingAliases_TLS_DoesNotAffectCollisionKey(t *testing.T) {
+	validBase := func(routing Routing) *Manifest {
+		return &Manifest{
+			TypeMeta: TypeMeta{Kind: ApplicationKind, APIVersion: "shrine/v1"},
+			Application: &ApplicationManifest{
+				Metadata: Metadata{Name: "a", Owner: "team-a"},
+				Spec:     ApplicationSpec{Image: "img", Port: 80, Routing: routing},
+			},
+		}
+	}
+
+	cases := []struct {
+		name    string
+		routing Routing
+		wantErr string
+	}{
+		{
+			// FR-006: tls flag is not a uniqueness key; same host+pathPrefix with
+			// different tls values is still a duplicate collision.
+			name: "same host+pathPrefix different tls is still a duplicate",
+			routing: Routing{
+				Domain: "app.home.lab",
+				Aliases: []RoutingAlias{
+					{Host: "x.example.com", PathPrefix: "/api", TLS: false},
+					{Host: "x.example.com", PathPrefix: "/api", TLS: true},
+				},
+			},
+			wantErr: "alias[1]",
+		},
+		{
+			// Different hosts with both tls:true must not collide.
+			name: "different hosts both tls true is valid",
+			routing: Routing{
+				Domain: "app.home.lab",
+				Aliases: []RoutingAlias{
+					{Host: "a.example.com", TLS: true},
+					{Host: "b.example.com", TLS: true},
+				},
+			},
+			wantErr: "",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			m := validBase(tc.routing)
+			err := Validate(m)
+			if tc.wantErr == "" {
+				if err != nil {
+					t.Errorf("expected no error, got: %v", err)
+				}
+				return
+			}
+			if err == nil || !strings.Contains(err.Error(), tc.wantErr) {
+				t.Errorf("expected error containing %q, got: %v", tc.wantErr, err)
+			}
+		})
+	}
+}
+
 func TestValidate_InvalidTeam(t *testing.T) {
 	m, err := Parse(testdataPath("invalid-team.yml"))
 	if err != nil {

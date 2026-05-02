@@ -1,3 +1,3 @@
 {
-  "feature_directory": "specs/011-traefik-tlsport-config"
+  "feature_directory": "specs/012-tls-alias-routers"
 }

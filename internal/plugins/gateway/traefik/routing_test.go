@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 
+	"gopkg.in/yaml.v3"
+
 	"github.com/CarlosHPlata/shrine/internal/engine"
 )
 
@@ -63,7 +65,7 @@ func captureWriteFileFn(t *testing.T) *[]byte {
 }
 
 func newTestBackend() *RoutingBackend {
-	return &RoutingBackend{routingDir: "/fake", observer: engine.NoopObserver{}}
+	return &RoutingBackend{routingDir: "/fake", staticConfigPath: "/fake/traefik.yml", observer: engine.NoopObserver{}}
 }
 
 func baseOp() engine.WriteRouteOp {
@@ -212,6 +214,12 @@ func TestWriteRoute_NoAliases(t *testing.T) {
 	if !strings.Contains(got, "team-a-hello-api:") {
 		t.Error("expected primary router key")
 	}
+	if strings.Contains(got, "websecure") {
+		t.Error("T025: expected no websecure in non-TLS alias output")
+	}
+	if strings.Contains(got, "tls:") {
+		t.Error("T025: expected no tls: in non-TLS alias output")
+	}
 }
 
 func TestWriteRoute_OneAlias_Strip(t *testing.T) {
@@ -240,6 +248,12 @@ func TestWriteRoute_OneAlias_Strip(t *testing.T) {
 	if !strings.Contains(got, "- team-a-hello-api-strip-0") {
 		t.Error("expected alias router to list strip middleware")
 	}
+	if strings.Contains(got, "websecure") {
+		t.Error("T025: expected no websecure in non-TLS alias output")
+	}
+	if strings.Contains(got, "tls:") {
+		t.Error("T025: expected no tls: in non-TLS alias output")
+	}
 }
 
 func TestWriteRoute_OneAlias_NoStrip(t *testing.T) {
@@ -265,6 +279,12 @@ func TestWriteRoute_OneAlias_NoStrip(t *testing.T) {
 	if !strings.Contains(got, "team-a-hello-api-alias-0:") {
 		t.Error("expected alias router")
 	}
+	if strings.Contains(got, "websecure") {
+		t.Error("T025: expected no websecure in non-TLS alias output")
+	}
+	if strings.Contains(got, "tls:") {
+		t.Error("T025: expected no tls: in non-TLS alias output")
+	}
 }
 
 func TestWriteRoute_HostOnlyAlias(t *testing.T) {
@@ -289,6 +309,12 @@ func TestWriteRoute_HostOnlyAlias(t *testing.T) {
 	}
 	if strings.Contains(got, "middlewares:") {
 		t.Error("expected no middlewares section for host-only alias")
+	}
+	if strings.Contains(got, "websecure") {
+		t.Error("T025: expected no websecure in non-TLS alias output")
+	}
+	if strings.Contains(got, "tls:") {
+		t.Error("T025: expected no tls: in non-TLS alias output")
 	}
 }
 
@@ -320,6 +346,12 @@ func TestWriteRoute_ThreeAliases_SparseStrip(t *testing.T) {
 	if strings.Contains(got, "team-a-hello-api-strip-2:") {
 		t.Error("expected no strip-2 middleware (StripPrefix=false at index 2)")
 	}
+	if strings.Contains(got, "websecure") {
+		t.Error("T025: expected no websecure in non-TLS alias output")
+	}
+	if strings.Contains(got, "tls:") {
+		t.Error("T025: expected no tls: in non-TLS alias output")
+	}
 }
 
 const wantPath = "/fake/dynamic/team-a-hello-api.yml"
@@ -343,7 +375,7 @@ func TestWriteRoute_FilePresent_Preserves(t *testing.T) {
 	})
 
 	rec := &recordingObserver{}
-	rb := &RoutingBackend{routingDir: "/fake", observer: rec}
+	rb := &RoutingBackend{routingDir: "/fake", staticConfigPath: "/fake/traefik.yml", observer: rec}
 
 	if err := rb.WriteRoute(baseOp()); err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -378,7 +410,7 @@ func TestWriteRoute_FreshWrite_EmitsGenerated(t *testing.T) {
 	captured := captureWriteFileFn(t)
 
 	rec := &recordingObserver{}
-	rb := &RoutingBackend{routingDir: "/fake", observer: rec}
+	rb := &RoutingBackend{routingDir: "/fake", staticConfigPath: "/fake/traefik.yml", observer: rec}
 
 	if err := rb.WriteRoute(baseOp()); err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -419,7 +451,7 @@ func TestWriteRoute_StatError_EmitsWarningAndContinues(t *testing.T) {
 	})
 
 	rec := &recordingObserver{}
-	rb := &RoutingBackend{routingDir: "/fake", observer: rec}
+	rb := &RoutingBackend{routingDir: "/fake", staticConfigPath: "/fake/traefik.yml", observer: rec}
 
 	if err := rb.WriteRoute(baseOp()); err != nil {
 		t.Fatalf("expected nil error (deploy must continue), got %v", err)
@@ -449,7 +481,7 @@ func TestWriteRoute_AbsentAfterPreviousPresent_RegeneratesFromManifest(t *testin
 	captured := captureWriteFileFn(t)
 
 	rec := &recordingObserver{}
-	rb := &RoutingBackend{routingDir: "/fake", observer: rec}
+	rb := &RoutingBackend{routingDir: "/fake", staticConfigPath: "/fake/traefik.yml", observer: rec}
 
 	op := baseOp()
 	op.AdditionalRoutes = []engine.AliasRoute{
@@ -487,7 +519,7 @@ func TestRemoveRoute_FilePresent_EmitsOrphanWarning(t *testing.T) {
 	captureRemoveFileFn(t)
 
 	rec := &recordingObserver{}
-	rb := &RoutingBackend{routingDir: "/fake", observer: rec}
+	rb := &RoutingBackend{routingDir: "/fake", staticConfigPath: "/fake/traefik.yml", observer: rec}
 
 	if err := rb.RemoveRoute("team-a", "hello-api"); err != nil {
 		t.Fatalf("expected nil error, got %v", err)
@@ -516,7 +548,7 @@ func TestRemoveRoute_FileAbsent_IsNoOp(t *testing.T) {
 	captureRemoveFileFn(t)
 
 	rec := &recordingObserver{}
-	rb := &RoutingBackend{routingDir: "/fake", observer: rec}
+	rb := &RoutingBackend{routingDir: "/fake", staticConfigPath: "/fake/traefik.yml", observer: rec}
 
 	if err := rb.RemoveRoute("team-a", "hello-api"); err != nil {
 		t.Fatalf("expected nil error, got %v", err)
@@ -532,7 +564,7 @@ func TestRemoveRoute_StatError_EmitsWarningAndContinues(t *testing.T) {
 	captureRemoveFileFn(t)
 
 	rec := &recordingObserver{}
-	rb := &RoutingBackend{routingDir: "/fake", observer: rec}
+	rb := &RoutingBackend{routingDir: "/fake", staticConfigPath: "/fake/traefik.yml", observer: rec}
 
 	if err := rb.RemoveRoute("team-a", "hello-api"); err != nil {
 		t.Fatalf("expected nil error (teardown must continue), got %v", err)
@@ -549,5 +581,252 @@ func TestRemoveRoute_StatError_EmitsWarningAndContinues(t *testing.T) {
 	}
 	if !strings.Contains(ev.Fields["error"], "permission denied") {
 		t.Errorf("expected error field to contain 'permission denied', got %q", ev.Fields["error"])
+	}
+}
+
+// stubReadFileWebsecurePresent stubs readFileFn to return YAML with both web and websecure entrypoints.
+func stubReadFileWebsecurePresent(t *testing.T) {
+	t.Helper()
+	orig := readFileFn
+	t.Cleanup(func() { readFileFn = orig })
+	readFileFn = func(string) ([]byte, error) {
+		return []byte("entryPoints:\n  web:\n    address: \":80\"\n  websecure:\n    address: \":443\"\n"), nil
+	}
+}
+
+// stubReadFileWebsecureMissing stubs readFileFn to return YAML with only the web entrypoint.
+func stubReadFileWebsecureMissing(t *testing.T) {
+	t.Helper()
+	orig := readFileFn
+	t.Cleanup(func() { readFileFn = orig })
+	readFileFn = func(string) ([]byte, error) {
+		return []byte("entryPoints:\n  web:\n    address: \":80\"\n"), nil
+	}
+}
+
+// T011: alias with TLS=true must produce entryPoints:[web,websecure] and a tls:{} block.
+// The primary-domain router must keep entryPoints:[web] with no tls key.
+func TestWriteRoute_AliasWithTLS_AddsWebsecureAndTLSBlock(t *testing.T) {
+	stubLstatNotExist(t)
+	stubReadFileWebsecurePresent(t)
+	captured := captureWriteFileFn(t)
+
+	rb := &RoutingBackend{routingDir: "/fake", staticConfigPath: "/fake/traefik.yml", observer: engine.NoopObserver{}}
+	op := baseOp()
+	op.AdditionalRoutes = []engine.AliasRoute{
+		{Host: "alias.shrine.lab", TLS: true},
+	}
+
+	if err := rb.WriteRoute(op); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	var doc struct {
+		HTTP httpConfig `yaml:"http"`
+	}
+	if err := yaml.Unmarshal(*captured, &doc); err != nil {
+		t.Fatalf("unmarshal failed: %v\nYAML:\n%s", err, *captured)
+	}
+
+	aliasRouter, ok := doc.HTTP.Routers["team-a-hello-api-alias-0"]
+	if !ok {
+		t.Fatalf("alias router key 'team-a-hello-api-alias-0' not found in routers")
+	}
+	if len(aliasRouter.EntryPoints) != 2 || aliasRouter.EntryPoints[0] != "web" || aliasRouter.EntryPoints[1] != "websecure" {
+		t.Errorf("alias router entryPoints: got %v, want [web websecure]", aliasRouter.EntryPoints)
+	}
+	if aliasRouter.TLS == nil {
+		t.Error("alias router: expected tls block to be present, got nil")
+	}
+
+	primary, ok := doc.HTTP.Routers["team-a-hello-api"]
+	if !ok {
+		t.Fatalf("primary router key 'team-a-hello-api' not found")
+	}
+	if len(primary.EntryPoints) != 1 || primary.EntryPoints[0] != "web" {
+		t.Errorf("primary router entryPoints: got %v, want [web]", primary.EntryPoints)
+	}
+	if primary.TLS != nil {
+		t.Error("primary router: expected no tls block, got non-nil")
+	}
+}
+
+// T012: primary-domain router must never gain a TLS block regardless of alias mix.
+func TestWriteRoute_AliasWithTLS_PreservesPrimaryRouterShape(t *testing.T) {
+	stubLstatNotExist(t)
+	stubReadFileWebsecurePresent(t)
+	captured := captureWriteFileFn(t)
+
+	rb := &RoutingBackend{routingDir: "/fake", staticConfigPath: "/fake/traefik.yml", observer: engine.NoopObserver{}}
+	op := baseOp()
+	op.AdditionalRoutes = []engine.AliasRoute{
+		{Host: "tls-alias.lab", TLS: true},
+		{Host: "plain-alias.lab", TLS: false},
+	}
+
+	if err := rb.WriteRoute(op); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	var doc struct {
+		HTTP httpConfig `yaml:"http"`
+	}
+	if err := yaml.Unmarshal(*captured, &doc); err != nil {
+		t.Fatalf("unmarshal failed: %v\nYAML:\n%s", err, *captured)
+	}
+
+	primary, ok := doc.HTTP.Routers["team-a-hello-api"]
+	if !ok {
+		t.Fatalf("primary router key 'team-a-hello-api' not found")
+	}
+	if len(primary.EntryPoints) != 1 || primary.EntryPoints[0] != "web" {
+		t.Errorf("primary router entryPoints: got %v, want [web]", primary.EntryPoints)
+	}
+	if primary.TLS != nil {
+		t.Error("primary router: must not have a tls block regardless of alias TLS flags")
+	}
+}
+
+// T013: when static config lacks websecure, a warning is emitted for TLS-enabled aliases.
+func TestWriteRoute_AliasWithTLS_EmitsWarning_WhenStaticConfigLacksWebsecure(t *testing.T) {
+	stubLstatNotExist(t)
+	stubReadFileWebsecureMissing(t)
+	captureWriteFileFn(t)
+
+	rec := &recordingObserver{}
+	rb := &RoutingBackend{routingDir: "/fake", staticConfigPath: "/fake/traefik.yml", observer: rec}
+	op := baseOp()
+	op.AdditionalRoutes = []engine.AliasRoute{
+		{Host: "a.example.com", TLS: true},
+		{Host: "b.example.com", PathPrefix: "/x", TLS: true},
+	}
+
+	if err := rb.WriteRoute(op); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	var warningEvents []engine.Event
+	for _, ev := range rec.events {
+		if ev.Name == "gateway.alias.tls_no_websecure" {
+			warningEvents = append(warningEvents, ev)
+		}
+	}
+	if len(warningEvents) != 1 {
+		t.Fatalf("expected exactly 1 gateway.alias.tls_no_websecure event, got %d: %+v", len(warningEvents), rec.events)
+	}
+	ev := warningEvents[0]
+	if ev.Status != engine.StatusWarning {
+		t.Errorf("expected StatusWarning, got %q", ev.Status)
+	}
+	if ev.Fields["team"] != "team-a" {
+		t.Errorf("expected team=team-a, got %q", ev.Fields["team"])
+	}
+	if ev.Fields["name"] != "hello-api" {
+		t.Errorf("expected name=hello-api, got %q", ev.Fields["name"])
+	}
+	if ev.Fields["path"] != "/fake/traefik.yml" {
+		t.Errorf("expected path=/fake/traefik.yml, got %q", ev.Fields["path"])
+	}
+	wantTLSAliases := "a.example.com,b.example.com+/x"
+	if ev.Fields["tls_aliases"] != wantTLSAliases {
+		t.Errorf("expected tls_aliases=%q, got %q", wantTLSAliases, ev.Fields["tls_aliases"])
+	}
+	if !strings.Contains(ev.Fields["hint"], "websecure") {
+		t.Errorf("hint should contain 'websecure', got %q", ev.Fields["hint"])
+	}
+}
+
+// T014: no warning emitted when websecure IS present and aliases use TLS.
+func TestWriteRoute_AliasWithTLS_NoWarning_WhenWebsecurePresent(t *testing.T) {
+	stubLstatNotExist(t)
+	stubReadFileWebsecurePresent(t)
+	captureWriteFileFn(t)
+
+	rec := &recordingObserver{}
+	rb := &RoutingBackend{routingDir: "/fake", staticConfigPath: "/fake/traefik.yml", observer: rec}
+	op := baseOp()
+	op.AdditionalRoutes = []engine.AliasRoute{
+		{Host: "a.example.com", TLS: true},
+		{Host: "b.example.com", PathPrefix: "/x", TLS: true},
+	}
+
+	if err := rb.WriteRoute(op); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	for _, ev := range rec.events {
+		if ev.Name == "gateway.alias.tls_no_websecure" {
+			t.Errorf("unexpected gateway.alias.tls_no_websecure event when websecure is present: %+v", ev)
+		}
+	}
+}
+
+// T015: no warning emitted when no alias has TLS=true, regardless of static config.
+func TestWriteRoute_NoAliasHasTLS_NoWarning_RegardlessOfStaticConfig(t *testing.T) {
+	stubLstatNotExist(t)
+	stubReadFileWebsecureMissing(t)
+	captureWriteFileFn(t)
+
+	rec := &recordingObserver{}
+	rb := &RoutingBackend{routingDir: "/fake", staticConfigPath: "/fake/traefik.yml", observer: rec}
+	op := baseOp()
+	op.AdditionalRoutes = []engine.AliasRoute{
+		{Host: "a.example.com", TLS: false},
+		{Host: "b.example.com", PathPrefix: "/p", TLS: false},
+	}
+
+	if err := rb.WriteRoute(op); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	for _, ev := range rec.events {
+		if ev.Name == "gateway.alias.tls_no_websecure" {
+			t.Errorf("unexpected gateway.alias.tls_no_websecure event when no alias has TLS=true: %+v", ev)
+		}
+	}
+}
+
+func TestWriteRoute_AliasWithTLS_EmitsProbeError_WhenStaticConfigUnreadable(t *testing.T) {
+	stubLstatNotExist(t)
+	captureWriteFileFn(t)
+
+	origRead := readFileFn
+	t.Cleanup(func() { readFileFn = origRead })
+	readFileFn = func(string) ([]byte, error) {
+		return []byte("entryPoints:\n  web: ::: not yaml :::\n"), nil
+	}
+
+	rec := &recordingObserver{}
+	rb := &RoutingBackend{routingDir: "/fake", staticConfigPath: "/fake/traefik.yml", observer: rec}
+	op := baseOp()
+	op.AdditionalRoutes = []engine.AliasRoute{
+		{Host: "a.example.com", TLS: true},
+	}
+
+	if err := rb.WriteRoute(op); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	var probeErrors []engine.Event
+	for _, ev := range rec.events {
+		if ev.Name == "gateway.config.tls_port_probe_error" {
+			probeErrors = append(probeErrors, ev)
+		}
+		if ev.Name == "gateway.alias.tls_no_websecure" {
+			t.Errorf("must not emit gateway.alias.tls_no_websecure on probe error: %+v", ev)
+		}
+	}
+	if len(probeErrors) != 1 {
+		t.Fatalf("expected exactly 1 gateway.config.tls_port_probe_error event, got %d: %+v", len(probeErrors), rec.events)
+	}
+	ev := probeErrors[0]
+	if ev.Status != engine.StatusWarning {
+		t.Errorf("expected StatusWarning, got %q", ev.Status)
+	}
+	if ev.Fields["path"] != "/fake/traefik.yml" {
+		t.Errorf("expected path=/fake/traefik.yml, got %q", ev.Fields["path"])
+	}
+	if ev.Fields["error"] == "" {
+		t.Error("expected non-empty error field on probe-error event")
 	}
 }

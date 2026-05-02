@@ -45,6 +45,9 @@ func parseManifest(meta *Manifest, data []byte) (*Manifest, error) {
 		if err := yaml.Unmarshal(data, &app); err != nil {
 			return nil, fmt.Errorf("parsing Application manifest: %w", err)
 		}
+		if err := rejectTLSOutsideAliasEntries(data); err != nil {
+			return nil, err
+		}
 		meta.Application = &app
 	case ResourceKind:
 		var res ResourceManifest
@@ -66,4 +69,39 @@ func parseManifest(meta *Manifest, data []byte) (*Manifest, error) {
 		return nil, fmt.Errorf("unknown manifest kind: %q", meta.Kind)
 	}
 	return meta, nil
+}
+
+// rejectTLSOutsideAliasEntries enforces FR-005: the `tls` field is only valid
+// inside a spec.routing.aliases[] entry, never at spec.routing top level.
+// The strongly-typed unmarshal silently drops unknown fields, so we re-walk
+// the raw YAML to catch this one specific misuse.
+func rejectTLSOutsideAliasEntries(data []byte) error {
+	var doc map[string]any
+	if err := yaml.Unmarshal(data, &doc); err != nil {
+		return nil
+	}
+	spec, ok := doc["spec"].(map[string]any)
+	if !ok {
+		return nil
+	}
+	routing, ok := spec["routing"].(map[string]any)
+	if !ok {
+		return nil
+	}
+	if _, hasTLS := routing["tls"]; hasTLS {
+		return fmt.Errorf("parsing Application manifest %q: field tls is not valid at spec.routing; tls is only valid inside an alias entry under spec.routing.aliases[]", applicationName(doc))
+	}
+	return nil
+}
+
+func applicationName(doc map[string]any) string {
+	meta, ok := doc["metadata"].(map[string]any)
+	if !ok {
+		return "<unknown>"
+	}
+	name, ok := meta["name"].(string)
+	if !ok || name == "" {
+		return "<unknown>"
+	}
+	return name
 }

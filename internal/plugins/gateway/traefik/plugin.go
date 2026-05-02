@@ -181,5 +181,5 @@ func (p *Plugin) RoutingBackend() (engine.RoutingBackend, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &RoutingBackend{routingDir: routingDir, observer: p.observer}, nil
+	return &RoutingBackend{routingDir: routingDir, staticConfigPath: filepath.Join(routingDir, "traefik.yml"), observer: p.observer}, nil
 }

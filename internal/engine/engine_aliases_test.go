@@ -122,3 +122,61 @@ func TestFormatAliasesForLog(t *testing.T) {
 		})
 	}
 }
+
+func TestResolveAliasRoutes_CarriesTLS(t *testing.T) {
+	input := []manifest.RoutingAlias{
+		{Host: "a.example.com", TLS: true},
+		{Host: "b.example.com", TLS: false},
+	}
+	routes := resolveAliasRoutes(input)
+	if len(routes) != 2 {
+		t.Fatalf("expected 2 routes, got %d", len(routes))
+	}
+	if routes[0].TLS != true {
+		t.Errorf("routes[0].TLS: got %v, want true", routes[0].TLS)
+	}
+	if routes[1].TLS != false {
+		t.Errorf("routes[1].TLS: got %v, want false", routes[1].TLS)
+	}
+}
+
+func TestFormatAliasesForLog_AppendsTLSMarker(t *testing.T) {
+	tests := []struct {
+		name   string
+		routes []AliasRoute
+		want   string
+	}{
+		{
+			name:   "host-only with tls",
+			routes: []AliasRoute{{Host: "a.example.com", TLS: true}},
+			want:   "a.example.com (tls)",
+		},
+		{
+			name:   "prefix with strip and tls",
+			routes: []AliasRoute{{Host: "a.example.com", PathPrefix: "/x", StripPrefix: true, TLS: true}},
+			want:   "a.example.com+/x (tls)",
+		},
+		{
+			name:   "prefix with no-strip and tls",
+			routes: []AliasRoute{{Host: "a.example.com", PathPrefix: "/x", StripPrefix: false, TLS: true}},
+			want:   "a.example.com+/x (no strip) (tls)",
+		},
+		{
+			name: "mixed tls and non-tls sorted",
+			routes: []AliasRoute{
+				{Host: "z.example.com", TLS: true},
+				{Host: "a.example.com", TLS: false},
+			},
+			want: "a.example.com,z.example.com (tls)",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := formatAliasesForLog(tc.routes)
+			if got != tc.want {
+				t.Errorf("got %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
