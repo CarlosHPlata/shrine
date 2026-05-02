@@ -47,6 +47,14 @@ func Execute() error {
 	return rootCmd.Execute()
 }
 
+// RootCmd returns the assembled Cobra command tree. External tooling that
+// needs to introspect the command surface (e.g., the docs CLI-reference
+// generator at docs/tools/docsgen) reads it; the main binary itself does
+// not need this getter.
+func RootCmd() *cobra.Command {
+	return rootCmd
+}
+
 // SetArgs sets the arguments for the root command. Used for testing.
 func SetArgs(args []string) {
 	rootCmd.SetArgs(args)

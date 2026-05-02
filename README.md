@@ -17,6 +17,10 @@
   <a href="LICENSE">
     <img alt="License" src="https://img.shields.io/github/license/CarlosHPlata/shrine?style=flat-square&color=3fa37f" />
   </a>
+
+  <p>
+    📖 <a href="https://carlosh-plata.github.io/shrine/"><strong>Documentation</strong></a>
+  </p>
 </div>
 
 ---

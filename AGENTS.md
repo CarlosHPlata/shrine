@@ -303,3 +303,21 @@ go run . teardown external
 ```
 
 The `test/smock/` fixture is the integration gate: three manifests across two teams (`backend`, `external`) with cross-team app→app and app→resource dependencies.
+
+## Documentation site
+
+Official docs are published at <https://carlosh-plata.github.io/shrine/>. **Every documentation page exposes a sibling raw-Markdown URL** at `<page>/index.md` — append `index.md` to any docs URL to get the verbatim source as `text/markdown`, no site chrome. Use this to ingest pages directly:
+
+```text
+https://carlosh-plata.github.io/shrine/cli/apply/index.md
+https://carlosh-plata.github.io/shrine/guides/traefik/index.md
+```
+
+The CLI reference is auto-generated from this repo's Cobra tree by an auxiliary tool at `docs/tools/docsgen/` (separate Go module — does not pollute the main `go.mod`). To regenerate locally:
+
+```bash
+make docs-gen-cli
+make docs-serve   # preview at http://localhost:1313/shrine/
+```
+
+Source content lives under `docs/content/`. Contributing workflow: `docs/content/getting-started/contributing-to-docs.md`.

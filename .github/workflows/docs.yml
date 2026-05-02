@@ -1,0 +1,100 @@
+name: Deploy Docs to GitHub Pages
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "docs/**"
+      - "cmd/**"
+      - "internal/**"
+      - ".github/workflows/docs.yml"
+  pull_request:
+    paths:
+      - "docs/**"
+      - "cmd/**"
+      - "internal/**"
+      - ".github/workflows/docs.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Allow only one concurrent deployment; do not cancel in-progress runs.
+concurrency:
+  group: "pages"
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.25"
+
+      - name: Install Hugo
+        run: make docs-tools
+
+      - name: Configure Pages
+        id: pages
+        uses: actions/configure-pages@v5
+
+      - name: Lint front-matter
+        run: bash scripts/lint-docs-frontmatter.sh docs/content
+
+      - name: Generate CLI reference
+        run: make docs-gen-cli
+
+      - name: Drift check (CLI reference matches Cobra tree)
+        run: |
+          mkdir -p /tmp/expected-cli
+          cd docs/tools/docsgen && go run ./cmd/docsgen -out /tmp/expected-cli
+          if ! diff -r /tmp/expected-cli ../../content/cli --exclude=_index.md --exclude=.gitkeep > /tmp/drift.diff; then
+            echo "::error::CLI reference is out of sync with the Cobra tree."
+            echo "Run 'make docs-gen-cli' locally and commit the result."
+            cat /tmp/drift.diff
+            exit 1
+          fi
+
+      - name: Compute version
+        run: echo "VERSION=$(git describe --tags --always)" >> $GITHUB_ENV
+
+      - name: Build site
+        env:
+          HUGO_PARAMS_VERSION: ${{ env.VERSION }}
+        run: |
+          cd docs && $(go env GOPATH)/bin/hugo \
+            --gc --minify \
+            --baseURL "${{ steps.pages.outputs.base_url }}/"
+
+      - name: Verify per-page Markdown companions exist
+        run: bash scripts/check-md-companions.sh docs/public
+
+      - name: Verify Markdown companions are well-formed
+        run: bash scripts/check-md-shape.sh docs/public
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: docs/public
+
+  deploy:
+    runs-on: ubuntu-latest
+    needs: build
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
