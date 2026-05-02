@@ -362,5 +362,7 @@ func TestParseApplication_Routing_TLS_RejectsTopLevelField(t *testing.T) {
 		t.Fatal("expected error rejecting tls at spec.routing top level, got nil")
 	} else if !strings.Contains(err.Error(), "tls") || !strings.Contains(err.Error(), "spec.routing") {
 		t.Errorf("error message must name the offending field path; got: %v", err)
+	} else if !strings.Contains(err.Error(), "test-app") {
+		t.Errorf("error message must name the offending application; got: %v", err)
 	}
 }

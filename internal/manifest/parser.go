@@ -89,7 +89,19 @@ func rejectTLSOutsideAliasEntries(data []byte) error {
 		return nil
 	}
 	if _, hasTLS := routing["tls"]; hasTLS {
-		return fmt.Errorf("parsing Application manifest: field tls is not valid at spec.routing; tls is only valid inside an alias entry under spec.routing.aliases[]")
+		return fmt.Errorf("parsing Application manifest %q: field tls is not valid at spec.routing; tls is only valid inside an alias entry under spec.routing.aliases[]", applicationName(doc))
 	}
 	return nil
+}
+
+func applicationName(doc map[string]any) string {
+	meta, ok := doc["metadata"].(map[string]any)
+	if !ok {
+		return "<unknown>"
+	}
+	name, ok := meta["name"].(string)
+	if !ok || name == "" {
+		return "<unknown>"
+	}
+	return name
 }

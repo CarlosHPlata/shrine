@@ -39,7 +39,7 @@ func stripMiddlewareName(team, service string, aliasIndex int) string {
 
 func formatAliasEntry(ar engine.AliasRoute) string {
 	if ar.PathPrefix != "" {
-		return ar.Host + ar.PathPrefix
+		return ar.Host + "+" + ar.PathPrefix
 	}
 	return ar.Host
 }

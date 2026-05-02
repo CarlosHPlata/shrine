@@ -727,7 +727,7 @@ func TestWriteRoute_AliasWithTLS_EmitsWarning_WhenStaticConfigLacksWebsecure(t *
 	if ev.Fields["path"] != "/fake/traefik.yml" {
 		t.Errorf("expected path=/fake/traefik.yml, got %q", ev.Fields["path"])
 	}
-	wantTLSAliases := "a.example.com,b.example.com/x"
+	wantTLSAliases := "a.example.com,b.example.com+/x"
 	if ev.Fields["tls_aliases"] != wantTLSAliases {
 		t.Errorf("expected tls_aliases=%q, got %q", wantTLSAliases, ev.Fields["tls_aliases"])
 	}
@@ -783,5 +783,50 @@ func TestWriteRoute_NoAliasHasTLS_NoWarning_RegardlessOfStaticConfig(t *testing.
 		if ev.Name == "gateway.alias.tls_no_websecure" {
 			t.Errorf("unexpected gateway.alias.tls_no_websecure event when no alias has TLS=true: %+v", ev)
 		}
+	}
+}
+
+func TestWriteRoute_AliasWithTLS_EmitsProbeError_WhenStaticConfigUnreadable(t *testing.T) {
+	stubLstatNotExist(t)
+	captureWriteFileFn(t)
+
+	origRead := readFileFn
+	t.Cleanup(func() { readFileFn = origRead })
+	readFileFn = func(string) ([]byte, error) {
+		return []byte("entryPoints:\n  web: ::: not yaml :::\n"), nil
+	}
+
+	rec := &recordingObserver{}
+	rb := &RoutingBackend{routingDir: "/fake", staticConfigPath: "/fake/traefik.yml", observer: rec}
+	op := baseOp()
+	op.AdditionalRoutes = []engine.AliasRoute{
+		{Host: "a.example.com", TLS: true},
+	}
+
+	if err := rb.WriteRoute(op); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	var probeErrors []engine.Event
+	for _, ev := range rec.events {
+		if ev.Name == "gateway.config.tls_port_probe_error" {
+			probeErrors = append(probeErrors, ev)
+		}
+		if ev.Name == "gateway.alias.tls_no_websecure" {
+			t.Errorf("must not emit gateway.alias.tls_no_websecure on probe error: %+v", ev)
+		}
+	}
+	if len(probeErrors) != 1 {
+		t.Fatalf("expected exactly 1 gateway.config.tls_port_probe_error event, got %d: %+v", len(probeErrors), rec.events)
+	}
+	ev := probeErrors[0]
+	if ev.Status != engine.StatusWarning {
+		t.Errorf("expected StatusWarning, got %q", ev.Status)
+	}
+	if ev.Fields["path"] != "/fake/traefik.yml" {
+		t.Errorf("expected path=/fake/traefik.yml, got %q", ev.Fields["path"])
+	}
+	if ev.Fields["error"] == "" {
+		t.Error("expected non-empty error field on probe-error event")
 	}
 }
