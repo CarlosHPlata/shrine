@@ -68,6 +68,9 @@ func (t *TerminalObserver) OnEvent(e engine.Event) {
 	case "gateway.config.tls_port_no_websecure":
 		fmt.Fprintf(t.out, "  ⚠️  tlsPort set but traefik.yml is missing websecure entrypoint at %s — %s\n", e.Fields["path"], e.Fields["hint"])
 
+	case "gateway.alias.tls_no_websecure":
+		fmt.Fprintf(t.out, "  ⚠️  alias tls: true but websecure entrypoint missing in %s for %s.%s (%s) — %s\n", e.Fields["path"], e.Fields["team"], e.Fields["name"], e.Fields["tls_aliases"], e.Fields["hint"])
+
 	case "gateway.config.legacy_probe_error":
 		fmt.Fprintf(t.out, "  ⚠️  Could not probe traefik.yml for legacy http block (deploy continues): %s (%s)\n", e.Fields["path"], e.Fields["error"])
 

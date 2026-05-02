@@ -43,11 +43,14 @@ type stripPrefix struct {
 }
 
 type router struct {
-	Rule        string   `yaml:"rule"`
-	Service     string   `yaml:"service"`
-	EntryPoints []string `yaml:"entryPoints"`
-	Middlewares []string `yaml:"middlewares,omitempty"`
+	Rule        string    `yaml:"rule"`
+	Service     string    `yaml:"service"`
+	EntryPoints []string  `yaml:"entryPoints"`
+	Middlewares []string  `yaml:"middlewares,omitempty"`
+	TLS         *tlsBlock `yaml:"tls,omitempty"`
 }
+
+type tlsBlock struct{}
 
 type service struct {
 	LoadBalancer loadBalancer `yaml:"loadBalancer"`

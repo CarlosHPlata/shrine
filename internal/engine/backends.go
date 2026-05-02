@@ -55,6 +55,7 @@ type AliasRoute struct {
 	Host        string
 	PathPrefix  string
 	StripPrefix bool
+	TLS         bool
 }
 
 type WriteRouteOp struct {

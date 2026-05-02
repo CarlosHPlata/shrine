@@ -40,6 +40,7 @@ type RoutingAlias struct {
 	Host        string `yaml:"host"`
 	PathPrefix  string `yaml:"pathPrefix,omitempty"`
 	StripPrefix *bool  `yaml:"stripPrefix,omitempty"`
+	TLS         bool   `yaml:"tls,omitempty"`
 }
 
 // Used in Application spec

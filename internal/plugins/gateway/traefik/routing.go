@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
+	"strings"
 
 	"gopkg.in/yaml.v3"
 
@@ -15,8 +17,9 @@ var mkdirAllFn = os.MkdirAll
 var removeFileFn = os.Remove
 
 type RoutingBackend struct {
-	routingDir string
-	observer   engine.Observer
+	routingDir       string
+	staticConfigPath string
+	observer         engine.Observer
 }
 
 func (r *RoutingBackend) dynamicDir() string {
@@ -34,10 +37,64 @@ func stripMiddlewareName(team, service string, aliasIndex int) string {
 	return fmt.Sprintf("%s-%s-strip-%d", team, service, aliasIndex)
 }
 
+func formatAliasEntry(ar engine.AliasRoute) string {
+	if ar.PathPrefix != "" {
+		return ar.Host + ar.PathPrefix
+	}
+	return ar.Host
+}
+
+func emitAliasTLSNoWebsecureSignal(op engine.WriteRouteOp, staticConfigPath string, observer engine.Observer) {
+	var tlsAliases []engine.AliasRoute
+	for _, ar := range op.AdditionalRoutes {
+		if ar.TLS {
+			tlsAliases = append(tlsAliases, ar)
+		}
+	}
+	if len(tlsAliases) == 0 {
+		return
+	}
+
+	ok, err := hasWebsecureEntrypoint(staticConfigPath)
+	if err != nil {
+		observer.OnEvent(engine.Event{
+			Name:   "gateway.config.tls_port_probe_error",
+			Status: engine.StatusWarning,
+			Fields: map[string]string{
+				"path":  staticConfigPath,
+				"error": err.Error(),
+			},
+		})
+		return
+	}
+	if ok {
+		return
+	}
+
+	entries := make([]string, 0, len(tlsAliases))
+	for _, ar := range tlsAliases {
+		entries = append(entries, formatAliasEntry(ar))
+	}
+	sort.Strings(entries)
+
+	observer.OnEvent(engine.Event{
+		Name:   "gateway.alias.tls_no_websecure",
+		Status: engine.StatusWarning,
+		Fields: map[string]string{
+			"team":        op.Team,
+			"name":        op.ServiceName,
+			"path":        staticConfigPath,
+			"tls_aliases": strings.Join(entries, ","),
+			"hint":        "Set plugins.gateway.traefik.tlsPort to publish a websecure entrypoint, or add the entrypoint to your preserved traefik.yml.",
+		},
+	})
+}
+
 func (r *RoutingBackend) WriteRoute(op engine.WriteRouteOp) error {
 	if err := mkdirAllFn(r.dynamicDir(), 0o755); err != nil {
 		return fmt.Errorf("traefik routing: creating dynamic dir: %w", err)
 	}
+	emitAliasTLSNoWebsecureSignal(op, r.staticConfigPath, r.observer)
 
 	path := filepath.Join(r.dynamicDir(), routeFileName(op.Team, op.ServiceName))
 	present, err := isPathPresent(path)
@@ -90,6 +147,10 @@ func (r *RoutingBackend) WriteRoute(op engine.WriteRouteOp) error {
 			midKey := stripMiddlewareName(op.Team, op.ServiceName, i)
 			mids[midKey] = middleware{StripPrefix: &stripPrefix{Prefixes: []string{ar.PathPrefix}}}
 			r.Middlewares = []string{midKey}
+		}
+		if ar.TLS {
+			r.EntryPoints = []string{"web", "websecure"}
+			r.TLS = &tlsBlock{}
 		}
 		routers[aliasKey] = r
 	}

@@ -58,6 +58,7 @@ spec:
       - host: gateway.tail9a6ddb.ts.net
         pathPrefix: /finances                  # required to start with `/`; trailing `/` normalized
         stripPrefix: true                      # default true when pathPrefix is set; set false to forward unchanged
+        tls: false                             # optional; when true, generated router uses web + websecure entrypoints
   dependencies:
     - kind: Resource
       name: hello-db
@@ -88,6 +89,8 @@ Each `env` entry uses exactly one of `value` / `valueFrom` / `template`. `templa
 Applications expose exactly two built-in outputs to other manifests: `host` (`<owner>.<name>`, the container DNS name) and `port` (`spec.port`). There is no `url` built-in — scheme composition is the consumer's job via `template`.
 
 If the backend handles the path prefix itself (Next.js with `basePath`, Grafana with `root_url`, JupyterLab with `base_url`), set `stripPrefix: false` on the alias — otherwise Shrine strips the prefix before the request reaches the backend, causing redirect loops and asset 404s. The deploy log's `routing.configure` event annotates affected aliases with `(no strip)` so you can confirm the opt-out took effect. See `specs/008-alias-strip-prefix/quickstart.md` for the full diagnosis-and-fix walkthrough.
+
+For TLS-terminated aliases, set `tls: true` to open the routing/entrypoint side only; certificate provisioning, ACME, and HTTPS redirects remain operator-owned via standard Traefik mechanisms (mirrors spec 011's `tlsPort` contract).
 
 ### Resource
 

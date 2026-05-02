@@ -3,6 +3,7 @@ package manifest
 import (
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 )
 
@@ -260,5 +261,106 @@ func TestParse_ResourceManifest(t *testing.T) {
 	wantTemplate := "postgres://postgres:{{.password}}@{{.host}}:{{.port}}/{{.database}}"
 	if res.Spec.Outputs[4].Template != wantTemplate {
 		t.Errorf("Outputs[4].Template = %q, want %q", res.Spec.Outputs[4].Template, wantTemplate)
+	}
+}
+
+// parseBytes parses a manifest from an in-memory YAML byte slice without
+// touching the filesystem, allowing unit tests to stay fully in-memory.
+func parseBytes(data []byte) (*Manifest, error) {
+	meta, err := probeKind(data)
+	if err != nil {
+		return nil, err
+	}
+	return parseManifest(meta, data)
+}
+
+// appYAMLWithAliases builds a minimal Application manifest YAML containing the
+// given aliases block (already indented under routing:).
+func appYAMLWithAliases(aliasesYAML string) []byte {
+	return []byte("apiVersion: shrine/v1\nkind: Application\nmetadata:\n  name: test-app\n  owner: team-a\nspec:\n  image: myapp\n  port: 8080\n  routing:\n    domain: app.home.lab\n    aliases:\n" + aliasesYAML)
+}
+
+func TestParseApplication_RoutingAlias_TLS_RoundTrip(t *testing.T) {
+	cases := []struct {
+		name    string
+		yaml    string
+		wantTLS bool
+	}{
+		{
+			name:    "tls: true",
+			yaml:    "      - host: x.example.com\n        tls: true\n",
+			wantTLS: true,
+		},
+		{
+			name:    "tls: false",
+			yaml:    "      - host: x.example.com\n        tls: false\n",
+			wantTLS: false,
+		},
+		{
+			name:    "tls omitted",
+			yaml:    "      - host: x.example.com\n",
+			wantTLS: false,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			m, err := parseBytes(appYAMLWithAliases(tc.yaml))
+			if err != nil {
+				t.Fatalf("parseBytes returned error: %v", err)
+			}
+			aliases := m.Application.Spec.Routing.Aliases
+			if len(aliases) != 1 {
+				t.Fatalf("len(Aliases) = %d, want 1", len(aliases))
+			}
+			if aliases[0].TLS != tc.wantTLS {
+				t.Errorf("Aliases[0].TLS = %v, want %v", aliases[0].TLS, tc.wantTLS)
+			}
+		})
+	}
+}
+
+func TestParseApplication_RoutingAlias_TLS_RejectsNonBoolean(t *testing.T) {
+	// yaml.v3 rejects !!int and !!str values for a Go bool field.
+	// Quoted "yes"/"no" are treated as YAML booleans and accepted silently;
+	// only explicit non-boolean types (integers, quoted strings like "true")
+	// produce unmarshal errors.
+	cases := []struct {
+		name        string
+		aliasYAML   string
+		errContains string
+	}{
+		{
+			name:        "tls as quoted string true",
+			aliasYAML:   "      - host: x.example.com\n        tls: \"true\"\n",
+			errContains: "!!str",
+		},
+		{
+			name:        "tls as integer 1",
+			aliasYAML:   "      - host: x.example.com\n        tls: 1\n",
+			errContains: "!!int",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := parseBytes(appYAMLWithAliases(tc.aliasYAML))
+			if err == nil {
+				t.Fatalf("expected parse error for non-boolean tls, got nil")
+			}
+			if !strings.Contains(err.Error(), tc.errContains) {
+				t.Errorf("error %q does not contain %q", err.Error(), tc.errContains)
+			}
+		})
+	}
+}
+
+func TestParseApplication_Routing_TLS_RejectsTopLevelField(t *testing.T) {
+	data := []byte("apiVersion: shrine/v1\nkind: Application\nmetadata:\n  name: test-app\n  owner: team-a\nspec:\n  image: myapp\n  port: 8080\n  routing:\n    domain: app.home.lab\n    tls: true\n")
+
+	if _, err := parseBytes(data); err == nil {
+		t.Fatal("expected error rejecting tls at spec.routing top level, got nil")
+	} else if !strings.Contains(err.Error(), "tls") || !strings.Contains(err.Error(), "spec.routing") {
+		t.Errorf("error message must name the offending field path; got: %v", err)
 	}
 }

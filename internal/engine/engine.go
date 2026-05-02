@@ -323,6 +323,7 @@ func resolveAliasRoutes(aliases []manifest.RoutingAlias) []AliasRoute {
 			Host:        alias.Host,
 			PathPrefix:  prefix,
 			StripPrefix: strip,
+			TLS:         alias.TLS,
 		})
 	}
 	return routes
@@ -337,6 +338,9 @@ func formatAliasesForLog(routes []AliasRoute) string {
 		}
 		if r.PathPrefix != "" && !r.StripPrefix {
 			entry += " (no strip)"
+		}
+		if r.TLS {
+			entry += " (tls)"
 		}
 		entries = append(entries, entry)
 	}
