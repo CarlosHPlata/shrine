@@ -17,9 +17,8 @@
   <a href="LICENSE">
     <img alt="License" src="https://img.shields.io/github/license/CarlosHPlata/shrine?style=flat-square&color=3fa37f" />
   </a>
-
   <p>
-    📖 <a href="https://carlosh-plata.github.io/shrine/"><strong>Documentation</strong></a>
+    <a href="https://carloshplata.github.io/shrine/"><strong>DOCUMENTATION</strong></a>
   </p>
 </div>
 
@@ -257,15 +256,14 @@ shrine generate app my-api --path ./manifests/   # explicit path override
 
 ## Documentation
 
-Full documentation is on the [Shrine Docs site](https://github.com/CarlosHPlata/shrine/wiki) *(coming soon)*.
+Full documentation is on the [Shrine Docs site](https://carloshplata.github.io/shrine).
 
 | Topic | Link |
 |---|---|
-| Manifest reference | TBD |
+| Manifest reference | [Manifest reference](https://carloshplata.github.io/shrine/reference/manifest-schema/)|
 | Networking model | TBD |
 | Configuration & state directories | TBD |
-| Traefik integration | TBD |
-| AdGuard DNS integration | TBD |
+| Traefik integration | [Traefik integration](https://carloshplata.github.io/shrine/guides/traefik/) |
 
 ---
 
