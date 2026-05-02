@@ -84,6 +84,7 @@
 - [ ] **Phase 11: Teardown** — reverse of deploy, reading from state
 - [ ] **Phase 12: End-to-end dry run** — full `shrine deploy --dry-run --verbose` against real manifests (full stack: Docker + Traefik + DNS)
 - [ ] **Phase 13: Packaging & Distribution** — GoReleaser config; .deb packaging with post-install scripts
+- [x] **Phase 14: Documentation site** — see `specs/013-docs-site/`. Hugo + Hextra at `docs/`, deployed to GitHub Pages on push to `main`. Per-page "copy as Markdown" button (every page exposes `<page>/index.md` for AI-agent ingestion). CLI reference auto-generated from the Cobra tree by an isolated tool at `docs/tools/docsgen/` (separate Go module, main `go.mod` stays clean). PR-time gates: front-matter lint, CLI drift check, Markdown companion check, Markdown shape check.
 
 ## Current State
 

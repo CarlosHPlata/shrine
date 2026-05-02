@@ -1,0 +1,6 @@
+{{ $issueTitle := printf "docs: %s" .RelPermalink }}
+{{ $issueURL := printf "https://github.com/CarlosHPlata/shrine/issues/new?title=%s&labels=docs" ($issueTitle | urlquery) }}
+<div style="text-align: center; padding: 0.5rem 0; opacity: 0.6; font-size: 0.85em;">
+  {{ if .Site.Params.version }}Shrine {{ .Site.Params.version }} · {{ end }}
+  <a href="{{ $issueURL }}" target="_blank" rel="noreferrer noopener">Report an issue with this page</a>
+</div>

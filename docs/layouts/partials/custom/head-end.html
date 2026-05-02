@@ -1,0 +1,77 @@
+{{- /*
+  Inject the "Copy as Markdown" button into <main id="content">.
+  Done in JS so we don't have to override Hextra's content-area partial
+  (which churns between theme versions). Progressive enhancement: if
+  navigator.clipboard is unavailable the button is never inserted, and the
+  raw-MD URL is still reachable directly via fetch / bookmark.
+*/ -}}
+<style>
+  .shrine-copy-md-bar {
+    display: flex;
+    justify-content: flex-end;
+    margin: 0.25rem 0 1rem 0;
+  }
+  .shrine-copy-md-btn {
+    font: inherit;
+    font-size: 0.85em;
+    padding: 0.3rem 0.7rem;
+    cursor: pointer;
+    border: 1px solid currentColor;
+    border-radius: 4px;
+    background: transparent;
+    color: inherit;
+    opacity: 0.65;
+    transition: opacity 120ms;
+  }
+  .shrine-copy-md-btn:hover { opacity: 1; }
+  .shrine-copy-md-btn[disabled] { cursor: default; opacity: 0.4; }
+</style>
+<script>
+  (function () {
+    if (!navigator.clipboard) return;
+
+    function mountCopyButton() {
+      var main = document.querySelector('main#content');
+      if (!main) return;
+      if (main.querySelector('.shrine-copy-md-bar')) return;
+
+      var bar = document.createElement('div');
+      bar.className = 'shrine-copy-md-bar';
+
+      var btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'shrine-copy-md-btn';
+      btn.textContent = 'Copy as Markdown';
+
+      var mdURL = window.location.pathname.replace(/\/?$/, '/') + 'index.md';
+
+      btn.addEventListener('click', async function () {
+        var prev = btn.textContent;
+        btn.disabled = true;
+        try {
+          var r = await fetch(mdURL, { credentials: 'same-origin' });
+          if (!r.ok) throw new Error('HTTP ' + r.status);
+          var t = await r.text();
+          await navigator.clipboard.writeText(t);
+          btn.textContent = 'Copied ✓';
+        } catch (err) {
+          btn.textContent = 'Copy failed';
+          console.error('copy-as-markdown:', err);
+        }
+        setTimeout(function () {
+          btn.textContent = prev;
+          btn.disabled = false;
+        }, 1800);
+      });
+
+      bar.appendChild(btn);
+      main.insertBefore(bar, main.firstChild);
+    }
+
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', mountCopyButton);
+    } else {
+      mountCopyButton();
+    }
+  })();
+</script>
