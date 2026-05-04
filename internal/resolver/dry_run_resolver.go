@@ -31,12 +31,15 @@ func (r *DryRunResolver) ResolveResource(res *manifest.ResourceManifest) (map[st
 		case o.Template != "":
 			values[o.Name] = o.Template
 		default:
-			if o.Name == "host" {
+			switch o.Name {
+			case "host":
 				values[o.Name] = res.Metadata.Owner + "." + res.Metadata.Name
-				continue
+			case "port":
+				values[o.Name] = "[PORT]"
+			default:
+				return nil, fmt.Errorf("dry-run: resource %q: bare output %q is not a recognized CLI built-in",
+					res.Metadata.Name, o.Name)
 			}
-			return nil, fmt.Errorf("dry-run: resource %q: bare output %q is not a recognized CLI built-in",
-				res.Metadata.Name, o.Name)
 		}
 	}
 
