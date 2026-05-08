@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/CarlosHPlata/shrine/internal/config"
 	"github.com/CarlosHPlata/shrine/internal/manifest"
 )
 
@@ -64,7 +65,7 @@ func TestResolve(t *testing.T) {
 			},
 		}
 
-		errs := Resolve(set, store)
+		errs := Resolve(set, store, nil)
 		if len(errs) > 0 {
 			t.Errorf("expected no errors, got %d: %v", len(errs), errs)
 		}
@@ -85,7 +86,7 @@ func TestResolve(t *testing.T) {
 			Resources: make(map[string]*manifest.ResourceManifest),
 		}
 
-		errs := Resolve(set, store)
+		errs := Resolve(set, store, nil)
 		if len(errs) == 0 {
 			t.Error("expected missing dependency error, got none")
 		}
@@ -111,7 +112,7 @@ func TestResolve(t *testing.T) {
 			},
 		}
 
-		errs := Resolve(set, store)
+		errs := Resolve(set, store, nil)
 		if len(errs) == 0 {
 			t.Error("expected access denied error, got none")
 		}
@@ -137,7 +138,7 @@ func TestResolve(t *testing.T) {
 			},
 		}
 
-		errs := Resolve(set, store)
+		errs := Resolve(set, store, nil)
 		if len(errs) > 0 {
 			t.Errorf("expected no errors, got %d: %v", len(errs), errs)
 		}
@@ -162,7 +163,7 @@ func TestResolve(t *testing.T) {
 			},
 		}
 
-		errs := Resolve(set, store)
+		errs := Resolve(set, store, nil)
 		found := false
 		for _, err := range errs {
 			if strings.Contains(err.Error(), "owned by \"team-b\", but manifest specifies owner \"team-a\"") {
@@ -184,7 +185,7 @@ func TestResolve(t *testing.T) {
 			},
 		}
 
-		errs := Resolve(set, store)
+		errs := Resolve(set, store, nil)
 		found := false
 		for _, err := range errs {
 			if strings.Contains(err.Error(), "exceeds MaxApps quota") {
@@ -207,7 +208,7 @@ func TestResolve(t *testing.T) {
 			},
 		}
 
-		errs := Resolve(set, store)
+		errs := Resolve(set, store, nil)
 		found := false
 		for _, err := range errs {
 			if strings.Contains(err.Error(), "not allowed by quota") {
@@ -253,7 +254,7 @@ func TestResolve(t *testing.T) {
 			},
 		}
 
-		errs := Resolve(set, store)
+		errs := Resolve(set, store, nil)
 
 		expectedErrors := []string{
 			"invalid valueFrom format \"resource.db1\"",
@@ -303,7 +304,7 @@ func TestResolve(t *testing.T) {
 			},
 		}
 
-		errs := Resolve(set, store)
+		errs := Resolve(set, store, nil)
 
 		expectedErrors := []string{
 			"template output \"bad\" references unknown variable \"missing\"",
@@ -353,7 +354,7 @@ func TestResolve(t *testing.T) {
 			},
 		}
 
-		errs := Resolve(set, store)
+		errs := Resolve(set, store, nil)
 
 		expectedErrors := []string{
 			"template env \"BAD\" references unknown variable \"ghost\"",
@@ -390,7 +391,7 @@ func TestResolve(t *testing.T) {
 					},
 				},
 			}
-			errs := Resolve(set, store)
+			errs := Resolve(set, store, nil)
 			if len(errs) > 0 {
 				t.Errorf("expected no errors, got: %v", errs)
 			}
@@ -413,7 +414,7 @@ func TestResolve(t *testing.T) {
 					},
 				},
 			}
-			errs := Resolve(set, store)
+			errs := Resolve(set, store, nil)
 			if len(errs) > 0 {
 				t.Errorf("expected no errors, got: %v", errs)
 			}
@@ -436,7 +437,7 @@ func TestResolve(t *testing.T) {
 					},
 				},
 			}
-			errs := Resolve(set, store)
+			errs := Resolve(set, store, nil)
 			found := false
 			for _, err := range errs {
 				if strings.Contains(err.Error(), "does not have access to application \"worker\"") {
@@ -462,7 +463,7 @@ func TestResolve(t *testing.T) {
 					},
 				},
 			}
-			errs := Resolve(set, store)
+			errs := Resolve(set, store, nil)
 			found := false
 			for _, err := range errs {
 				if strings.Contains(err.Error(), "depends on missing application \"ghost\"") {
@@ -492,7 +493,7 @@ func TestResolve(t *testing.T) {
 					},
 				},
 			}
-			errs := Resolve(set, store)
+			errs := Resolve(set, store, nil)
 			found := false
 			for _, err := range errs {
 				if strings.Contains(err.Error(), "application \"worker\" owned by \"team-a\", but manifest specifies owner \"team-b\"") {
@@ -522,7 +523,7 @@ func TestResolve(t *testing.T) {
 					},
 				},
 			}
-			errs := Resolve(set, store)
+			errs := Resolve(set, store, nil)
 			found := false
 			for _, err := range errs {
 				if strings.Contains(err.Error(), "is not reachable cross-team") {
@@ -552,7 +553,7 @@ func TestResolve(t *testing.T) {
 					},
 				},
 			}
-			errs := Resolve(set, store)
+			errs := Resolve(set, store, nil)
 			hasAccessErr := false
 			hasReachErr := false
 			for _, err := range errs {
@@ -592,7 +593,7 @@ func TestResolve(t *testing.T) {
 					},
 				},
 			}
-			errs := Resolve(set, store)
+			errs := Resolve(set, store, nil)
 			found := false
 			for _, err := range errs {
 				if strings.Contains(err.Error(), "is not reachable cross-team") {
@@ -624,7 +625,7 @@ func TestResolve(t *testing.T) {
 					},
 				},
 			}
-			errs := Resolve(set, store)
+			errs := Resolve(set, store, nil)
 			if len(errs) > 0 {
 				t.Errorf("expected no errors, got: %v", errs)
 			}
@@ -646,7 +647,7 @@ func TestResolve(t *testing.T) {
 			},
 		}
 
-		errs := Resolve(set, store)
+		errs := Resolve(set, store, nil)
 		// Should succeed, no "name collision" error
 		for _, err := range errs {
 			if strings.Contains(err.Error(), "name collision") {
@@ -665,7 +666,7 @@ func TestResolve(t *testing.T) {
 			},
 		}
 
-		errs := Resolve(set, store)
+		errs := Resolve(set, store, nil)
 		found := false
 		for _, err := range errs {
 			if strings.Contains(err.Error(), "application \"key-a\" has metadata name mismatch: \"mismatch-a\"") {
@@ -675,6 +676,133 @@ func TestResolve(t *testing.T) {
 		}
 		if !found {
 			t.Errorf("expected metadata mismatch error, got: %v", errs)
+		}
+	})
+}
+
+func TestValidateRegistryImages(t *testing.T) {
+	registries := []config.RegistryConfig{
+		{Host: "192.168.1.1:3000", Alias: "myregistry"},
+	}
+
+	t.Run("plain image passes with no registries", func(t *testing.T) {
+		set := &ManifestSet{
+			Applications: map[string]*manifest.ApplicationManifest{
+				"app": {
+					Metadata: manifest.Metadata{Name: "app", Owner: "team"},
+					Spec:     manifest.ApplicationSpec{Image: "nginx:latest", Port: 80},
+				},
+			},
+			Resources: map[string]*manifest.ResourceManifest{},
+		}
+		errs := validateRegistryImages(set, nil)
+		if len(errs) != 0 {
+			t.Errorf("expected no errors, got: %v", errs)
+		}
+	})
+
+	t.Run("reg: alias in app resolves against config", func(t *testing.T) {
+		set := &ManifestSet{
+			Applications: map[string]*manifest.ApplicationManifest{
+				"app": {
+					Metadata: manifest.Metadata{Name: "app", Owner: "team"},
+					Spec:     manifest.ApplicationSpec{Image: "reg:myregistry/postgres:15", Port: 80},
+				},
+			},
+			Resources: map[string]*manifest.ResourceManifest{},
+		}
+		errs := validateRegistryImages(set, registries)
+		if len(errs) != 0 {
+			t.Errorf("expected no errors, got: %v", errs)
+		}
+	})
+
+	t.Run("reg: alias in resource resolves against config", func(t *testing.T) {
+		set := &ManifestSet{
+			Applications: map[string]*manifest.ApplicationManifest{},
+			Resources: map[string]*manifest.ResourceManifest{
+				"db": {
+					Metadata: manifest.Metadata{Name: "db", Owner: "team"},
+					Spec:     manifest.ResourceSpec{Image: "reg:myregistry/postgres:15"},
+				},
+			},
+		}
+		errs := validateRegistryImages(set, registries)
+		if len(errs) != 0 {
+			t.Errorf("expected no errors, got: %v", errs)
+		}
+	})
+
+	t.Run("unknown alias in app returns error", func(t *testing.T) {
+		set := &ManifestSet{
+			Applications: map[string]*manifest.ApplicationManifest{
+				"app": {
+					Metadata: manifest.Metadata{Name: "app", Owner: "team"},
+					Spec:     manifest.ApplicationSpec{Image: "reg:unknown/postgres:15", Port: 80},
+				},
+			},
+			Resources: map[string]*manifest.ResourceManifest{},
+		}
+		errs := validateRegistryImages(set, registries)
+		if len(errs) != 1 {
+			t.Fatalf("expected 1 error, got %d: %v", len(errs), errs)
+		}
+		if !strings.Contains(errs[0].Error(), `alias "unknown"`) {
+			t.Errorf("error %q should contain alias name", errs[0].Error())
+		}
+	})
+
+	t.Run("unknown alias in resource returns error", func(t *testing.T) {
+		set := &ManifestSet{
+			Applications: map[string]*manifest.ApplicationManifest{},
+			Resources: map[string]*manifest.ResourceManifest{
+				"db": {
+					Metadata: manifest.Metadata{Name: "db", Owner: "team"},
+					Spec:     manifest.ResourceSpec{Image: "reg:missing/postgres:15"},
+				},
+			},
+		}
+		errs := validateRegistryImages(set, registries)
+		if len(errs) != 1 {
+			t.Fatalf("expected 1 error, got %d: %v", len(errs), errs)
+		}
+		if !strings.Contains(errs[0].Error(), `alias "missing"`) {
+			t.Errorf("error %q should contain alias name", errs[0].Error())
+		}
+	})
+
+	t.Run("empty alias after reg: returns error", func(t *testing.T) {
+		set := &ManifestSet{
+			Applications: map[string]*manifest.ApplicationManifest{
+				"app": {
+					Metadata: manifest.Metadata{Name: "app", Owner: "team"},
+					Spec:     manifest.ApplicationSpec{Image: "reg:/postgres:15", Port: 80},
+				},
+			},
+			Resources: map[string]*manifest.ResourceManifest{},
+		}
+		errs := validateRegistryImages(set, registries)
+		if len(errs) != 1 {
+			t.Fatalf("expected 1 error, got %d: %v", len(errs), errs)
+		}
+		if !strings.Contains(errs[0].Error(), "alias name must not be empty") {
+			t.Errorf("error %q should mention empty alias", errs[0].Error())
+		}
+	})
+
+	t.Run("resource with no image is skipped", func(t *testing.T) {
+		set := &ManifestSet{
+			Applications: map[string]*manifest.ApplicationManifest{},
+			Resources: map[string]*manifest.ResourceManifest{
+				"db": {
+					Metadata: manifest.Metadata{Name: "db", Owner: "team"},
+					Spec:     manifest.ResourceSpec{},
+				},
+			},
+		}
+		errs := validateRegistryImages(set, registries)
+		if len(errs) != 0 {
+			t.Errorf("expected no errors for empty image, got: %v", errs)
 		}
 	})
 }

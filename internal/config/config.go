@@ -2,11 +2,15 @@ package config
 
 import (
 	"errors"
+	"fmt"
 	"io/fs"
 	"os"
+	"regexp"
 
 	"gopkg.in/yaml.v3"
 )
+
+var validAliasPattern = regexp.MustCompile(`^[a-zA-Z0-9_-]+$`)
 
 // Config represents the global configuration for shrine.
 type Config struct {
@@ -27,6 +31,7 @@ type GatewayPluginsConfig struct {
 // RegistryConfig holds credentials and host information for a Docker registry.
 type RegistryConfig struct {
 	Host     string `yaml:"host,omitempty"`
+	Alias    string `yaml:"alias,omitempty"`
 	Username string `yaml:"username,omitempty"`
 	Password string `yaml:"password,omitempty"`
 }
@@ -54,6 +59,25 @@ func Load(configFile string) (*Config, error) {
 	}
 
 	return &cfg, nil
+}
+
+// ValidateRegistries checks that all registry aliases are unique and well-formed.
+// Entries without an alias are skipped. Must be called explicitly by callers after Load.
+func (c *Config) ValidateRegistries() error {
+	seen := make(map[string]struct{}, len(c.Registries))
+	for _, r := range c.Registries {
+		if r.Alias == "" {
+			continue
+		}
+		if !validAliasPattern.MatchString(r.Alias) {
+			return fmt.Errorf("registries: alias %q contains invalid characters (alphanumeric, hyphens, underscores only)", r.Alias)
+		}
+		if _, dup := seen[r.Alias]; dup {
+			return fmt.Errorf("registries: alias %q is defined more than once", r.Alias)
+		}
+		seen[r.Alias] = struct{}{}
+	}
+	return nil
 }
 
 // ResolveSpecsDir returns the specs directory to use, with the following priority:

@@ -1,0 +1,12 @@
+apiVersion: shrine/v1
+kind: Resource
+metadata:
+  name: alias-db
+  owner: shrine-deploy-test
+spec:
+  type: postgres
+  image: reg:myregistry/postgres:15
+  port: 5432
+  outputs:
+    - name: host
+    - name: port

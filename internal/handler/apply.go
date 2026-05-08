@@ -23,7 +23,11 @@ type ApplySingleOptions struct {
 }
 
 func ApplySingle(opts ApplySingleOptions) error {
-	result := planner.PlanSingle(opts.File, opts.ManifestDir, opts.Store.Teams)
+	if err := opts.Config.ValidateRegistries(); err != nil {
+		return err
+	}
+
+	result := planner.PlanSingle(opts.File, opts.ManifestDir, opts.Store.Teams, opts.Config.Registries)
 
 	if result.Error != nil {
 		return result.Error

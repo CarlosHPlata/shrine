@@ -1,0 +1,10 @@
+apiVersion: shrine/v1
+kind: Application
+metadata:
+  name: unknown-alias-app
+  owner: shrine-deploy-test
+spec:
+  image: reg:unknown/traefik/whoami:latest
+  port: 80
+  networking:
+    exposeToPlatform: false

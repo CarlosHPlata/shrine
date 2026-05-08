@@ -5,6 +5,79 @@ import (
 	"testing"
 )
 
+func TestValidateRegistries(t *testing.T) {
+	cases := []struct {
+		name    string
+		cfg     Config
+		wantErr string
+	}{
+		{
+			name: "no registries is valid",
+			cfg:  Config{},
+		},
+		{
+			name: "registry without alias is valid",
+			cfg:  Config{Registries: []RegistryConfig{{Host: "ghcr.io"}}},
+		},
+		{
+			name: "valid alias passes",
+			cfg:  Config{Registries: []RegistryConfig{{Host: "192.168.1.1:3000", Alias: "myregistry"}}},
+		},
+		{
+			name: "hyphens and underscores in alias are valid",
+			cfg:  Config{Registries: []RegistryConfig{{Host: "192.168.1.1:3000", Alias: "my-registry_prod"}}},
+		},
+		{
+			name: "multiple unique aliases pass",
+			cfg: Config{Registries: []RegistryConfig{
+				{Host: "192.168.1.1:3000", Alias: "reg-a"},
+				{Host: "192.168.1.2:3000", Alias: "reg-b"},
+			}},
+		},
+		{
+			name: "duplicate alias returns error",
+			cfg: Config{Registries: []RegistryConfig{
+				{Host: "192.168.1.1:3000", Alias: "myregistry"},
+				{Host: "192.168.1.2:3000", Alias: "myregistry"},
+			}},
+			wantErr: `alias "myregistry" is defined more than once`,
+		},
+		{
+			name:    "dot in alias returns invalid characters error",
+			cfg:     Config{Registries: []RegistryConfig{{Host: "192.168.1.1:3000", Alias: "my.registry"}}},
+			wantErr: `alias "my.registry" contains invalid characters`,
+		},
+		{
+			name:    "space in alias returns invalid characters error",
+			cfg:     Config{Registries: []RegistryConfig{{Host: "192.168.1.1:3000", Alias: "my registry"}}},
+			wantErr: `alias "my registry" contains invalid characters`,
+		},
+		{
+			name:    "slash in alias returns invalid characters error",
+			cfg:     Config{Registries: []RegistryConfig{{Host: "192.168.1.1:3000", Alias: "my/registry"}}},
+			wantErr: `alias "my/registry" contains invalid characters`,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			err := tc.cfg.ValidateRegistries()
+			if tc.wantErr != "" {
+				if err == nil {
+					t.Fatalf("ValidateRegistries succeeded, want error containing %q", tc.wantErr)
+				}
+				if !strings.Contains(err.Error(), tc.wantErr) {
+					t.Errorf("error %q should contain %q", err.Error(), tc.wantErr)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("ValidateRegistries returned unexpected error: %v", err)
+			}
+		})
+	}
+}
+
 func TestResolveSpecsDir(t *testing.T) {
 	const fakeHome = "/home/test-user"
 

@@ -238,7 +238,7 @@ spec:
 		t.Fatal(err)
 	}
 
-	result := PlanSingle(typoFile, "", nullTeamStore{})
+	result := PlanSingle(typoFile, "", nullTeamStore{}, nil)
 	if result.Error == nil {
 		t.Fatal("expected PlanSingle to return an error for bad-kind manifest, got nil")
 	}
