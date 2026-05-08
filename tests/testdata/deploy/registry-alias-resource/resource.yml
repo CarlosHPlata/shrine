@@ -5,6 +5,7 @@ metadata:
   owner: shrine-deploy-test
 spec:
   type: postgres
+  version: "15"
   image: reg:myregistry/postgres:15
   port: 5432
   outputs:
