@@ -28,12 +28,15 @@ type DeployOptions struct {
 // operations instead of writing files.
 func DryRun(out io.Writer, manifestDir string, store *state.Store, cfg *config.Config) error {
 	if cfg != nil {
+		if err := cfg.ValidateRegistries(); err != nil {
+			return err
+		}
 		if _, err := traefik.New(cfg.Plugins.Gateway.Traefik, nil, "", nil); err != nil {
 			return err
 		}
 	}
 
-	result := planner.Plan(manifestDir, store.Teams)
+	result := planner.Plan(manifestDir, store.Teams, cfg.Registries)
 
 	if result.Error != nil {
 		return result.Error
@@ -61,6 +64,10 @@ func DryRun(out io.Writer, manifestDir string, store *state.Store, cfg *config.C
 }
 
 func Deploy(opts DeployOptions) error {
+	if err := opts.Config.ValidateRegistries(); err != nil {
+		return err
+	}
+
 	specsDir, _ := opts.Config.ResolveSpecsDir(opts.ManifestDir)
 
 	terminal := ui.NewTerminalObserver(opts.Out)
@@ -82,7 +89,7 @@ func Deploy(opts DeployOptions) error {
 		return err
 	}
 
-	result := planner.Plan(opts.ManifestDir, opts.Store.Teams)
+	result := planner.Plan(opts.ManifestDir, opts.Store.Teams, opts.Config.Registries)
 
 	if result.Error != nil {
 		return result.Error

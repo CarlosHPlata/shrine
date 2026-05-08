@@ -1,0 +1,3 @@
+registries:
+  - host: docker.io
+    alias: myregistry

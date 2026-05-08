@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"sort"
 
+	"github.com/CarlosHPlata/shrine/internal/config"
 	"github.com/CarlosHPlata/shrine/internal/manifest"
 	"github.com/CarlosHPlata/shrine/internal/state"
 )
@@ -20,13 +21,13 @@ type PlanTeardownResult struct {
 	Error error
 }
 
-func Plan(dir string, store state.TeamStore) PlanResult {
+func Plan(dir string, store state.TeamStore, registries []config.RegistryConfig) PlanResult {
 	set, err := LoadDir(dir)
 	if err != nil {
 		return PlanResult{Error: err}
 	}
 
-	if errs := Resolve(set, store); len(errs) > 0 {
+	if errs := Resolve(set, store, registries); len(errs) > 0 {
 		return PlanResult{ValidationErr: errs}
 	}
 
@@ -41,7 +42,7 @@ func Plan(dir string, store state.TeamStore) PlanResult {
 // PlanSingle plans the deployment of a single manifest file.
 // If specsDir is non-empty it loads the full directory as resolution context;
 // otherwise a minimal ManifestSet containing only the parsed manifest is used.
-func PlanSingle(file, specsDir string, store state.TeamStore) PlanResult {
+func PlanSingle(file, specsDir string, store state.TeamStore, registries []config.RegistryConfig) PlanResult {
 	// Step 1: Parse and validate the target manifest.
 	m, err := manifest.Parse(file)
 	if err != nil {
@@ -98,8 +99,8 @@ func PlanSingle(file, specsDir string, store state.TeamStore) PlanResult {
 		}
 	}
 
-	// Step 3: Resolve dependencies, quotas, and access control.
-	if errs := Resolve(set, store); len(errs) > 0 {
+	// Step 3: Resolve dependencies, quotas, access control, and registry aliases.
+	if errs := Resolve(set, store, registries); len(errs) > 0 {
 		return PlanResult{ValidationErr: errs}
 	}
 

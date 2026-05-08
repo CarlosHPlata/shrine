@@ -5,13 +5,14 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/CarlosHPlata/shrine/internal/config"
 	"github.com/CarlosHPlata/shrine/internal/manifest"
 	"github.com/CarlosHPlata/shrine/internal/state"
 )
 
-// Resolve performs dependency resolution, access control checks, and quota enforcement
-// for a set of manifests. It returns a slice of all validation errors found.
-func Resolve(set *ManifestSet, store state.TeamStore) []error {
+// Resolve performs dependency resolution, access control checks, quota enforcement,
+// and registry alias validation for a set of manifests. It returns all errors found.
+func Resolve(set *ManifestSet, store state.TeamStore, registries []config.RegistryConfig) []error {
 	var errs []error
 
 	// 0. Name collision check
@@ -42,7 +43,63 @@ func Resolve(set *ManifestSet, store state.TeamStore) []error {
 	// 4. Check AllowedResourceTypes
 	errs = append(errs, allowedResourceTypes(set, teamCache)...)
 
+	// 5. Validate registry aliases in image references
+	errs = append(errs, validateRegistryImages(set, registries)...)
+
 	return errs
+}
+
+// validateRegistryImages checks that every image field using the reg:<alias> prefix
+// references an alias defined in the provided registry config.
+func validateRegistryImages(set *ManifestSet, registries []config.RegistryConfig) []error {
+	aliasMap := buildRegistryAliasMap(registries)
+	var errs []error
+
+	for _, app := range set.Applications {
+		if err := checkImageAlias(app.Spec.Image, "app", app.Metadata.Name, aliasMap); err != nil {
+			errs = append(errs, err)
+		}
+	}
+	for _, res := range set.Resources {
+		if res.Spec.Image == "" {
+			continue
+		}
+		if err := checkImageAlias(res.Spec.Image, "resource", res.Metadata.Name, aliasMap); err != nil {
+			errs = append(errs, err)
+		}
+	}
+	return errs
+}
+
+func checkImageAlias(image, kind, name string, aliasMap map[string]string) error {
+	if !strings.HasPrefix(image, "reg:") {
+		return nil
+	}
+	rest := image[len("reg:"):]
+	slash := strings.Index(rest, "/")
+	var alias string
+	if slash == -1 {
+		alias = rest
+	} else {
+		alias = rest[:slash]
+	}
+	if alias == "" {
+		return fmt.Errorf(`%s %q: image %q: alias name must not be empty`, kind, name, image)
+	}
+	if _, ok := aliasMap[alias]; !ok {
+		return fmt.Errorf(`%s %q: image %q: alias %q is not defined in config registries`, kind, name, image, alias)
+	}
+	return nil
+}
+
+func buildRegistryAliasMap(registries []config.RegistryConfig) map[string]string {
+	m := make(map[string]string, len(registries))
+	for _, r := range registries {
+		if r.Alias != "" {
+			m[r.Alias] = r.Host
+		}
+	}
+	return m
 }
 
 // resolveDependencies resolves dependencies and performs access checks for a single Application.

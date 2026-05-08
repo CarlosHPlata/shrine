@@ -3,11 +3,44 @@ package dockercontainer
 import (
 	"encoding/base64"
 	"encoding/json"
+	"fmt"
 	"strings"
 
 	"github.com/CarlosHPlata/shrine/internal/config"
 	"github.com/docker/docker/api/types/registry"
 )
+
+// hasRegistryAliasPrefix reports whether ref starts with the reg: scheme.
+func hasRegistryAliasPrefix(ref string) bool {
+	return strings.HasPrefix(ref, "reg:")
+}
+
+// expandRegistryAlias replaces a reg:<alias>/ prefix with the corresponding
+// registry host. Returns the ref unchanged if no reg: prefix is present.
+func expandRegistryAlias(ref string, registries []config.RegistryConfig) (string, error) {
+	if !hasRegistryAliasPrefix(ref) {
+		return ref, nil
+	}
+	rest := ref[len("reg:"):]
+	slash := strings.Index(rest, "/")
+	var alias, tail string
+	if slash == -1 {
+		alias = rest
+		tail = ""
+	} else {
+		alias = rest[:slash]
+		tail = rest[slash:]
+	}
+	if alias == "" {
+		return "", fmt.Errorf("image %q: alias name must not be empty", ref)
+	}
+	for _, r := range registries {
+		if r.Alias == alias {
+			return r.Host + tail, nil
+		}
+	}
+	return "", fmt.Errorf("image %q: alias %q is not defined in config registries", ref, alias)
+}
 
 // registryAuthFor returns the base64 encoded auth JSON Docker expects
 // on ImagePull for the registry implied by the image reference. Returns "" if

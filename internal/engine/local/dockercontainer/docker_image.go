@@ -10,6 +10,11 @@ import (
 )
 
 func (backend *DockerBackend) ensureImage(ctx context.Context, ref string) error {
+	var err error
+	if ref, err = expandRegistryAlias(ref, backend.registries); err != nil {
+		return backend.emitErr("registry.alias", map[string]string{"ref": ref}, err)
+	}
+
 	args := filters.NewArgs()
 	args.Add("reference", ref)
 	existing, err := backend.client.ImageList(ctx, image.ListOptions{Filters: args})
@@ -49,6 +54,11 @@ func (backend *DockerBackend) ensureImage(ctx context.Context, ref string) error
 }
 
 func (backend *DockerBackend) resolveImage(ctx context.Context, ref string, policy string) (string, error) {
+	var err error
+	if ref, err = expandRegistryAlias(ref, backend.registries); err != nil {
+		return "", backend.emitErr("registry.alias", map[string]string{"ref": ref}, err)
+	}
+
 	if policy != "Always" {
 		args := filters.NewArgs()
 		args.Add("reference", ref)
