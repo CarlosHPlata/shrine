@@ -11,4 +11,4 @@ spec:
     - name: host
     - name: port
     - name: password
-      valueFrom: vault:486975e5-b3a2-49d4-8c54-9702270c25ce/prod/DB_PASSWORD
+      valueFrom: vault:shrine-test/prod/DB_PASSWORD

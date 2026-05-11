@@ -99,7 +99,7 @@ As a Shrine operator, I want to be able to change the vault backend (e.g., from 
 
 - **SecretsPlugin** (interface): The provider-agnostic contract that any vault backend must implement — at minimum, fetching a secret by path and reporting whether the plugin is active.
 - **SecretsPluginsConfig**: The shrine.yml block that selects and configures the active secrets plugin. For Infisical this includes `url` (self-hosted instance URL), `client-id`, and `client-secret` (Machine Identity Universal Auth credentials — service tokens are deprecated upstream).
-- **VaultSecretRef**: A parsed reference of the form `<path>` extracted from a `valueFrom: vault:<path>` value, passed opaquely to the active plugin. For Infisical the path convention is `<project-uuid>/<environment-slug>/<secret-name>`. Valid in both Application `spec.env[]` and Resource `spec.outputs[]`.
+- **VaultSecretRef**: A parsed reference of the form `<path>` extracted from a `valueFrom: vault:<path>` value, passed opaquely to the active plugin. For Infisical the path convention is `<project>/<environment-slug>/<secret-name>`, where the project component may be a name, slug, or UUID (the plugin resolves any of the three). Valid in both Application `spec.env[]` and Resource `spec.outputs[]`.
 
 ## Success Criteria *(mandatory)*
 
@@ -116,7 +116,7 @@ As a Shrine operator, I want to be able to change the vault backend (e.g., from 
 
 - The vault backend (Infisical for v1) is already running and accessible from the Shrine host before `shrine apply` is invoked; Shrine does not manage its lifecycle.
 - Authentication to Infisical uses **Machine Identity Universal Auth** (`client-id` + `client-secret`). Service tokens are not used — they are deprecated upstream in favor of Machine Identities.
-- The path structure within `vault:<path>` is treated as an opaque string by Shrine's core; interpretation is delegated entirely to the active plugin. For Infisical, the convention is `<project-uuid>/<environment-slug>/<secret-name>` — the project component is Infisical's UUID (visible in the project URL), not the project display name.
+- The path structure within `vault:<path>` is treated as an opaque string by Shrine's core; interpretation is delegated entirely to the active plugin. For Infisical, the convention is `<project>/<environment-slug>/<secret-name>` — the project component may be the project's display name, its (auto-generated) slug, or its UUID; the plugin resolves names and slugs to UUIDs via a cached `/api/v1/workspace` lookup.
 - `valueFrom: vault:` is supported in both Application `spec.env[]` and Resource `spec.outputs[]`. Resource outputs resolved from the vault are available to downstream Applications via the existing `valueFrom: resource.<name>.<output>` reference mechanism.
 - The `client-id` and `client-secret` in shrine.yml are stored in plaintext on the operator's machine; secret encryption at rest for shrine.yml is out of scope.
 - The vault URL is accepted as-is with no protocol enforcement — HTTP or HTTPS is the operator's responsibility. This supports local test setups (e.g., `http://localhost:8080`) without requiring TLS.

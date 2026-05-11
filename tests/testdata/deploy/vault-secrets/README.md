@@ -23,7 +23,7 @@ Open `http://localhost:8080` and:
 
 1. **Sign up** as the first admin (any email + password works — this instance is ephemeral).
 2. **Create an organization** (any name).
-3. **Create a project** (any name; the *display* name doesn't matter — we'll reference it by UUID).
+3. **Create a project** named **`shrine-test`** (this exact name — the fixtures reference it by slug, which Infisical auto-generates from the name).
 4. The project comes with three default environments: `dev`, `staging`, `prod`. We use **`prod`**.
 5. In the `prod` environment, **create two secrets**:
    - `DB_PASSWORD` → any value (e.g. `ci-db-password-123`)
@@ -33,21 +33,15 @@ Open `http://localhost:8080` and:
    - Note the generated **Client ID** and **Client Secret** (Client Secret is shown only once)
 7. **Attach the machine identity to the project**:
    - Project → Access Control → Identities → Add → select your identity → assign a role with `secrets:read` (e.g. Developer)
-8. **Find the project UUID**: open the project; the URL contains it (e.g. `/project/<UUID>/secrets/...`). Or run:
-   ```bash
-   curl -s -H "Authorization: Bearer $TOKEN" http://localhost:8080/api/v1/workspace | python3 -m json.tool
-   ```
 
-## 3. Wire the project UUID into the fixtures
+> The plugin resolves project **name or slug** to a UUID at first fetch via
+> `/api/v1/workspace` (cached for the rest of the process). Infisical auto-
+> appends a random suffix to the slug (e.g. `shrine-test-2jdn`) but the name
+> stays as you typed it, so the fixture's `vault:shrine-test/...` matches via
+> name lookup regardless of the slug suffix. You can also paste a UUID into
+> the manifest if you'd rather skip the lookup — all three forms are accepted.
 
-The vault path in Infisical's API is `<project-uuid>/<env-slug>/<secret-name>` (project component is a UUID, not the project name). Edit:
-
-- `tests/testdata/deploy/vault-secrets/manifests/db.yml` → replace the UUID in `valueFrom: vault:<UUID>/prod/DB_PASSWORD`
-- `tests/testdata/deploy/vault-secrets/manifests/app.yml` → replace the UUID in `valueFrom: vault:<UUID>/prod/API_KEY`
-
-(The committed fixtures contain a real-looking UUID from the original test setup; substitute your own.)
-
-## 4. Run the integration test
+## 3. Run the integration test
 
 ```bash
 export INFISICAL_TEST_URL=http://localhost:8080

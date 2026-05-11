@@ -47,7 +47,7 @@ spec:
 | Component | Position | Description |
 |---|---|---|
 | `vault:` | prefix | Required literal prefix identifying a vault reference |
-| `<project>` | path[0] | Infisical project UUID (e.g. `486975e5-b3a2-49d4-8c54-9702270c25ce`) — visible in the project URL or via `/api/v1/workspace` |
+| `<project>` | path[0] | Infisical project **name** (e.g. `shrine-test`), slug, or UUID. Plugin resolves any of the three via a one-time `/api/v1/workspace` lookup; the result is cached for the process lifetime. UUIDs skip the lookup entirely. |
 | `<environment>` | path[1] | Infisical environment slug (e.g. `production`, `staging`) |
 | `<secret-name>` | path[2] | Infisical secret key (e.g. `DB_PASSWORD`) |
 

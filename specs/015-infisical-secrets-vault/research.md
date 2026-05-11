@@ -44,9 +44,9 @@ val := secret.SecretValue
 
 ## Path Format: `vault:<project>/<environment>/<secret-name>`
 
-**Decision**: Three slash-separated components: `<project-uuid>/<env-slug>/<secret-name>`. Project must be the UUID (visible in the project URL); environment is the Infisical environment slug (`dev`, `staging`, `prod` by default); secret name is the exact key stored in Infisical.
+**Decision**: Three slash-separated components: `<project>/<env-slug>/<secret-name>`. The project component accepts the project's display **name**, its (auto-generated) **slug**, or its **UUID**. Environment is the Infisical environment slug (`dev`, `staging`, `prod` by default). Secret name is the exact key stored in Infisical.
 
-**Rationale**: We initially assumed Infisical's Go SDK accepted slugs in `RetrieveSecretOptions.ProjectID`. In practice (v0.7.x) it requires a UUID — passing a slug yields "Project with ID 'X' not found during bot lookup". The path treats the project component as opaque, so the only contract for the operator is "the value Infisical's API accepts for that field". A future enhancement could add slug→UUID lookup inside the plugin to restore ergonomics.
+**Rationale**: The Infisical Go SDK v0.7.x `RetrieveSecretOptions.ProjectID` only accepts UUIDs — passing a slug yields "Project with ID 'X' not found during bot lookup". UUIDs in YAML are terrible UX, so the plugin transparently resolves names and slugs to UUIDs via a cached `GET /api/v1/workspace` call (the workspace listing response includes both `name` and `slug` per project, so we index both). UUIDs are detected by regex and skip the lookup entirely. A user typing `vault:shrine-test/prod/SECRET` doesn't need to know about the auto-generated slug suffix Infisical appends.
 
 **Validation at plan time**: Path MUST have exactly 3 non-empty `/`-separated components. A malformed path (e.g. `vault:foo`, `vault:foo/bar`) is rejected before execution begins.
 
