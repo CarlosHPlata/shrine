@@ -81,8 +81,10 @@ internal/engine/local/
   local_engine.go                    ← pass vault plugin to NewLiveResolver
 
 internal/handler/
-  deploy.go                          ← construct SecretsPlugin from cfg.Plugins.Secrets;
-                                        validate at startup (same pattern as Traefik plugin)
+  deploy.go                          ← construct SecretsPlugin from cfg.Plugins.Secrets in Deploy()
+                                        and DryRun() (config validation + plugin activation)
+  apply.go                           ← construct and pass SecretsPlugin in ApplySingle()
+                                        (same pattern — ApplySingle runs its own engine path)
 
 tests/integration/
   deploy_test.go                     ← new vault secret resolution scenario (TDD-first)
