@@ -19,7 +19,8 @@ As a Shrine operator, I want to reference secrets stored in an external vault fr
 1. **Given** an application manifest with `env.DATABASE_PASSWORD.valueFrom: vault:myproject/production/DB_PASSWORD`, **When** `shrine apply` runs, **Then** the container is started with `DATABASE_PASSWORD` set to the value fetched from the configured vault backend.
 2. **Given** the referenced secret does not exist in the vault, **When** `shrine apply` runs, **Then** the deploy fails with a clear error identifying the missing secret path.
 3. **Given** a manifest where different env vars each use a distinct resolution type (`value:`, `generated:`, and `valueFrom: vault:` on separate keys), **When** `shrine apply` runs, **Then** all three resolution types succeed together.
-4. **Given** a shrine.yml that switches the secrets plugin from one provider to another, **When** `shrine apply` runs, **Then** manifests using `vault:` refs work without modification.
+4. **Given** a Resource manifest with a `valueFrom: vault:<path>` output, **When** `shrine apply` runs, **Then** the output resolves to the vault secret value and a downstream Application that references that output via `valueFrom: resource.<name>.<output>` receives the correct value.
+5. **Given** a shrine.yml that switches the secrets plugin from one provider to another, **When** `shrine apply` runs, **Then** manifests using `vault:` refs work without modification.
 
 ---
 
@@ -89,7 +90,7 @@ As a Shrine operator, I want to be able to change the vault backend (e.g., from 
 - **FR-006**: Dry-run mode MUST NOT contact the vault backend; it MUST substitute a human-readable placeholder (e.g., `[VAULT:<path>]`) for each vault-sourced value.
 - **FR-007**: The `vault:` prefix and path format MUST be validated at plan time so malformed references are rejected before execution begins.
 - **FR-008**: If no secrets plugin is configured in shrine.yml and no manifest uses `valueFrom: vault:`, Shrine behavior MUST be identical to the current baseline (zero regression).
-- **FR-009**: Vault-sourced env vars MUST be composable with existing `value:`, `generated:`, and `template:` env types within the same manifest, on different keys. Setting `valueFrom: vault:` on the same key as any other resolution type MUST be rejected at plan time by the existing mutual-exclusion validation (no new validation logic required — `vault:` registers as one more exclusive option in the existing check).
+- **FR-009**: Vault-sourced values MUST be composable with existing `value:`, `generated:`, and `template:` resolution types within the same manifest, on different keys or output names. Setting `valueFrom: vault:` on the same Application env key or Resource output name as any other resolution type MUST be rejected at plan time. This applies to both `spec.env[]` (Application) and `spec.outputs[]` (Resource) — `vault:` registers as one more exclusive option in each mutual-exclusion check.
 - **FR-010**: Only one secrets plugin may be active at a time per shrine.yml; multi-vault federation is out of scope. If more than one `plugins.secrets.*` block is declared, Shrine MUST error at config load before any planning or execution begins.
 - **FR-011**: Secret values MUST never appear in any log output, error messages, or CLI output. Only the secret path (e.g., `myproject/production/DB_PASSWORD`) may be referenced in diagnostic output.
 - **FR-012**: A user-facing guide (`docs/content/guides/secrets-vault.md`) MUST be created covering plugin activation, config fields, manifest `vault:` syntax, dry-run placeholder output, and common pitfalls. The manifest schema reference (`docs/content/reference/manifest-schema.md`) MUST be updated to document `valueFrom: vault:<path>` alongside existing `valueFrom` forms.

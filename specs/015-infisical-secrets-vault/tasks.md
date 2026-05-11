@@ -51,11 +51,11 @@
 
 ---
 
-## Phase 4: User Story 1 — Reference Vault Secrets in Application Manifests (Priority: P1)
+## Phase 4: User Story 1 — Reference Vault Secrets in Application Manifests and Resource Outputs (Priority: P1)
 
-**Goal**: `valueFrom: vault:project/env/key` in an Application manifest resolves to the actual secret value at deploy time via the Infisical backend.
+**Goal**: `valueFrom: vault:project/env/key` resolves to the actual secret value at deploy time — in Application `spec.env[]` directly, and in Resource `spec.outputs[]` (making the resolved value available to downstream Applications via `valueFrom: resource.<name>.<output>`).
 
-**Independent Test**: Configure shrine.yml with a live Infisical connection, deploy a manifest with `valueFrom: vault:myproject/production/DB_PASSWORD`, assert the container env var equals the value stored in Infisical.
+**Independent Test**: Configure shrine.yml with a live Infisical connection; deploy a Resource manifest with a `valueFrom: vault:` output and an Application that consumes it plus one direct `valueFrom: vault:` env var; assert both container env vars equal the values stored in Infisical.
 
 - [ ] T009 [P] [US1] Implement `InfisicalPlugin` struct in `internal/plugins/secrets/infisical/plugin.go` — `New(cfg *config.InfisicalPluginConfig) (*InfisicalPlugin, error)` initialises and authenticates the Infisical SDK client (returns nil, nil when cfg is nil); `IsActive()` returns false when cfg is nil; `GetSecret(path string)` splits path on `/` into `[project, environment, secretKey]` and calls `client.Secrets().Retrieve(...)`, returning only the value or an error that includes the path but never the value
 - [ ] T010 [P] [US1] Write unit tests for `InfisicalPlugin` in `internal/plugins/secrets/infisical/plugin_test.go` — use a mock or stub Infisical SDK client; cover: `IsActive()` false when nil config, `GetSecret()` success, `GetSecret()` error propagates path (not value), `New()` returns nil when cfg is nil
