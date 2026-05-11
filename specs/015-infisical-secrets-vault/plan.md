@@ -87,6 +87,18 @@ internal/handler/
 tests/integration/
   deploy_test.go                     ← new vault secret resolution scenario (TDD-first)
   testdata/deploy/vault-secrets/     ← shrine.yml + manifest fixtures for integration test
+
+docs/content/guides/
+  secrets-vault.md                   ← new guide: enable the plugin, configure shrine.yml,
+                                        write vault: refs in manifests, dry-run behaviour,
+                                        common pitfalls (modelled on traefik.md)
+
+docs/content/guides/
+  _index.md                          ← add "Secrets vault" entry to the Contents list
+
+docs/content/reference/
+  manifest-schema.md                 ← extend spec.env[].valueFrom table to document
+                                        vault:<path> syntax alongside resource.<name>.<output>
 ```
 
 **Structure Decision**: All changes are additive extensions to existing files within the
@@ -122,6 +134,23 @@ existence is NOT validated at plan time (would require vault connectivity during
 `lookupValueFrom` switch gains a `vault:` case. If `r.Vault` is nil or inactive when a
 `vault:` ref is encountered, an error is returned (not a silent fallthrough). This makes
 misconfiguration (missing `plugins.secrets` block) loud and immediate.
+
+### Documentation (`docs/content/`)
+
+Three docs changes ship alongside the implementation:
+
+1. **New guide** — `docs/content/guides/secrets-vault.md`: covers activating the plugin
+   (`plugins.secrets.infisical` block), all config fields, writing `valueFrom: vault:` refs
+   in manifests, dry-run placeholder output, and a common-pitfalls section (missing config
+   block, malformed path, auth failure). Modelled on `docs/content/guides/traefik.md` and also a `docker-compose.yml` example to show a user how to setup the local infisical vault server.
+
+2. **Updated reference** — `docs/content/reference/manifest-schema.md`: extend the
+   `spec.env[]` table with a `vault:<project>/<environment>/<secret-name>` row under
+   `valueFrom`, alongside the existing `resource.<name>.<output>` row. Update the prose
+   in the Templating section to mention vault resolution.
+
+3. **Updated guide index** — `docs/content/guides/_index.md`: add the secrets vault
+   entry to the Contents list.
 
 ### No-Value-Logging Invariant
 

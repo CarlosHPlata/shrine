@@ -69,3 +69,12 @@ API_KEY=[VAULT:myapp/production/API_KEY]
 ```
 
 No network connection to the vault is made.
+
+---
+
+## Published Documentation
+
+This contract is the source of truth for implementation. The following docs files expose these contracts to operators:
+
+- **`docs/content/guides/secrets-vault.md`** — user-facing guide covering all config fields, manifest syntax, and dry-run behaviour described in this contract.
+- **`docs/content/reference/manifest-schema.md`** — the `spec.env[].valueFrom` table is updated to document `vault:<path>` as a valid form alongside `resource.<name>.<output>`.

@@ -133,3 +133,17 @@ A vault reference is a `valueFrom` string with the `vault:` prefix, e.g. `vault:
 ## State & Caching
 
 No secret values are cached. Each `shrine apply` invocation fetches all vault-referenced secrets fresh from the vault. This is consistent with the constitution rule: "No in-memory caching of secret values — always read from disk" (here: always read from vault).
+
+---
+
+## Documentation Artifacts
+
+The following docs files are created or updated as part of this feature. They are operator-facing and ship alongside the implementation.
+
+| File | Type | Content |
+|---|---|---|
+| `docs/content/guides/secrets-vault.md` | New | How to activate the plugin, configure shrine.yml, write `vault:` refs, read dry-run output, and diagnose common errors |
+| `docs/content/guides/_index.md` | Update | Add "Secrets vault" entry to the Contents list |
+| `docs/content/reference/manifest-schema.md` | Update | Extend `spec.env[].valueFrom` table with `vault:<project>/<environment>/<secret-name>` row; update Templating prose |
+
+The guide follows the same structure as `docs/content/guides/traefik.md`: concept, activation, config field reference, per-manifest usage, dry-run behaviour, common pitfalls, see-also links.

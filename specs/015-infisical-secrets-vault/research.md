@@ -87,3 +87,17 @@ val := secret.SecretValue
 4. Asserts the container has the correct env var set.
 
 The Infisical test stack is only started when the `integration` build tag is present.
+
+---
+
+## Documentation Approach
+
+**Decision**: Three docs changes ship alongside the implementation, following the same pattern as the Traefik gateway plugin docs.
+
+| File | Change |
+|---|---|
+| `docs/content/guides/secrets-vault.md` | New guide — activation, config fields, manifest syntax, dry-run output, common pitfalls |
+| `docs/content/guides/_index.md` | Add "Secrets vault" entry to Contents list |
+| `docs/content/reference/manifest-schema.md` | Extend `spec.env[].valueFrom` to document `vault:<path>` alongside `resource.<name>.<output>` |
+
+**Rationale**: The Traefik plugin ships with a dedicated guide (`guides/traefik.md`) and its config is reflected in the manifest schema reference. The secrets vault plugin follows the same convention so operators have a single reference point for both activation and manifest authoring.

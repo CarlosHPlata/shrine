@@ -92,6 +92,7 @@ As a Shrine operator, I want to be able to change the vault backend (e.g., from 
 - **FR-009**: Vault-sourced env vars MUST be composable with existing `value:`, `generated:`, and `template:` env types within the same manifest, on different keys. Setting `valueFrom: vault:` on the same key as any other resolution type MUST be rejected at plan time by the existing mutual-exclusion validation (no new validation logic required — `vault:` registers as one more exclusive option in the existing check).
 - **FR-010**: Only one secrets plugin may be active at a time per shrine.yml; multi-vault federation is out of scope. If more than one `plugins.secrets.*` block is declared, Shrine MUST error at config load before any planning or execution begins.
 - **FR-011**: Secret values MUST never appear in any log output, error messages, or CLI output. Only the secret path (e.g., `myproject/production/DB_PASSWORD`) may be referenced in diagnostic output.
+- **FR-012**: A user-facing guide (`docs/content/guides/secrets-vault.md`) MUST be created covering plugin activation, config fields, manifest `vault:` syntax, dry-run placeholder output, and common pitfalls. The manifest schema reference (`docs/content/reference/manifest-schema.md`) MUST be updated to document `valueFrom: vault:<path>` alongside existing `valueFrom` forms.
 
 ### Key Entities
 
