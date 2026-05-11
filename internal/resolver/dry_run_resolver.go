@@ -30,6 +30,8 @@ func (r *DryRunResolver) ResolveResource(res *manifest.ResourceManifest) (map[st
 			values[o.Name] = "[GENERATED]"
 		case o.Template != "":
 			values[o.Name] = o.Template
+		case isVaultRef(o.ValueFrom):
+			values[o.Name] = "[VAULT:" + parseVaultPath(o.ValueFrom) + "]"
 		default:
 			switch o.Name {
 			case "host":
@@ -57,6 +59,8 @@ func (r *DryRunResolver) ResolveApplication(
 		switch {
 		case e.Value != "":
 			env[e.Name] = e.Value
+		case isVaultRef(e.ValueFrom):
+			env[e.Name] = "[VAULT:" + parseVaultPath(e.ValueFrom) + "]"
 		case e.ValueFrom != "":
 			val, err := lookupValueFrom(e.ValueFrom, deps)
 			if err != nil {

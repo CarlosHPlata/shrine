@@ -234,3 +234,52 @@ func TestDeploy(t *testing.T) {
 		tc.AssertContainerRunning(testTeam + ".whoami")
 	})
 }
+
+// TestDeploy_VaultSecrets verifies vault secret resolution end-to-end against a
+// real Infisical instance. See tests/testdata/deploy/vault-secrets/README.md for
+// the local setup steps (Infisical's first-time admin signup needs E2EE crypto
+// that bash + curl can't do, so the manual web-UI flow is the current path).
+//
+// Skipped automatically unless INFISICAL_TEST_URL, INFISICAL_CLIENT_ID, and
+// INFISICAL_CLIENT_SECRET are all set in the environment.
+func TestDeploy_VaultSecrets(t *testing.T) {
+	url := os.Getenv("INFISICAL_TEST_URL")
+	clientID := os.Getenv("INFISICAL_CLIENT_ID")
+	clientSecret := os.Getenv("INFISICAL_CLIENT_SECRET")
+	if url == "" || clientID == "" || clientSecret == "" {
+		t.Skip("vault integration test: set INFISICAL_TEST_URL, INFISICAL_CLIENT_ID, INFISICAL_CLIENT_SECRET — see tests/testdata/deploy/vault-secrets/README.md")
+	}
+
+	s := NewDockerSuite(t, "vault-team")
+
+	// Generate config.yml with the real credentials into a temp config dir.
+	configDir := t.TempDir()
+	configBody := "plugins:\n  secrets:\n    infisical:\n      url: " + url +
+		"\n      client-id: \"" + clientID +
+		"\"\n      client-secret: \"" + clientSecret + "\"\n"
+	if err := os.WriteFile(filepath.Join(configDir, "config.yml"), []byte(configBody), 0o600); err != nil {
+		t.Fatalf("write config.yml: %v", err)
+	}
+
+	s.BeforeEach(func(tc *TestCase) {
+		tc.StateDir = tc.TempDir()
+		SeedSubnetState(tc)
+		tc.Run("apply", "teams",
+			"--path", fixturesPath("vault-secrets", "manifests"),
+			"--state-dir", tc.StateDir,
+			"--config-dir", configDir,
+		).AssertSuccess()
+	})
+
+	s.Test("should resolve vault-backed resource output and inject into app container", func(tc *TestCase) {
+		tc.Run("deploy",
+			"--path", fixturesPath("vault-secrets", "manifests"),
+			"--state-dir", tc.StateDir,
+			"--config-dir", configDir,
+		).AssertSuccess()
+
+		tc.AssertContainerRunning("vault-team.test-app")
+		tc.AssertContainerEnvVarNotEmpty("vault-team.test-app", "DB_PASSWORD")
+		tc.AssertContainerEnvVarNotEmpty("vault-team.test-app", "API_KEY")
+	})
+}

@@ -1,0 +1,36 @@
+services:
+  infisical:
+    image: infisical/infisical:latest-postgres
+    ports:
+      - "8080:8080"
+    environment:
+      - NODE_ENV=production
+      # Ephemeral test values — this stack is destroyed after every integration
+      # run (down -v). No real secrets are ever stored here.
+      # ENCRYPTION_KEY: 16 bytes hex (32 chars) per Infisical docs (openssl rand -hex 16)
+      - ENCRYPTION_KEY=6c1fe4e407b8911c97cd8a2cf32f7c93
+      - AUTH_SECRET=ci-test-auth-secret-not-for-production-use
+      - DB_CONNECTION_URI=postgres://infisical:infisical@db:5432/infisical
+      - REDIS_URL=redis://redis:6379
+      - SITE_URL=http://localhost:8080
+      - TELEMETRY_ENABLED=false
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+
+  db:
+    image: postgres:14-alpine
+    environment:
+      - POSTGRES_USER=infisical
+      - POSTGRES_PASSWORD=infisical
+      - POSTGRES_DB=infisical
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U infisical"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine

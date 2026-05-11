@@ -9,6 +9,7 @@ import (
 	"text/template"
 
 	"github.com/CarlosHPlata/shrine/internal/manifest"
+	"github.com/CarlosHPlata/shrine/internal/plugins/secrets"
 	"github.com/CarlosHPlata/shrine/internal/state"
 	"github.com/CarlosHPlata/shrine/internal/topo"
 )
@@ -37,10 +38,21 @@ type Resolver interface {
 
 type LiveResolver struct {
 	Secrets state.SecretStore
+	Vault   secrets.SecretsPlugin
 }
 
-func NewLiveResolver(secrets state.SecretStore) Resolver {
-	return &LiveResolver{Secrets: secrets}
+func NewLiveResolver(secretStore state.SecretStore, vault secrets.SecretsPlugin) Resolver {
+	return &LiveResolver{Secrets: secretStore, Vault: vault}
+}
+
+// isVaultRef reports whether a valueFrom string is a vault reference.
+func isVaultRef(s string) bool {
+	return strings.HasPrefix(s, "vault:")
+}
+
+// parseVaultPath strips the "vault:" prefix from a vault reference.
+func parseVaultPath(s string) string {
+	return strings.TrimPrefix(s, "vault:")
 }
 
 // ResolveResource returns all output values for a single resource. The returned
@@ -70,6 +82,17 @@ func (r *LiveResolver) ResolveResource(res *manifest.ResourceManifest) (map[stri
 
 		case output.Template != "":
 			templates = append(templates, output)
+
+		case isVaultRef(output.ValueFrom):
+			if r.Vault == nil || !r.Vault.IsActive() {
+				return nil, fmt.Errorf("resource %q: output %q uses vault: ref but no secrets plugin is configured",
+					res.Metadata.Name, output.Name)
+			}
+			val, err := r.Vault.GetSecret(parseVaultPath(output.ValueFrom))
+			if err != nil {
+				return nil, fmt.Errorf("resource %q: output %q: %w", res.Metadata.Name, output.Name, err)
+			}
+			values[output.Name] = val
 
 		default:
 			switch output.Name {
@@ -118,7 +141,7 @@ func (r *LiveResolver) ResolveApplication(
 		case e.Value != "":
 			env[e.Name] = e.Value
 		case e.ValueFrom != "":
-			val, err := lookupValueFrom(e.ValueFrom, deps)
+			val, err := r.lookupValueFrom(e.ValueFrom, deps)
 			if err != nil {
 				return nil, fmt.Errorf("app %q: env %q: %w", app.Metadata.Name, e.Name, err)
 			}
@@ -150,7 +173,27 @@ func (r *LiveResolver) ResolveApplication(
 	return env, nil
 }
 
+func (r *LiveResolver) lookupValueFrom(
+	ref string,
+	deps ResolvedDependencies,
+) (string, error) {
+	if isVaultRef(ref) {
+		if r.Vault == nil || !r.Vault.IsActive() {
+			return "", fmt.Errorf("vault ref %q: no secrets plugin configured", ref)
+		}
+		return r.Vault.GetSecret(parseVaultPath(ref))
+	}
+	return lookupResourceOrApplication(ref, deps)
+}
+
 func lookupValueFrom(
+	ref string,
+	deps ResolvedDependencies,
+) (string, error) {
+	return lookupResourceOrApplication(ref, deps)
+}
+
+func lookupResourceOrApplication(
 	ref string,
 	deps ResolvedDependencies,
 ) (string, error) {
