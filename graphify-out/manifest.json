@@ -1,0 +1,334 @@
+{
+  "/root/projects/shrine/internal/topo/topo_test.go": {
+    "mtime": 1776949781.346249,
+    "hash": "0d0fb3a4271343861625a62048cc7863"
+  },
+  "/root/projects/shrine/internal/topo/topo.go": {
+    "mtime": 1777035028.1810918,
+    "hash": "78f1624de131c20495a60a3148ee4b73"
+  },
+  "/root/projects/shrine/internal/resolver/dry_run_resolver.go": {
+    "mtime": 1777913858.3964317,
+    "hash": "ee6698d9139826ad7f6875482a08da4c"
+  },
+  "/root/projects/shrine/internal/resolver/resolver.go": {
+    "mtime": 1777502238.4880476,
+    "hash": "46fda9ef6c90d25e2f755a2a25ad5029"
+  },
+  "/root/projects/shrine/internal/resolver/resolver_test.go": {
+    "mtime": 1777021383.829208,
+    "hash": "bc9eb665957a9ee353d8e548c8d7f323"
+  },
+  "/root/projects/shrine/internal/planner/resolve_test.go": {
+    "mtime": 1778279690.347997,
+    "hash": "2931f1319010c7a818f42c63498d027d"
+  },
+  "/root/projects/shrine/internal/planner/collisions_test.go": {
+    "mtime": 1777635971.023083,
+    "hash": "e47ba1863602779de2a04edcb7eff893"
+  },
+  "/root/projects/shrine/internal/planner/collisions.go": {
+    "mtime": 1777635971.023083,
+    "hash": "826ad6b18ff61b0be6ee832e5482f0b1"
+  },
+  "/root/projects/shrine/internal/planner/order.go": {
+    "mtime": 1776982441.532961,
+    "hash": "9faff151a505f7066a0a0bac6547e5fd"
+  },
+  "/root/projects/shrine/internal/planner/loader_test.go": {
+    "mtime": 1778279690.3477378,
+    "hash": "da18e50753dac04424b21e332127f6c6"
+  },
+  "/root/projects/shrine/internal/planner/order_test.go": {
+    "mtime": 1776982727.8369567,
+    "hash": "97ab1708d44ba821cf4104f596a468f3"
+  },
+  "/root/projects/shrine/internal/planner/loader.go": {
+    "mtime": 1777555046.8248205,
+    "hash": "b047aaca4787041ef5329486b6df5449"
+  },
+  "/root/projects/shrine/internal/planner/templates.go": {
+    "mtime": 1777502238.4869168,
+    "hash": "012bbc0e9869dd53af5e1ed8e9a2bc33"
+  },
+  "/root/projects/shrine/internal/planner/plan.go": {
+    "mtime": 1778279690.3478105,
+    "hash": "ac0fe09f73fae769fe8c9b9a736dd2eb"
+  },
+  "/root/projects/shrine/internal/planner/resolve.go": {
+    "mtime": 1778279690.3479009,
+    "hash": "7c882afd3f3eb0461c5417ca856530be"
+  },
+  "/root/projects/shrine/internal/engine/events.go": {
+    "mtime": 1777669907.2838583,
+    "hash": "feb1f4679630cee431e623aaa790aaea"
+  },
+  "/root/projects/shrine/internal/engine/backends.go": {
+    "mtime": 1777721115.114904,
+    "hash": "3baadd66ae98177eb000ea91b097ce74"
+  },
+  "/root/projects/shrine/internal/engine/engine_aliases_test.go": {
+    "mtime": 1777721115.115059,
+    "hash": "b761735a393b47cd5f0edb9baf9e9906"
+  },
+  "/root/projects/shrine/internal/engine/engine_test.go": {
+    "mtime": 1777669907.2838583,
+    "hash": "8591eebfe6ff1fe84ccbbe430f52ea0d"
+  },
+  "/root/projects/shrine/internal/engine/engine.go": {
+    "mtime": 1777721115.1149898,
+    "hash": "a598d93527aadf1430fd06a98ff123b9"
+  },
+  "/root/projects/shrine/internal/engine/local/local_engine.go": {
+    "mtime": 1777502238.4869168,
+    "hash": "68962f59110d34ad78ee6c9d1b52c65a"
+  },
+  "/root/projects/shrine/internal/engine/local/dockercontainer/registry_auth.go": {
+    "mtime": 1778279690.3473241,
+    "hash": "4856829245e1ca407ee4a14a930e8a1e"
+  },
+  "/root/projects/shrine/internal/engine/local/dockercontainer/docker_network.go": {
+    "mtime": 1777502238.4869168,
+    "hash": "585f4a9e8365efda748c5da3e7486a5d"
+  },
+  "/root/projects/shrine/internal/engine/local/dockercontainer/registry_auth_test.go": {
+    "mtime": 1778279690.3473241,
+    "hash": "ed526be89724432a986d1f7f9b2911e8"
+  },
+  "/root/projects/shrine/internal/engine/local/dockercontainer/docker_image.go": {
+    "mtime": 1778279690.3473241,
+    "hash": "6e8ba92be069239747d8eeaace129308"
+  },
+  "/root/projects/shrine/internal/engine/local/dockercontainer/docker_status.go": {
+    "mtime": 1777320773.54481,
+    "hash": "91bae51b90143cb595fbc2d00a43a91e"
+  },
+  "/root/projects/shrine/internal/engine/local/dockercontainer/docker_container.go": {
+    "mtime": 1777716536.1375968,
+    "hash": "7a1d490c4d119cea1396f70cfe0ca9d6"
+  },
+  "/root/projects/shrine/internal/engine/local/dockercontainer/docker_volume.go": {
+    "mtime": 1777072748.804424,
+    "hash": "689731241eb84925e062f7d7f79364d4"
+  },
+  "/root/projects/shrine/internal/engine/local/dockercontainer/docker_backend.go": {
+    "mtime": 1777072652.9400952,
+    "hash": "e8f0c754513693f3f5361105fd330ad1"
+  },
+  "/root/projects/shrine/internal/engine/dryrun/dry_run_dns.go": {
+    "mtime": 1776692832.7388353,
+    "hash": "a9f0a8b290a1c6e84a70f12e71d10e28"
+  },
+  "/root/projects/shrine/internal/engine/dryrun/dry_run_routing.go": {
+    "mtime": 1776692840.0309017,
+    "hash": "65ae47355a01bc1eea72053638e74647"
+  },
+  "/root/projects/shrine/internal/engine/dryrun/dry_run_container.go": {
+    "mtime": 1777320773.5446653,
+    "hash": "d1aa24b7ae4462b199270449f480b8dc"
+  },
+  "/root/projects/shrine/internal/engine/dryrun/dry_run_engine.go": {
+    "mtime": 1776693574.1821442,
+    "hash": "bed6401777ea58a3223a228de1db145d"
+  },
+  "/root/projects/shrine/internal/manifest/parser_test.go": {
+    "mtime": 1777721115.1152172,
+    "hash": "a9d25369b230a01c2d099d2096cfbe63"
+  },
+  "/root/projects/shrine/internal/manifest/scan.go": {
+    "mtime": 1777555046.8245356,
+    "hash": "6397b003607f2f54057293eff31aa1ee"
+  },
+  "/root/projects/shrine/internal/manifest/scan_test.go": {
+    "mtime": 1777555046.8247464,
+    "hash": "ba8ec0731299ad029b4988dd92c26db3"
+  },
+  "/root/projects/shrine/internal/manifest/validate.go": {
+    "mtime": 1777635971.022083,
+    "hash": "b094af1152e4e41048e595e3f2805101"
+  },
+  "/root/projects/shrine/internal/manifest/types.go": {
+    "mtime": 1777721115.1152883,
+    "hash": "1118fad640bfbdfe303f9d941fb4e2b3"
+  },
+  "/root/projects/shrine/internal/manifest/classify.go": {
+    "mtime": 1777555046.8245356,
+    "hash": "267647439a165701ba20865259352375"
+  },
+  "/root/projects/shrine/internal/manifest/validate_test.go": {
+    "mtime": 1777721115.115372,
+    "hash": "354268f73b268bb5f43a0060ee063089"
+  },
+  "/root/projects/shrine/internal/manifest/classify_test.go": {
+    "mtime": 1777555046.8245356,
+    "hash": "3189aaccad47324f2e461f5a2cc8317c"
+  },
+  "/root/projects/shrine/internal/manifest/parser.go": {
+    "mtime": 1777721115.1151302,
+    "hash": "b4c6ca77590c116d162e6af39833f36b"
+  },
+  "/root/projects/shrine/internal/manifest/template.go": {
+    "mtime": 1776681410.4584458,
+    "hash": "6fc0160b8e80a3c790804f2b40c88bbd"
+  },
+  "/root/projects/shrine/internal/plugins/gateway/traefik/routing.go": {
+    "mtime": 1777721115.115459,
+    "hash": "ba8f7eecaa1576395224eb554d787e8f"
+  },
+  "/root/projects/shrine/internal/plugins/gateway/traefik/config_gen_test.go": {
+    "mtime": 1777716536.138597,
+    "hash": "5adc7320da6f935334cbb4307a9f1157"
+  },
+  "/root/projects/shrine/internal/plugins/gateway/traefik/spec.go": {
+    "mtime": 1777721115.1156638,
+    "hash": "c71d8a608ed30be28a6d449fc5689199"
+  },
+  "/root/projects/shrine/internal/plugins/gateway/traefik/plugin_test.go": {
+    "mtime": 1777716536.138597,
+    "hash": "265dd6240c1e5c16dda23ee0218e8f28"
+  },
+  "/root/projects/shrine/internal/plugins/gateway/traefik/plugin.go": {
+    "mtime": 1777721115.115459,
+    "hash": "f9fa32cd50bda6b01c7177beae8d3639"
+  },
+  "/root/projects/shrine/internal/plugins/gateway/traefik/helpers_test.go": {
+    "mtime": 1777669907.2838583,
+    "hash": "e62111e312ed8a264a0cb3a2c98864f6"
+  },
+  "/root/projects/shrine/internal/plugins/gateway/traefik/config_gen.go": {
+    "mtime": 1777716536.138597,
+    "hash": "ac3c6f6c1fa6526dde34364763af48f1"
+  },
+  "/root/projects/shrine/internal/plugins/gateway/traefik/routing_test.go": {
+    "mtime": 1777721115.1156638,
+    "hash": "0340062fa4239ed26e67dc1be2ecb6c4"
+  },
+  "/root/projects/shrine/internal/state/deployments.go": {
+    "mtime": 1777716536.138597,
+    "hash": "af29a9df69d2c08dd62766d91fbc88c5"
+  },
+  "/root/projects/shrine/internal/state/deployments_test.go": {
+    "mtime": 1777716536.138597,
+    "hash": "94c50751da24383380f2eccba0bbb67c"
+  },
+  "/root/projects/shrine/internal/state/teams.go": {
+    "mtime": 1776415878.9552763,
+    "hash": "b60af05b34409e6e14427913cef6e391"
+  },
+  "/root/projects/shrine/internal/state/state.go": {
+    "mtime": 1776677173.24105,
+    "hash": "8e1cc1e40f59dd0f7f71974b6e3c129c"
+  },
+  "/root/projects/shrine/internal/state/subnets.go": {
+    "mtime": 1776871983.1979191,
+    "hash": "b5e9b8b85365b6aea82fa1f5e291408c"
+  },
+  "/root/projects/shrine/internal/state/local/subnets_test.go": {
+    "mtime": 1776872056.2914138,
+    "hash": "427c6a8ed4b9447f0d66acae279509bc"
+  },
+  "/root/projects/shrine/internal/state/local/teams_test.go": {
+    "mtime": 1776866923.9524262,
+    "hash": "3516fa5cd3094a31489c9fcc21ac980b"
+  },
+  "/root/projects/shrine/internal/state/local/local.go": {
+    "mtime": 1776677184.763971,
+    "hash": "6b3314545275e0fee7df996c0a5f2bce"
+  },
+  "/root/projects/shrine/internal/state/local/deployments.go": {
+    "mtime": 1777080191.3021326,
+    "hash": "ab66aadbee9f397936de2858f22b6238"
+  },
+  "/root/projects/shrine/internal/state/local/deployments_test.go": {
+    "mtime": 1777080436.5344434,
+    "hash": "d38bcedefbd93f1ff9351d8430fd7ac3"
+  },
+  "/root/projects/shrine/internal/state/local/secrets_test.go": {
+    "mtime": 1776641339.763464,
+    "hash": "030c73b084c52b0f0288a34562f9629e"
+  },
+  "/root/projects/shrine/internal/state/local/teams.go": {
+    "mtime": 1776869106.078105,
+    "hash": "639d1f8a1f15a9f82032e92b7e64f397"
+  },
+  "/root/projects/shrine/internal/state/local/subnets.go": {
+    "mtime": 1776871989.6928742,
+    "hash": "ec28514252629007b381a4f21f431bf0"
+  },
+  "/root/projects/shrine/internal/ui/terminal_logger.go": {
+    "mtime": 1777721115.1158378,
+    "hash": "1a4222c21cb3233372c652c6b1c9eb7d"
+  },
+  "/root/projects/shrine/internal/ui/file_logger.go": {
+    "mtime": 1776784663.0155616,
+    "hash": "b88bfff236eec07387ae3bafe310b140"
+  },
+  "/root/projects/shrine/internal/config/config.go": {
+    "mtime": 1778279690.3472495,
+    "hash": "cf170e2c76f36f5530afa0ca0d405a45"
+  },
+  "/root/projects/shrine/internal/config/plugin_traefik.go": {
+    "mtime": 1777716536.1375968,
+    "hash": "88109626a67453184dd5973379a75e2a"
+  },
+  "/root/projects/shrine/internal/config/utils_test.go": {
+    "mtime": 1777563661.2484205,
+    "hash": "55f64231384522450cb09d6c9301bf20"
+  },
+  "/root/projects/shrine/internal/config/config_test.go": {
+    "mtime": 1778279690.3473241,
+    "hash": "4bb22c29200bf69abee129c3f58f7106"
+  },
+  "/root/projects/shrine/internal/config/plugin_traefik_test.go": {
+    "mtime": 1777563661.2484205,
+    "hash": "d318c6b20a5a7804e659d59e2f35b46a"
+  },
+  "/root/projects/shrine/internal/config/utils.go": {
+    "mtime": 1777563661.2484205,
+    "hash": "4df3ddae34d29fe1a25c3e77e0e060da"
+  },
+  "/root/projects/shrine/internal/config/paths.go": {
+    "mtime": 1777333637.9454348,
+    "hash": "511575e64d69f808cf05671bdb6d0a65"
+  },
+  "/root/projects/shrine/internal/handler/status_test.go": {
+    "mtime": 1777320773.5452404,
+    "hash": "b8e8788ede536abfe6db67e467303d90"
+  },
+  "/root/projects/shrine/internal/handler/status.go": {
+    "mtime": 1777320773.5451698,
+    "hash": "3e189a841f34130c9a0127fdcc1f26e9"
+  },
+  "/root/projects/shrine/internal/handler/deploy.go": {
+    "mtime": 1778279690.3473241,
+    "hash": "89d4d566a6390eb7784ef5c285bee6c4"
+  },
+  "/root/projects/shrine/internal/handler/apply.go": {
+    "mtime": 1778279690.3473241,
+    "hash": "ae5bc2835c8dadc39e164c1ef92b0f37"
+  },
+  "/root/projects/shrine/internal/handler/deployments.go": {
+    "mtime": 1777320773.54481,
+    "hash": "0b41d34375062befe784228a2b7e71b5"
+  },
+  "/root/projects/shrine/internal/handler/teardown.go": {
+    "mtime": 1777669907.2838583,
+    "hash": "3d5ed5f9a5cd17fea7f35661cf63469c"
+  },
+  "/root/projects/shrine/internal/handler/resources.go": {
+    "mtime": 1776710270.083237,
+    "hash": "79d3f55a8e78f8889e8bcaabb1ea4f57"
+  },
+  "/root/projects/shrine/internal/handler/teams.go": {
+    "mtime": 1777555046.824474,
+    "hash": "5c404966e7dcd093d2dcb2b884149384"
+  },
+  "/root/projects/shrine/internal/handler/apps.go": {
+    "mtime": 1776710262.8102872,
+    "hash": "ee131d58834bde9e3ab0100678efb928"
+  },
+  "/root/projects/shrine/internal/updater/updater.go": {
+    "mtime": 1777333637.9474247,
+    "hash": "78cb431398dc47599cd96e3ca4cebea8"
+  }
+}
