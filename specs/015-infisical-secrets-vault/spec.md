@@ -25,15 +25,15 @@ As a Shrine operator, I want to reference secrets stored in an external vault fr
 
 ### User Story 2 - Configure Vault Plugin in shrine.yml (Priority: P1)
 
-As a Shrine operator, I want to declare which secrets vault plugin to use (e.g., Infisical) and its connection parameters in shrine.yml, so that Shrine knows how to reach the vault without any changes to application manifests.
+As a Shrine operator, I want to declare which secrets vault plugin to use (Infisical is the only available now) and its connection parameters in shrine.yml, so that Shrine knows how to reach the vault without any changes to application manifests.
 
 **Why this priority**: Required for the integration to be discoverable and operable; no other story works without it.
 
 **Independent Test**: Add a `plugins.secrets.infisical` block with url and token to shrine.yml, then run `shrine dry-run` — it should not error on the secrets plugin config block.
-
+   
 **Acceptance Scenarios**:
 
-1. **Given** shrine.yml contains a valid `plugins.secrets.infisical` block with `url` and `token`, **When** Shrine loads config, **Then** the Infisical connection parameters are accepted and the vault plugin is activated.
+1. **Given** shrine.yml contains a valid `plugins.secrets.infisical` block with `url`, `client-id`, and `client-secret`, **When** Shrine loads config, **Then** the Infisical connection parameters are accepted and the vault plugin is activated.
 2. **Given** no secrets plugin is configured in shrine.yml, **When** any manifest uses `valueFrom: vault:...`, **Then** the deploy fails with a clear error indicating no vault backend is configured.
 3. **Given** shrine.yml contains a secrets plugin block with an invalid or unreachable URL, **When** `shrine apply` runs, **Then** Shrine reports a connectivity error before any container changes are made.
 
@@ -95,8 +95,8 @@ As a Shrine operator, I want to be able to change the vault backend (e.g., from 
 ### Key Entities
 
 - **SecretsPlugin** (interface): The provider-agnostic contract that any vault backend must implement — at minimum, fetching a secret by path and reporting whether the plugin is active.
-- **SecretsPluginConfig**: The shrine.yml block that selects and configures the active secrets plugin (e.g., `plugins.secrets.infisical` with `url` and `token`).
-- **VaultSecretRef**: A parsed reference of the form `<path>` extracted from a `valueFrom: vault:<path>` value, passed opaquely to the active plugin.
+- **SecretsPluginConfig**: The shrine.yml block that selects and configures the active secrets plugin. For Infisical this includes `url` (self-hosted instance URL), `client-id`, and `client-secret` (Machine Identity Universal Auth credentials — service tokens are deprecated upstream).
+- **VaultSecretRef**: A parsed reference of the form `<path>` extracted from a `valueFrom: vault:<path>` value, passed opaquely to the active plugin. For Infisical the path convention is `<project>/<environment>/<secret-name>`.
 
 ## Success Criteria *(mandatory)*
 
@@ -112,8 +112,24 @@ As a Shrine operator, I want to be able to change the vault backend (e.g., from 
 ## Assumptions
 
 - The vault backend (Infisical for v1) is already running and accessible from the Shrine host before `shrine apply` is invoked; Shrine does not manage its lifecycle.
-- The access token in shrine.yml is a long-lived service token or machine identity token with read access to the referenced paths.
-- The path structure within `vault:<path>` is treated as an opaque string by Shrine's core; interpretation is delegated entirely to the active plugin.
+- Authentication to Infisical uses **Machine Identity Universal Auth** (`client-id` + `client-secret`). Service tokens are not used — they are deprecated upstream in favor of Machine Identities.
+- The path structure within `vault:<path>` is treated as an opaque string by Shrine's core; interpretation is delegated entirely to the active plugin. For Infisical, the convention is `<project>/<environment>/<secret-name>`.
 - Resource manifests are out of scope for `valueFrom: vault:` in v1 — only Application env vars are supported initially.
-- The shrine.yml token is stored in plaintext on the operator's machine; secret encryption at rest for shrine.yml is out of scope.
+- The `client-id` and `client-secret` in shrine.yml are stored in plaintext on the operator's machine; secret encryption at rest for shrine.yml is out of scope.
 - Infisical is the only secrets plugin shipped in v1; the interface is designed for extensibility but no second implementation is required to ship.
+
+## Testing Setup (Infisical Docker Compose)
+
+For local development and integration testing, Infisical requires three services:
+
+- **infisical** — the main backend, exposed on port 80 (or a chosen host port)
+- **postgres** — secrets database (internal only)
+- **redis** — caching and job queues (internal only)
+
+Minimum environment variables for the Infisical container:
+- `ENCRYPTION_KEY` — generated once via `openssl rand -hex 32`; **must be backed up** — losing it makes all stored secrets unrecoverable
+- `DATABASE_URL` — Postgres connection string
+- `REDIS_URL` — Redis connection string
+- `SITE_URL` — the base URL Infisical is reachable at (e.g., `http://localhost:8080`)
+
+The official Docker Compose file and `.env.example` are maintained in the Infisical GitHub repository and should be used as the starting point for the test environment.
