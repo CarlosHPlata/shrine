@@ -86,12 +86,13 @@ spec:
 | `spec.outputs[].value` | no* | — | Static string value. Mutually exclusive with `generated` and `template`. |
 | `spec.outputs[].generated` | no* | — | Generate a random value at deploy time. |
 | `spec.outputs[].template` | no* | — | Go `text/template` expression referencing sibling output names, e.g. `postgres://postgres:{{.password}}@{{.host}}:{{.port}}/app`. |
+| `spec.outputs[].valueFrom` | no* | — | Fetch value from the active secrets vault at deploy time: `vault:<project>/<environment>/<secret-name>`. Mutually exclusive with `value`, `generated`, and `template`. |
 | `spec.networking.exposeToPlatform` | no | `false` | Attach the resource to the shared platform network so gateway plugins can reach it. |
 | `spec.volumes[].name` | yes (per entry) | — | Logical volume name; must be unique within the manifest. |
 | `spec.volumes[].mountPath` | yes (per entry) | — | Absolute path inside the container. |
 | `spec.imagePullPolicy` | no | `Always` for `:latest`, `IfNotPresent` otherwise | Docker image pull policy. |
 
-\* Each output (except the built-ins `host` and `port`) must set exactly one of `value`, `generated`, or `template`.
+\* Each output (except the built-ins `host` and `port`) must set exactly one of `value`, `generated`, `template`, or `valueFrom`.
 
 ## Application
 
@@ -169,12 +170,12 @@ Each env var must set exactly one of `value`, `valueFrom`, or `template`.
 |-------|-------------|
 | `name` | Environment variable name passed to the container. |
 | `value` | Static string value. |
-| `valueFrom` | Reference to a Resource output: `resource.<resource-name>.<output-name>`. |
+| `valueFrom` | Reference to a Resource output (`resource.<resource-name>.<output-name>`) or a vault secret (`vault:<project>/<environment>/<secret-name>`). |
 | `template` | Go `text/template` expression; can reference other env vars or resource outputs by name. |
 
 ## Templating
 
-Shrine resolves `valueFrom` references and `template` expressions at deploy time using Go `text/template`. The dependency graph is topologically sorted (Kahn's algorithm) so references resolve in the correct order. Circular references are a validation error.
+Shrine resolves `valueFrom` references, vault-sourced values, and `template` expressions at deploy time using Go `text/template`. Vault secrets (any `valueFrom` field whose value starts with the `vault:` prefix) are fetched from the configured secrets plugin and treated as resolved string values before template expressions are evaluated. The dependency graph is topologically sorted (Kahn's algorithm) so all three resolution mechanisms — `valueFrom`, vault fetch, and `template` — resolve in the correct order. Circular references are a validation error.
 
 ## Examples
 

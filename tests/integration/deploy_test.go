@@ -234,3 +234,39 @@ func TestDeploy(t *testing.T) {
 		tc.AssertContainerRunning(testTeam + ".whoami")
 	})
 }
+
+// TestDeploy_VaultSecrets verifies vault secret resolution end-to-end: a
+// Resource output and an Application env var that both carry a vault: reference
+// are resolved against a live Infisical instance, and the resolved values are
+// injected into the deployed container.  This test is intentionally skipped in
+// normal local runs and must be triggered explicitly (e.g. from the CI pipeline
+// that provisions the Infisical side-stack defined in
+// tests/testdata/deploy/vault-secrets/docker-compose.yml).
+func TestDeploy_VaultSecrets(t *testing.T) {
+	if os.Getenv("INFISICAL_TEST_URL") == "" {
+		t.Skip("vault integration test: set INFISICAL_TEST_URL and start tests/testdata/deploy/vault-secrets/docker-compose.yml to run")
+	}
+
+	s := NewDockerSuite(t, "vault-team")
+
+	s.BeforeEach(func(tc *TestCase) {
+		tc.StateDir = tc.TempDir()
+		SeedSubnetState(tc)
+		tc.Run("apply", "teams",
+			"--path", fixturesPath("vault-secrets", "manifests"),
+			"--state-dir", tc.StateDir,
+		).AssertSuccess()
+	})
+
+	s.Test("should resolve vault-backed resource output and inject into app container", func(tc *TestCase) {
+		tc.Run("deploy",
+			"--path", fixturesPath("vault-secrets", "manifests"),
+			"--state-dir", tc.StateDir,
+			"--config", fixturesPath("vault-secrets", "shrine.yml"),
+		).AssertSuccess()
+
+		tc.AssertContainerRunning("vault-team.test-app")
+		tc.AssertContainerEnvVarNotEmpty("vault-team.test-app", "DB_PASSWORD")
+		tc.AssertContainerEnvVarNotEmpty("vault-team.test-app", "API_KEY")
+	})
+}

@@ -8,6 +8,7 @@ import (
 	"github.com/CarlosHPlata/shrine/internal/engine"
 	"github.com/CarlosHPlata/shrine/internal/engine/local"
 	"github.com/CarlosHPlata/shrine/internal/planner"
+	infisicalplugin "github.com/CarlosHPlata/shrine/internal/plugins/secrets/infisical"
 	"github.com/CarlosHPlata/shrine/internal/state"
 	"github.com/CarlosHPlata/shrine/internal/ui"
 )
@@ -50,7 +51,17 @@ func ApplySingle(opts ApplySingleOptions) error {
 
 	observer := engine.MultiObserver{terminal, fileLogger}
 
-	deployEngine, err := local.NewLocalEngine(opts.Store, opts.Config.Registries, observer)
+	vaultPlugin, err := infisicalplugin.New(opts.Config.Plugins.Secrets.Infisical)
+	if err != nil {
+		return err
+	}
+
+	deployEngine, err := local.NewLocalEngine(local.EngineOptions{
+		Store:      opts.Store,
+		Registries: opts.Config.Registries,
+		Observer:   observer,
+		Vault:      vaultPlugin,
+	})
 	if err != nil {
 		return err
 	}

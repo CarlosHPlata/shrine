@@ -22,6 +22,11 @@ type Config struct {
 
 type PluginsConfig struct {
 	Gateway GatewayPluginsConfig `yaml:"gateway,omitempty"`
+	Secrets SecretsPluginsConfig `yaml:"secrets,omitempty"`
+}
+
+type SecretsPluginsConfig struct {
+	Infisical *InfisicalPluginConfig `yaml:"infisical,omitempty"`
 }
 
 type GatewayPluginsConfig struct {
@@ -58,7 +63,24 @@ func Load(configFile string) (*Config, error) {
 		return nil, err
 	}
 
+	if err := cfg.validateSecretsPlugins(); err != nil {
+		return nil, err
+	}
+
 	return &cfg, nil
+}
+
+// validateSecretsPlugins returns an error if more than one secrets plugin block
+// is declared in shrine.yml.
+func (c *Config) validateSecretsPlugins() error {
+	count := 0
+	if c.Plugins.Secrets.Infisical != nil {
+		count++
+	}
+	if count > 1 {
+		return fmt.Errorf("plugins.secrets: only one secrets plugin may be active at a time; multiple providers declared")
+	}
+	return nil
 }
 
 // ValidateRegistries checks that all registry aliases are unique and well-formed.

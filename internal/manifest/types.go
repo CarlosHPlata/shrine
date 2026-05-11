@@ -75,11 +75,13 @@ type ApplicationSpec struct {
 // Output declares a named value that a Resource exposes to consumers.
 // If Generated is true, the value is created at deploy time (e.g. passwords).
 // If Value is set, it's a static default (e.g. a port number).
+// If ValueFrom is set, the value is fetched from the active secrets vault.
 type Output struct {
 	Name      string `yaml:"name" json:"name"`
 	Value     string `yaml:"value,omitempty" json:"value,omitempty"`
 	Generated bool   `yaml:"generated,omitempty" json:"generated,omitempty"`
 	Template  string `yaml:"template,omitempty" json:"template,omitempty"`
+	ValueFrom string `yaml:"valueFrom,omitempty" json:"valueFrom,omitempty"`
 }
 
 type ResourceSpec struct {

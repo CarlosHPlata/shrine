@@ -1,14 +1,14 @@
 package resolver
 
 import (
+	"errors"
 	"strings"
 	"testing"
 
 	"github.com/CarlosHPlata/shrine/internal/manifest"
 )
 
-// fakeSecrets is a minimal in-memory implementation of state.SecretStore
-// sufficient for exercising GetOrGenerate in these tests.
+// fakeSecrets is a minimal in-memory implementation of state.SecretStore.
 type fakeSecrets struct {
 	data map[string]map[string]string
 }
@@ -37,6 +37,39 @@ func (f *fakeSecrets) List(team string) (map[string]string, error) {
 	return f.data[team], nil
 }
 
+// fakeVault implements secrets.SecretsPlugin for testing.
+type fakeVault struct {
+	data map[string]string
+	err  error
+}
+
+func newFakeVault(kv ...string) *fakeVault {
+	m := make(map[string]string)
+	for i := 0; i+1 < len(kv); i += 2 {
+		m[kv[i]] = kv[i+1]
+	}
+	return &fakeVault{data: m}
+}
+
+func (v *fakeVault) IsActive() bool { return true }
+
+func (v *fakeVault) GetSecret(path string) (string, error) {
+	if v.err != nil {
+		return "", v.err
+	}
+	val, ok := v.data[path]
+	if !ok {
+		return "", errors.New("vault: secret not found: " + path)
+	}
+	return val, nil
+}
+
+// nilVault simulates an unconfigured vault (IsActive returns false).
+type nilVault struct{}
+
+func (nilVault) IsActive() bool              { return false }
+func (nilVault) GetSecret(_ string) (string, error) { return "", errors.New("inactive") }
+
 func TestResolveResource_MixedOutputs(t *testing.T) {
 	res := &manifest.ResourceManifest{
 		Metadata: manifest.Metadata{Name: "hello-db", Owner: "team-a"},
@@ -51,7 +84,7 @@ func TestResolveResource_MixedOutputs(t *testing.T) {
 		},
 	}
 
-	r := NewLiveResolver(newFakeSecrets())
+	r := NewLiveResolver(newFakeSecrets(), nil)
 	values, err := r.ResolveResource(res)
 	if err != nil {
 		t.Fatalf("ResolveResource returned error: %v", err)
@@ -72,8 +105,77 @@ func TestResolveResource_MixedOutputs(t *testing.T) {
 	}
 }
 
+func TestResolveResource_VaultOutput(t *testing.T) {
+	vault := newFakeVault("myproject/prod/DB_PASS", "s3cr3t")
+	res := &manifest.ResourceManifest{
+		Metadata: manifest.Metadata{Name: "db", Owner: "team-a"},
+		Spec: manifest.ResourceSpec{
+			Outputs: []manifest.Output{
+				{Name: "host"},
+				{Name: "password", ValueFrom: "vault:myproject/prod/DB_PASS"},
+			},
+		},
+	}
+
+	r := NewLiveResolver(newFakeSecrets(), vault)
+	values, err := r.ResolveResource(res)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if values["password"] != "s3cr3t" {
+		t.Errorf("password = %q, want %q", values["password"], "s3cr3t")
+	}
+}
+
+func TestResolveResource_VaultOutput_NoPlugin(t *testing.T) {
+	res := &manifest.ResourceManifest{
+		Metadata: manifest.Metadata{Name: "db", Owner: "team-a"},
+		Spec: manifest.ResourceSpec{
+			Outputs: []manifest.Output{
+				{Name: "password", ValueFrom: "vault:proj/prod/PASS"},
+			},
+		},
+	}
+
+	t.Run("nil vault", func(t *testing.T) {
+		r := NewLiveResolver(newFakeSecrets(), nil)
+		_, err := r.ResolveResource(res)
+		if err == nil || !strings.Contains(err.Error(), "no secrets plugin") {
+			t.Errorf("expected no-plugin error, got: %v", err)
+		}
+	})
+
+	t.Run("inactive vault", func(t *testing.T) {
+		r := NewLiveResolver(newFakeSecrets(), nilVault{})
+		_, err := r.ResolveResource(res)
+		if err == nil || !strings.Contains(err.Error(), "no secrets plugin") {
+			t.Errorf("expected no-plugin error, got: %v", err)
+		}
+	})
+}
+
+func TestResolveResource_VaultOutput_MissingSecret(t *testing.T) {
+	vault := newFakeVault() // empty vault
+	res := &manifest.ResourceManifest{
+		Metadata: manifest.Metadata{Name: "db", Owner: "team-a"},
+		Spec: manifest.ResourceSpec{
+			Outputs: []manifest.Output{
+				{Name: "password", ValueFrom: "vault:proj/prod/MISSING"},
+			},
+		},
+	}
+
+	r := NewLiveResolver(newFakeSecrets(), vault)
+	_, err := r.ResolveResource(res)
+	if err == nil {
+		t.Fatal("expected error for missing secret, got nil")
+	}
+	if !strings.Contains(err.Error(), "proj/prod/MISSING") {
+		t.Errorf("error should contain secret path, got: %v", err)
+	}
+}
+
 func TestResolveResource_TemplateChain(t *testing.T) {
-	// a depends on b, b depends on c — topological order must resolve all.
 	res := &manifest.ResourceManifest{
 		Metadata: manifest.Metadata{Name: "chain", Owner: "team-a"},
 		Spec: manifest.ResourceSpec{
@@ -85,7 +187,7 @@ func TestResolveResource_TemplateChain(t *testing.T) {
 		},
 	}
 
-	r := NewLiveResolver(newFakeSecrets())
+	r := NewLiveResolver(newFakeSecrets(), nil)
 	values, err := r.ResolveResource(res)
 	if err != nil {
 		t.Fatalf("ResolveResource returned error: %v", err)
@@ -106,7 +208,7 @@ func TestResolveResource_TemplateCycle(t *testing.T) {
 		},
 	}
 
-	r := NewLiveResolver(newFakeSecrets())
+	r := NewLiveResolver(newFakeSecrets(), nil)
 	_, err := r.ResolveResource(res)
 	if err == nil {
 		t.Fatal("expected cycle error, got nil")
@@ -125,7 +227,7 @@ func TestResolveResource_BareNonHostFails(t *testing.T) {
 			},
 		},
 	}
-	_, err := NewLiveResolver(newFakeSecrets()).ResolveResource(res)
+	_, err := NewLiveResolver(newFakeSecrets(), nil).ResolveResource(res)
 	if err == nil || !strings.Contains(err.Error(), "bare output") {
 		t.Errorf("expected bare-output error, got: %v", err)
 	}
@@ -146,7 +248,7 @@ func TestResolveApplication_StaticAndValueFrom(t *testing.T) {
 		"db": {"url": "postgres://..."},
 	}
 
-	env, err := NewLiveResolver(nil).ResolveApplication(app, ResolvedDependencies{Resources: resolved})
+	env, err := NewLiveResolver(nil, nil).ResolveApplication(app, ResolvedDependencies{Resources: resolved})
 	if err != nil {
 		t.Fatalf("ResolveApplication returned error: %v", err)
 	}
@@ -155,6 +257,66 @@ func TestResolveApplication_StaticAndValueFrom(t *testing.T) {
 	}
 	if env["DATABASE_URL"] != "postgres://..." {
 		t.Errorf("DATABASE_URL = %q, want %q", env["DATABASE_URL"], "postgres://...")
+	}
+}
+
+func TestResolveApplication_VaultEnv(t *testing.T) {
+	vault := newFakeVault("myproject/prod/API_KEY", "key-xyz")
+	app := &manifest.ApplicationManifest{
+		Metadata: manifest.Metadata{Name: "api", Owner: "team-a"},
+		Spec: manifest.ApplicationSpec{
+			Env: []manifest.EnvVar{
+				{Name: "STATIC", Value: "hello"},
+				{Name: "API_KEY", ValueFrom: "vault:myproject/prod/API_KEY"},
+			},
+		},
+	}
+
+	env, err := NewLiveResolver(nil, vault).ResolveApplication(app, ResolvedDependencies{})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if env["API_KEY"] != "key-xyz" {
+		t.Errorf("API_KEY = %q, want key-xyz", env["API_KEY"])
+	}
+	if env["STATIC"] != "hello" {
+		t.Errorf("STATIC = %q, want hello", env["STATIC"])
+	}
+}
+
+func TestResolveApplication_VaultEnv_NoPlugin(t *testing.T) {
+	app := &manifest.ApplicationManifest{
+		Metadata: manifest.Metadata{Name: "api", Owner: "team-a"},
+		Spec: manifest.ApplicationSpec{
+			Env: []manifest.EnvVar{
+				{Name: "API_KEY", ValueFrom: "vault:proj/prod/KEY"},
+			},
+		},
+	}
+
+	_, err := NewLiveResolver(nil, nil).ResolveApplication(app, ResolvedDependencies{})
+	if err == nil || !strings.Contains(err.Error(), "no secrets plugin") {
+		t.Errorf("expected no-plugin error, got: %v", err)
+	}
+}
+
+func TestResolveApplication_VaultEnv_ErrorContainsPath(t *testing.T) {
+	vault := newFakeVault() // empty vault — will return error
+	app := &manifest.ApplicationManifest{
+		Metadata: manifest.Metadata{Name: "api", Owner: "team-a"},
+		Spec: manifest.ApplicationSpec{
+			Env: []manifest.EnvVar{
+				{Name: "API_KEY", ValueFrom: "vault:proj/prod/MISSING"},
+			},
+		},
+	}
+
+	_, err := NewLiveResolver(nil, vault).ResolveApplication(app, ResolvedDependencies{})
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	if !strings.Contains(err.Error(), "proj/prod/MISSING") {
+		t.Errorf("error should contain secret path, got: %v", err)
 	}
 }
 
@@ -167,11 +329,12 @@ func TestResolveApplication_MissingResource(t *testing.T) {
 			},
 		},
 	}
-	_, err := NewLiveResolver(nil).ResolveApplication(app, ResolvedDependencies{Resources: map[string]map[string]string{}})
+	_, err := NewLiveResolver(nil, nil).ResolveApplication(app, ResolvedDependencies{Resources: map[string]map[string]string{}})
 	if err == nil || !strings.Contains(err.Error(), "unknown resource") {
 		t.Errorf("expected unknown resource error, got: %v", err)
 	}
 }
+
 func TestResolveApplication_Templates(t *testing.T) {
 	t.Run("simple template", func(t *testing.T) {
 		app := &manifest.ApplicationManifest{
@@ -183,7 +346,7 @@ func TestResolveApplication_Templates(t *testing.T) {
 				},
 			},
 		}
-		env, err := NewLiveResolver(nil).ResolveApplication(app, ResolvedDependencies{})
+		env, err := NewLiveResolver(nil, nil).ResolveApplication(app, ResolvedDependencies{})
 		if err != nil {
 			t.Fatalf("error: %v", err)
 		}
@@ -205,7 +368,7 @@ func TestResolveApplication_Templates(t *testing.T) {
 		resolved := map[string]map[string]string{
 			"db": {"host": "db-server"},
 		}
-		env, err := NewLiveResolver(nil).ResolveApplication(app, ResolvedDependencies{Resources: resolved})
+		env, err := NewLiveResolver(nil, nil).ResolveApplication(app, ResolvedDependencies{Resources: resolved})
 		if err != nil {
 			t.Fatalf("error: %v", err)
 		}
@@ -225,7 +388,7 @@ func TestResolveApplication_Templates(t *testing.T) {
 				},
 			},
 		}
-		env, err := NewLiveResolver(nil).ResolveApplication(app, ResolvedDependencies{})
+		env, err := NewLiveResolver(nil, nil).ResolveApplication(app, ResolvedDependencies{})
 		if err != nil {
 			t.Fatalf("error: %v", err)
 		}
@@ -244,7 +407,7 @@ func TestResolveApplication_Templates(t *testing.T) {
 				},
 			},
 		}
-		_, err := NewLiveResolver(nil).ResolveApplication(app, ResolvedDependencies{})
+		_, err := NewLiveResolver(nil, nil).ResolveApplication(app, ResolvedDependencies{})
 		if err == nil || !strings.Contains(err.Error(), "template cycle") {
 			t.Errorf("expected cycle error, got: %v", err)
 		}
@@ -259,7 +422,7 @@ func TestResolveApplication_Templates(t *testing.T) {
 				},
 			},
 		}
-		env, err := NewLiveResolver(nil).ResolveApplication(app, ResolvedDependencies{})
+		env, err := NewLiveResolver(nil, nil).ResolveApplication(app, ResolvedDependencies{})
 		if err != nil {
 			t.Fatalf("error: %v", err)
 		}
@@ -280,7 +443,7 @@ func TestResolveApplication_Templates(t *testing.T) {
 		resolvedApps := map[string]map[string]string{
 			"producer": {"host": "team-b.producer", "port": "80"},
 		}
-		env, err := NewLiveResolver(nil).ResolveApplication(app, ResolvedDependencies{Applications: resolvedApps})
+		env, err := NewLiveResolver(nil, nil).ResolveApplication(app, ResolvedDependencies{Applications: resolvedApps})
 		if err != nil {
 			t.Fatalf("error: %v", err)
 		}
@@ -307,7 +470,7 @@ func TestResolveApplication_AppBuiltins(t *testing.T) {
 		},
 	}
 
-	env, err := NewLiveResolver(nil).ResolveApplication(app, deps)
+	env, err := NewLiveResolver(nil, nil).ResolveApplication(app, deps)
 	if err != nil {
 		t.Fatalf("ResolveApplication returned error: %v", err)
 	}
@@ -328,9 +491,77 @@ func TestResolveApplication_AppBuiltins(t *testing.T) {
 				},
 			},
 		}
-		_, err := NewLiveResolver(nil).ResolveApplication(badApp, deps)
+		_, err := NewLiveResolver(nil, nil).ResolveApplication(badApp, deps)
 		if err == nil || !strings.Contains(err.Error(), "has no resolved output \"url\"") {
 			t.Errorf("expected missing output error, got: %v", err)
 		}
 	})
+}
+
+// --- DryRunResolver vault placeholder tests (T018) ---
+
+func TestDryRunResolver_VaultPlaceholder_AppEnv(t *testing.T) {
+	app := &manifest.ApplicationManifest{
+		Metadata: manifest.Metadata{Name: "api", Owner: "team-a"},
+		Spec: manifest.ApplicationSpec{
+			Env: []manifest.EnvVar{
+				{Name: "STATIC", Value: "hello"},
+				{Name: "API_KEY", ValueFrom: "vault:proj/prod/API_KEY"},
+			},
+		},
+	}
+
+	r := NewDryRunResolver()
+	env, err := r.ResolveApplication(app, ResolvedDependencies{})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if env["STATIC"] != "hello" {
+		t.Errorf("STATIC = %q, want hello", env["STATIC"])
+	}
+	if env["API_KEY"] != "[VAULT:proj/prod/API_KEY]" {
+		t.Errorf("API_KEY = %q, want [VAULT:proj/prod/API_KEY]", env["API_KEY"])
+	}
+}
+
+func TestDryRunResolver_VaultPlaceholder_ResourceOutput(t *testing.T) {
+	res := &manifest.ResourceManifest{
+		Metadata: manifest.Metadata{Name: "db", Owner: "team-a"},
+		Spec: manifest.ResourceSpec{
+			Outputs: []manifest.Output{
+				{Name: "host"},
+				{Name: "password", ValueFrom: "vault:proj/prod/DB_PASS"},
+			},
+		},
+	}
+
+	r := NewDryRunResolver()
+	values, err := r.ResolveResource(res)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if values["password"] != "[VAULT:proj/prod/DB_PASS]" {
+		t.Errorf("password = %q, want [VAULT:proj/prod/DB_PASS]", values["password"])
+	}
+}
+
+func TestDryRunResolver_VaultPlaceholder_NoNetworkCall(t *testing.T) {
+	// This test simply verifies dry-run does not panic or error
+	// even when there is no live vault configured.
+	app := &manifest.ApplicationManifest{
+		Metadata: manifest.Metadata{Name: "api", Owner: "team-a"},
+		Spec: manifest.ApplicationSpec{
+			Env: []manifest.EnvVar{
+				{Name: "SECRET", ValueFrom: "vault:a/b/c"},
+			},
+		},
+	}
+	r := NewDryRunResolver()
+	env, err := r.ResolveApplication(app, ResolvedDependencies{})
+	if err != nil {
+		t.Fatalf("dry-run must not error without vault: %v", err)
+	}
+	if env["SECRET"] != "[VAULT:a/b/c]" {
+		t.Errorf("SECRET = %q, want [VAULT:a/b/c]", env["SECRET"])
+	}
 }

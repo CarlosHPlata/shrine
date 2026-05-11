@@ -4,28 +4,34 @@ import (
 	"github.com/CarlosHPlata/shrine/internal/config"
 	"github.com/CarlosHPlata/shrine/internal/engine"
 	"github.com/CarlosHPlata/shrine/internal/engine/local/dockercontainer"
+	"github.com/CarlosHPlata/shrine/internal/plugins/secrets"
 	"github.com/CarlosHPlata/shrine/internal/resolver"
 	"github.com/CarlosHPlata/shrine/internal/state"
 )
 
-func NewLocalEngine(store *state.Store, registries []config.RegistryConfig, observer engine.Observer) (*engine.Engine, error) {
-	return NewLocalEngineWithRouting(store, registries, observer, nil)
+// EngineOptions bundles the inputs required to construct a local engine.
+type EngineOptions struct {
+	Store      *state.Store
+	Registries []config.RegistryConfig
+	Observer   engine.Observer
+	Routing    engine.RoutingBackend  // nil disables routing
+	Vault      secrets.SecretsPlugin  // nil disables vault resolution
 }
 
-func NewLocalEngineWithRouting(store *state.Store, registries []config.RegistryConfig, observer engine.Observer, routing engine.RoutingBackend) (*engine.Engine, error) {
-	resolver := resolver.NewLiveResolver(store.Secrets)
+func NewLocalEngine(opts EngineOptions) (*engine.Engine, error) {
+	res := resolver.NewLiveResolver(opts.Store.Secrets, opts.Vault)
 
-	containerBackend, err := dockercontainer.NewDockerBackend(store, registries, observer)
+	containerBackend, err := dockercontainer.NewDockerBackend(opts.Store, opts.Registries, opts.Observer)
 	if err != nil {
 		return nil, err
 	}
 
 	return &engine.Engine{
 		Container: containerBackend,
-		Routing:   routing,
+		Routing:   opts.Routing,
 		DNS:       nil,
-		Resolver:  resolver,
-		Observer:  observer,
+		Resolver:  res,
+		Observer:  opts.Observer,
 	}, nil
 }
 

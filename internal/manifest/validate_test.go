@@ -116,22 +116,32 @@ func TestValidate_ResourceOutputRules(t *testing.T) {
 		{
 			name:    "host with value is rejected",
 			outputs: []Output{{Name: "host", Value: "x"}},
-			wantErr: "is a CLI built-in and must not set value/generated/template",
+			wantErr: "is a CLI built-in and must not set value/generated/template/valueFrom",
 		},
 		{
 			name:    "host with template is rejected",
 			outputs: []Output{{Name: "host", Template: "{{.name}}"}},
-			wantErr: "is a CLI built-in and must not set value/generated/template",
+			wantErr: "is a CLI built-in and must not set value/generated/template/valueFrom",
 		},
 		{
 			name:    "non-host bare output is rejected",
 			outputs: []Output{{Name: "mystery"}},
-			wantErr: "must set one of value/generated/template",
+			wantErr: "must set one of value/generated/template/valueFrom",
 		},
 		{
 			name:    "conflicting kinds are rejected",
 			outputs: []Output{{Name: "url", Value: "x", Template: "{{.name}}"}},
-			wantErr: "value/generated/template are mutually exclusive",
+			wantErr: "value/generated/template/valueFrom are mutually exclusive",
+		},
+		{
+			name:    "vault valueFrom is accepted",
+			outputs: []Output{{Name: "password", ValueFrom: "vault:proj/prod/PASS"}},
+			wantErr: "",
+		},
+		{
+			name:    "vault valueFrom conflicts with value",
+			outputs: []Output{{Name: "password", Value: "x", ValueFrom: "vault:proj/prod/PASS"}},
+			wantErr: "value/generated/template/valueFrom are mutually exclusive",
 		},
 	}
 
@@ -145,7 +155,11 @@ func TestValidate_ResourceOutputRules(t *testing.T) {
 				},
 			}
 			err := Validate(m)
-			if err == nil || !strings.Contains(err.Error(), tc.wantErr) {
+			if tc.wantErr == "" {
+				if err != nil {
+					t.Errorf("expected no error, got: %v", err)
+				}
+			} else if err == nil || !strings.Contains(err.Error(), tc.wantErr) {
 				t.Errorf("expected error containing %q, got: %v", tc.wantErr, err)
 			}
 		})

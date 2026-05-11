@@ -10,6 +10,7 @@ import (
 	"github.com/CarlosHPlata/shrine/internal/engine/local"
 	"github.com/CarlosHPlata/shrine/internal/planner"
 	"github.com/CarlosHPlata/shrine/internal/plugins/gateway/traefik"
+	infisicalplugin "github.com/CarlosHPlata/shrine/internal/plugins/secrets/infisical"
 	"github.com/CarlosHPlata/shrine/internal/state"
 	"github.com/CarlosHPlata/shrine/internal/ui"
 )
@@ -89,6 +90,11 @@ func Deploy(opts DeployOptions) error {
 		return err
 	}
 
+	vaultPlugin, err := infisicalplugin.New(opts.Config.Plugins.Secrets.Infisical)
+	if err != nil {
+		return err
+	}
+
 	result := planner.Plan(opts.ManifestDir, opts.Store.Teams, opts.Config.Registries)
 
 	if result.Error != nil {
@@ -121,7 +127,13 @@ func Deploy(opts DeployOptions) error {
 		}
 	}
 
-	deployEngine, err := local.NewLocalEngineWithRouting(opts.Store, opts.Config.Registries, observer, routing)
+	deployEngine, err := local.NewLocalEngine(local.EngineOptions{
+		Store:      opts.Store,
+		Registries: opts.Config.Registries,
+		Observer:   observer,
+		Routing:    routing,
+		Vault:      vaultPlugin,
+	})
 	if err != nil {
 		return err
 	}

@@ -1,0 +1,6 @@
+plugins:
+  secrets:
+    infisical:
+      url: http://localhost:8080
+      client-id: "test-client-id"
+      client-secret: "test-client-secret"

@@ -18,7 +18,7 @@
 
 **Purpose**: Add the Infisical Go SDK dependency before any code is written.
 
-- [ ] T001 Add `github.com/infisical/go-sdk` dependency by running `go get github.com/infisical/go-sdk` and committing the updated `go.mod` and `go.sum`
+- [x] T001 Add `github.com/infisical/go-sdk` dependency by running `go get github.com/infisical/go-sdk` and committing the updated `go.mod` and `go.sum`
 
 ---
 
@@ -28,11 +28,11 @@
 
 **⚠️ CRITICAL**: No user story work can begin until this phase is complete.
 
-- [ ] T002 [P] Create `SecretsPlugin` interface in `internal/plugins/secrets/plugin.go` with exactly two methods: `IsActive() bool` and `GetSecret(path string) (string, error)`
-- [ ] T003 [P] Create `InfisicalPluginConfig` struct in `internal/config/plugin_infisical.go` with `URL`, `ClientID`, and `ClientSecret` string fields and their `yaml` tags (`url`, `client-id`, `client-secret`)
-- [ ] T004 Add `SecretsPluginsConfig` struct and `Secrets SecretsPluginsConfig` field to `PluginsConfig` in `internal/config/config.go`; add `validateSecretsPlugins()` that returns an error when more than one `plugins.secrets.*` block is non-nil; call it from `Load()` after YAML unmarshalling
-- [ ] T005 [P] Write integration test fixtures in `tests/testdata/deploy/vault-secrets/`: a `shrine.yml` with `plugins.secrets.infisical` pointing to a local test instance, a Resource manifest with one `valueFrom: vault:` output, and an Application manifest that consumes that Resource output plus one direct `valueFrom: vault:` env var; include `docker-compose.yml` for the Infisical side-stack (infisical + postgres + redis) in the same directory
-- [ ] T006 Write integration test scenario in `tests/integration/deploy_test.go` covering vault secret resolution — start Infisical via the compose file in `tests/testdata/deploy/vault-secrets/`, provision project and secrets via API, run `shrine apply` as subprocess, assert the Application container has correct env vars for both the direct vault ref and the vault-backed Resource output; mark with `//go:build integration` tag and leave failing (CI-only)
+- [x] T002 [P] Create `SecretsPlugin` interface in `internal/plugins/secrets/plugin.go` with exactly two methods: `IsActive() bool` and `GetSecret(path string) (string, error)`
+- [x] T003 [P] Create `InfisicalPluginConfig` struct in `internal/config/plugin_infisical.go` with `URL`, `ClientID`, and `ClientSecret` string fields and their `yaml` tags (`url`, `client-id`, `client-secret`)
+- [x] T004 Add `SecretsPluginsConfig` struct and `Secrets SecretsPluginsConfig` field to `PluginsConfig` in `internal/config/config.go`; add `validateSecretsPlugins()` that returns an error when more than one `plugins.secrets.*` block is non-nil; call it from `Load()` after YAML unmarshalling
+- [x] T005 [P] Write integration test fixtures in `tests/testdata/deploy/vault-secrets/`: a `shrine.yml` with `plugins.secrets.infisical` pointing to a local test instance, a Resource manifest with one `valueFrom: vault:` output, and an Application manifest that consumes that Resource output plus one direct `valueFrom: vault:` env var; include `docker-compose.yml` for the Infisical side-stack (infisical + postgres + redis) in the same directory
+- [x] T006 Write integration test scenario in `tests/integration/deploy_test.go` covering vault secret resolution — start Infisical via the compose file in `tests/testdata/deploy/vault-secrets/`, provision project and secrets via API, run `shrine apply` as subprocess, assert the Application container has correct env vars for both the direct vault ref and the vault-backed Resource output; mark with `//go:build integration` tag and leave failing (CI-only)
 
 **Checkpoint**: Interface defined, config types ready, integration test skeleton written. User story implementation can now begin.
 
@@ -44,8 +44,8 @@
 
 **Independent Test**: Add `plugins.secrets.infisical` block to shrine.yml, run `shrine dry-run` — no error. Remove the block, add a `valueFrom: vault:` ref, run `shrine apply` — clear error: "no secrets plugin configured".
 
-- [ ] T007 [US2] Wire `InfisicalPlugin` construction in `internal/handler/deploy.go:Deploy()` — construct the plugin from `cfg.Plugins.Secrets.Infisical` (returns nil-safe no-op when config is nil), pass it into `NewLocalEngineWithRouting`; `DryRun()` requires no changes (config validation is automatic via `config.Load()`; `DryRunResolver` handles vault refs as placeholders without the plugin)
-- [ ] T008 [US2] Wire `InfisicalPlugin` construction in `internal/handler/apply.go:ApplySingle()` — same pattern as `deploy.go:Deploy()`; construct and pass the plugin into the engine
+- [x] T007 [US2] Wire `InfisicalPlugin` construction in `internal/handler/deploy.go:Deploy()` — construct the plugin from `cfg.Plugins.Secrets.Infisical` (returns nil-safe no-op when config is nil), pass it into `NewLocalEngineWithRouting`; `DryRun()` requires no changes (config validation is automatic via `config.Load()`; `DryRunResolver` handles vault refs as placeholders without the plugin)
+- [x] T008 [US2] Wire `InfisicalPlugin` construction in `internal/handler/apply.go:ApplySingle()` — same pattern as `deploy.go:Deploy()`; construct and pass the plugin into the engine
 
 **Checkpoint**: Config is accepted, validated (dual-plugin error), and handlers construct the plugin. Dry-run is unaffected.
 
@@ -57,14 +57,14 @@
 
 **Independent Test**: Configure shrine.yml with a live Infisical connection; deploy a Resource manifest with a `valueFrom: vault:` output and an Application that consumes it plus one direct `valueFrom: vault:` env var; assert both container env vars equal the values stored in Infisical.
 
-- [ ] T009 [P] [US1] Implement `InfisicalPlugin` struct in `internal/plugins/secrets/infisical/plugin.go` — `New(cfg *config.InfisicalPluginConfig) (*InfisicalPlugin, error)` initialises and authenticates the Infisical SDK client (returns nil, nil when cfg is nil); `IsActive()` returns false when cfg is nil; `GetSecret(path string)` splits path on `/` into `[project, environment, secretKey]` and calls `client.Secrets().Retrieve(...)`, returning only the value or an error that includes the path but never the value
-- [ ] T010 [P] [US1] Write unit tests for `InfisicalPlugin` in `internal/plugins/secrets/infisical/plugin_test.go` — use a mock or stub Infisical SDK client; cover: `IsActive()` false when nil config, `GetSecret()` success, `GetSecret()` error propagates path (not value), `New()` returns nil when cfg is nil
-- [ ] T011 [US1] Add `ValueFrom string \`yaml:"valueFrom,omitempty"\`` to the Resource `Output` struct in `internal/manifest/types.go`; extend the mutual-exclusion check in `internal/manifest/validate.go` to include `valueFrom` as a fourth exclusive option for Resource outputs (alongside `value`, `generated`, `template`)
-- [ ] T012 [US1] Extend `validateValueFrom` in `internal/planner/resolve.go` to accept the `vault:` prefix for both Application env vars and Resource outputs; validate the path splits into exactly 3 non-empty `/`-separated components and return a descriptive plan-time error if not
-- [ ] T013 [US1] Extend `LiveResolver` in `internal/resolver/resolver.go`: add `Vault secrets.SecretsPlugin` field; add private helpers `isVaultRef(s string) bool` and `parseVaultPath(s string) string`; add `vault:` case to `lookupValueFrom` used by `ResolveApplication`; extend `ResolveResource` to resolve output `ValueFrom` vault refs using the same helpers; update `NewLiveResolver` signature to `NewLiveResolver(store state.SecretStore, vault secrets.SecretsPlugin) Resolver`
-- [ ] T014 [US1] Update `internal/engine/local/local_engine.go` — pass the vault plugin argument through `NewLocalEngineWithRouting` (or equivalent constructor) down to `NewLiveResolver` so the updated signature is satisfied
-- [ ] T015 [US1] Extend unit tests in `internal/resolver/resolver_test.go`: vault ref in Application env resolved via active plugin; vault ref in Resource output resolved via active plugin; nil/inactive plugin returns error for both paths; non-vault `valueFrom` values unaffected; missing project/environment/secret surfaces full path in error message; unexpected vault SDK error surfaces path + SDK message
-- [ ] T016 [US1] Run `go test ./...` and confirm all unit tests pass
+- [x] T009 [P] [US1] Implement `InfisicalPlugin` struct in `internal/plugins/secrets/infisical/plugin.go` — `New(cfg *config.InfisicalPluginConfig) (*InfisicalPlugin, error)` initialises and authenticates the Infisical SDK client (returns nil, nil when cfg is nil); `IsActive()` returns false when cfg is nil; `GetSecret(path string)` splits path on `/` into `[project, environment, secretKey]` and calls `client.Secrets().Retrieve(...)`, returning only the value or an error that includes the path but never the value
+- [x] T010 [P] [US1] Write unit tests for `InfisicalPlugin` in `internal/plugins/secrets/infisical/plugin_test.go` — use a mock or stub Infisical SDK client; cover: `IsActive()` false when nil config, `GetSecret()` success, `GetSecret()` error propagates path (not value), `New()` returns nil when cfg is nil
+- [x] T011 [US1] Add `ValueFrom string \`yaml:"valueFrom,omitempty"\`` to the Resource `Output` struct in `internal/manifest/types.go`; extend the mutual-exclusion check in `internal/manifest/validate.go` to include `valueFrom` as a fourth exclusive option for Resource outputs (alongside `value`, `generated`, `template`)
+- [x] T012 [US1] Extend `validateValueFrom` in `internal/planner/resolve.go` to accept the `vault:` prefix for both Application env vars and Resource outputs; validate the path splits into exactly 3 non-empty `/`-separated components and return a descriptive plan-time error if not
+- [x] T013 [US1] Extend `LiveResolver` in `internal/resolver/resolver.go`: add `Vault secrets.SecretsPlugin` field; add private helpers `isVaultRef(s string) bool` and `parseVaultPath(s string) string`; add `vault:` case to `lookupValueFrom` used by `ResolveApplication`; extend `ResolveResource` to resolve output `ValueFrom` vault refs using the same helpers; update `NewLiveResolver` signature to `NewLiveResolver(store state.SecretStore, vault secrets.SecretsPlugin) Resolver`
+- [x] T014 [US1] Update `internal/engine/local/local_engine.go` — pass the vault plugin argument through `NewLocalEngineWithRouting` (or equivalent constructor) down to `NewLiveResolver` so the updated signature is satisfied
+- [x] T015 [US1] Extend unit tests in `internal/resolver/resolver_test.go`: vault ref in Application env resolved via active plugin; vault ref in Resource output resolved via active plugin; nil/inactive plugin returns error for both paths; non-vault `valueFrom` values unaffected; missing project/environment/secret surfaces full path in error message; unexpected vault SDK error surfaces path + SDK message
+- [x] T016 [US1] Run `go test ./...` and confirm all unit tests pass
 
 **Checkpoint**: `shrine apply` resolves `valueFrom: vault:` env vars from a live Infisical instance.
 
@@ -76,9 +76,9 @@
 
 **Independent Test**: Run `shrine dry-run` on a manifest with `valueFrom: vault:project/env/key` with no live Infisical instance — output contains `[VAULT:project/env/key]` and command exits 0.
 
-- [ ] T017 [US3] Extend `DryRunResolver` in `internal/resolver/dry_run_resolver.go` — add a `vault:` branch in both Application env and Resource output resolution paths using the shared `isVaultRef` and `parseVaultPath` helpers; return `fmt.Sprintf("[VAULT:%s]", parseVaultPath(valueFrom))` with no network call
-- [ ] T018 [US3] Extend unit tests in `internal/resolver/resolver_test.go` for the dry-run placeholder: `vault:` ref in Application env produces `[VAULT:<path>]`; `vault:` ref in Resource output produces `[VAULT:<path>]`; no vault plugin is called; non-vault refs unaffected
-- [ ] T019 [US3] Run `go test ./...` and confirm all unit tests pass including the new dry-run placeholder tests
+- [x] T017 [US3] Extend `DryRunResolver` in `internal/resolver/dry_run_resolver.go` — add a `vault:` branch in both Application env and Resource output resolution paths using the shared `isVaultRef` and `parseVaultPath` helpers; return `fmt.Sprintf("[VAULT:%s]", parseVaultPath(valueFrom))` with no network call
+- [x] T018 [US3] Extend unit tests in `internal/resolver/resolver_test.go` for the dry-run placeholder: `vault:` ref in Application env produces `[VAULT:<path>]`; `vault:` ref in Resource output produces `[VAULT:<path>]`; no vault plugin is called; non-vault refs unaffected
+- [x] T019 [US3] Run `go test ./...` and confirm all unit tests pass including the new dry-run placeholder tests
 
 **Checkpoint**: `shrine dry-run` works correctly with vault refs and needs no vault connectivity.
 
@@ -90,8 +90,8 @@
 
 **Independent Test**: Inspect `internal/plugins/secrets/plugin.go` — zero Infisical imports. Inspect `internal/config/config.go` — `validateSecretsPlugins()` counts non-nil fields generically, no Infisical-specific logic.
 
-- [ ] T020 [US4] Audit `internal/plugins/secrets/plugin.go` — confirm the `SecretsPlugin` interface has no Infisical-specific method signatures, imports, or comments; if any exist, remove them
-- [ ] T021 [US4] Audit `internal/config/config.go:validateSecretsPlugins()` — confirm the check counts non-nil `SecretsPluginsConfig` fields without referencing Infisical by name; if any provider-specific logic exists, refactor to be generic
+- [x] T020 [US4] Audit `internal/plugins/secrets/plugin.go` — confirm the `SecretsPlugin` interface has no Infisical-specific method signatures, imports, or comments; if any exist, remove them
+- [x] T021 [US4] Audit `internal/config/config.go:validateSecretsPlugins()` — confirm the check counts non-nil `SecretsPluginsConfig` fields without referencing Infisical by name; if any provider-specific logic exists, refactor to be generic
 
 **Checkpoint**: Adding a second vault provider requires only a new `SecretsPlugin` impl and a new field in `SecretsPluginsConfig` — zero changes to the resolver, planner, or manifest format.
 
@@ -101,10 +101,10 @@
 
 **Purpose**: Operator-facing documentation shipped alongside the implementation.
 
-- [ ] T022 [P] Create `docs/content/guides/secrets-vault.md` — cover: concept, activation, Application env syntax, Resource output syntax (with downstream Application consumption example), dry-run placeholder output, common pitfalls table (missing config, malformed path, auth failure, project/environment not found, vault SDK error), see-also links
-- [ ] T023 [P] Update `docs/content/guides/_index.md` — add `- [Secrets vault](secrets-vault/) — Store secrets in an external vault and reference them from manifests.` to the Contents list
-- [ ] T024 [P] Update `docs/content/reference/manifest-schema.md` — extend Application `spec.env[].valueFrom` row to document `vault:<path>`; add `valueFrom` as a fourth option in the Resource `spec.outputs[]` table (alongside `value`, `generated`, `template`); update Templating prose
-- [ ] T025 Run `go test ./...` as a final pass to confirm all unit tests still pass after documentation changes
+- [x] T022 [P] Create `docs/content/guides/secrets-vault.md` — cover: concept, activation, Application env syntax, Resource output syntax (with downstream Application consumption example), dry-run placeholder output, common pitfalls table (missing config, malformed path, auth failure, project/environment not found, vault SDK error), see-also links
+- [x] T023 [P] Update `docs/content/guides/_index.md` — add `- [Secrets vault](secrets-vault/) — Store secrets in an external vault and reference them from manifests.` to the Contents list
+- [x] T024 [P] Update `docs/content/reference/manifest-schema.md` — extend Application `spec.env[].valueFrom` row to document `vault:<path>`; add `valueFrom` as a fourth option in the Resource `spec.outputs[]` table (alongside `value`, `generated`, `template`); update Templating prose
+- [x] T025 Run `go test ./...` as a final pass to confirm all unit tests still pass after documentation changes
 
 ---
 

@@ -1,0 +1,17 @@
+apiVersion: shrine/v1
+kind: Application
+metadata:
+  name: test-app
+  owner: vault-team
+spec:
+  image: nginx:alpine
+  port: 8080
+  dependencies:
+    - kind: Resource
+      name: test-db
+      owner: vault-team
+  env:
+    - name: DB_PASSWORD
+      valueFrom: resource.test-db.password
+    - name: API_KEY
+      valueFrom: vault:shrine-test/production/API_KEY

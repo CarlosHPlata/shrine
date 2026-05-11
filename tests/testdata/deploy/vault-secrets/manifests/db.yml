@@ -1,0 +1,14 @@
+apiVersion: shrine/v1
+kind: Resource
+metadata:
+  name: test-db
+  owner: vault-team
+spec:
+  type: postgres
+  version: "16"
+  outputs:
+    - name: host
+    - name: port
+      value: "5432"
+    - name: password
+      valueFrom: vault:shrine-test/production/DB_PASSWORD

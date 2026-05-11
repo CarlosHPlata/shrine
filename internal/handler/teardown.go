@@ -52,7 +52,12 @@ func Teardown(opts TeardownOptions) error {
 		}
 	}
 
-	localEngine, err := local.NewLocalEngineWithRouting(opts.Store, opts.Config.Registries, observer, routing)
+	localEngine, err := local.NewLocalEngine(local.EngineOptions{
+		Store:      opts.Store,
+		Registries: opts.Config.Registries,
+		Observer:   observer,
+		Routing:    routing,
+	})
 	if err != nil {
 		return err
 	}

@@ -30,10 +30,11 @@ func Resolve(set *ManifestSet, store state.TeamStore, registries []config.Regist
 		errs = append(errs, validateEnvTemplates(app)...)
 	}
 
-	// 2. Resource-specific checks (counts, template refs)
+	// 2. Resource-specific checks (counts, template refs, vault output refs)
 	for _, res := range set.Resources {
 		resCounts[res.Metadata.Owner]++
 		errs = append(errs, validateTemplates(res)...)
+		errs = append(errs, validateResourceVaultOutputs(res)...)
 	}
 
 	// 3. Quota enforcement
@@ -244,8 +245,8 @@ func hasAccess(consumer string, owner string, accessList []string) bool {
 }
 
 // validateValueFrom ensures all environment variables using valueFrom reference valid
-// resource outputs in the format 'resource.<name>.<output>'. Presence and mutual
-// exclusivity of value/valueFrom are enforced earlier by manifest.Validate.
+// resource outputs or well-formed vault paths. Presence and mutual exclusivity of
+// value/valueFrom are enforced earlier by manifest.Validate.
 func validateValueFrom(set *ManifestSet, app *manifest.ApplicationManifest) []error {
 	var errs []error
 	for _, env := range app.Spec.Env {
@@ -253,9 +254,14 @@ func validateValueFrom(set *ManifestSet, app *manifest.ApplicationManifest) []er
 			continue
 		}
 
+		if strings.HasPrefix(env.ValueFrom, "vault:") {
+			errs = append(errs, validateVaultPath("app", app.Metadata.Name, "env", env.Name, env.ValueFrom)...)
+			continue
+		}
+
 		parts := strings.Split(env.ValueFrom, ".")
 		if len(parts) != 3 {
-			errs = append(errs, fmt.Errorf("app %q: env %q has invalid valueFrom format %q (expected <kind>.<name>.<output>)",
+			errs = append(errs, fmt.Errorf("app %q: env %q has invalid valueFrom format %q (expected <kind>.<name>.<output> or vault:<project>/<env>/<key>)",
 				app.Metadata.Name, env.Name, env.ValueFrom))
 			continue
 		}
@@ -298,11 +304,34 @@ func validateValueFrom(set *ManifestSet, app *manifest.ApplicationManifest) []er
 			}
 
 		default:
-			errs = append(errs, fmt.Errorf("app %q: env %q has invalid valueFrom format %q (expected resource.<name>.<output> or application.<name>.<built-in>)",
+			errs = append(errs, fmt.Errorf("app %q: env %q has invalid valueFrom format %q (expected resource.<name>.<output>, application.<name>.<built-in>, or vault:<project>/<env>/<key>)",
 				app.Metadata.Name, env.Name, env.ValueFrom))
 		}
 	}
 	return errs
+}
+
+// validateResourceVaultOutputs validates vault: valueFrom references on resource outputs.
+func validateResourceVaultOutputs(res *manifest.ResourceManifest) []error {
+	var errs []error
+	for _, out := range res.Spec.Outputs {
+		if out.ValueFrom == "" {
+			continue
+		}
+		errs = append(errs, validateVaultPath("resource", res.Metadata.Name, "output", out.Name, out.ValueFrom)...)
+	}
+	return errs
+}
+
+// validateVaultPath checks that a vault: ref has exactly 3 non-empty path components.
+func validateVaultPath(kind, owner, fieldType, fieldName, ref string) []error {
+	path := strings.TrimPrefix(ref, "vault:")
+	parts := strings.SplitN(path, "/", 4)
+	if len(parts) != 3 || parts[0] == "" || parts[1] == "" || parts[2] == "" {
+		return []error{fmt.Errorf("%s %q: %s %q has invalid vault ref %q (expected vault:<project>/<environment>/<secret-name>)",
+			kind, owner, fieldType, fieldName, ref)}
+	}
+	return nil
 }
 
 func validateUniqueNames(set *ManifestSet) []error {

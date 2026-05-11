@@ -122,15 +122,15 @@ func validateResourceSpec(spec ResourceSpec) []string {
 		}
 		seen[o.Name] = true
 
-		kinds := countSet(o.Value != "", o.Generated, o.Template != "")
+		kinds := countSet(o.Value != "", o.Generated, o.Template != "", o.ValueFrom != "")
 		if o.Name == "host" || o.Name == "port" {
 			if kinds > 0 {
-				errs = append(errs, fmt.Sprintf("spec.outputs[%d]: %q is a CLI built-in and must not set value/generated/template", i, o.Name))
+				errs = append(errs, fmt.Sprintf("spec.outputs[%d]: %q is a CLI built-in and must not set value/generated/template/valueFrom", i, o.Name))
 			}
 			continue
 		}
 
-		errs = append(errs, validateExclusiveFields("spec.outputs", i, o.Name, "value/generated/template", kinds)...)
+		errs = append(errs, validateExclusiveFields("spec.outputs", i, o.Name, "value/generated/template/valueFrom", kinds)...)
 	}
 
 	// validate volumes
