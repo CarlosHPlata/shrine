@@ -235,19 +235,32 @@ func TestDeploy(t *testing.T) {
 	})
 }
 
-// TestDeploy_VaultSecrets verifies vault secret resolution end-to-end: a
-// Resource output and an Application env var that both carry a vault: reference
-// are resolved against a live Infisical instance, and the resolved values are
-// injected into the deployed container.  This test is intentionally skipped in
-// normal local runs and must be triggered explicitly (e.g. from the CI pipeline
-// that provisions the Infisical side-stack defined in
-// tests/testdata/deploy/vault-secrets/docker-compose.yml).
+// TestDeploy_VaultSecrets verifies vault secret resolution end-to-end against a
+// real Infisical instance. See tests/testdata/deploy/vault-secrets/README.md for
+// the local setup steps (Infisical's first-time admin signup needs E2EE crypto
+// that bash + curl can't do, so the manual web-UI flow is the current path).
+//
+// Skipped automatically unless INFISICAL_TEST_URL, INFISICAL_CLIENT_ID, and
+// INFISICAL_CLIENT_SECRET are all set in the environment.
 func TestDeploy_VaultSecrets(t *testing.T) {
-	if os.Getenv("INFISICAL_TEST_URL") == "" {
-		t.Skip("vault integration test: set INFISICAL_TEST_URL and start tests/testdata/deploy/vault-secrets/docker-compose.yml to run")
+	url := os.Getenv("INFISICAL_TEST_URL")
+	clientID := os.Getenv("INFISICAL_CLIENT_ID")
+	clientSecret := os.Getenv("INFISICAL_CLIENT_SECRET")
+	if url == "" || clientID == "" || clientSecret == "" {
+		t.Skip("vault integration test: set INFISICAL_TEST_URL, INFISICAL_CLIENT_ID, INFISICAL_CLIENT_SECRET — see tests/testdata/deploy/vault-secrets/README.md")
 	}
 
 	s := NewDockerSuite(t, "vault-team")
+
+	// Generate shrine.yml with the real credentials into the suite's temp dir.
+	configDir := t.TempDir()
+	configPath := filepath.Join(configDir, "shrine.yml")
+	configBody := "plugins:\n  secrets:\n    infisical:\n      url: " + url +
+		"\n      client-id: \"" + clientID +
+		"\"\n      client-secret: \"" + clientSecret + "\"\n"
+	if err := os.WriteFile(configPath, []byte(configBody), 0o600); err != nil {
+		t.Fatalf("write shrine.yml: %v", err)
+	}
 
 	s.BeforeEach(func(tc *TestCase) {
 		tc.StateDir = tc.TempDir()
@@ -262,7 +275,7 @@ func TestDeploy_VaultSecrets(t *testing.T) {
 		tc.Run("deploy",
 			"--path", fixturesPath("vault-secrets", "manifests"),
 			"--state-dir", tc.StateDir,
-			"--config", fixturesPath("vault-secrets", "shrine.yml"),
+			"--config", configPath,
 		).AssertSuccess()
 
 		tc.AssertContainerRunning("vault-team.test-app")
