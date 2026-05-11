@@ -15,7 +15,7 @@ Shrine manifests are designed to be checked into version control, which means pl
 The design separates concerns cleanly:
 
 - **Manifests** carry only the logical path (`vault:<project>/<environment>/<secret-name>`). They are provider-agnostic and safe to commit.
-- **Config** (`~/.config/shrine/config.yml` or the path passed via `--config`) selects the provider and supplies the credentials. Currently the only supported provider is Infisical.
+- **Config** (`~/.config/shrine/config.yml` or the directory passed via `--config-dir`) selects the provider and supplies the credentials. Currently the only supported provider is Infisical.
 
 When the `plugins.secrets.infisical` block is absent, any `vault:` reference in a deployed manifest produces the error "no secrets plugin configured" at plan time, before any container starts.
 
@@ -62,9 +62,21 @@ spec:
       valueFrom: vault:shrine-test/prod/STRIPE_SECRET_KEY
 ```
 
-The path has exactly three slash-separated components: project, environment slug, and secret name. The project component is flexible — you can write the project's display name (e.g. `shrine-test`), its slug, or its UUID. The plugin resolves names and slugs via a one-time call to `/api/v1/workspace` and caches the result for the process lifetime; UUIDs bypass the lookup. A path with a different number of components is rejected at plan time with an explicit error.
+The path has exactly three slash-separated components: project, environment slug, and secret name. A path with a different number of components is rejected at plan time with an explicit error.
 
 `value`, `valueFrom`, and `template` are mutually exclusive on a single env entry. Combining `vault:` with any other source is a plan-time validation error.
+
+### How the project component is resolved
+
+The Infisical API identifies projects by UUID, but typing UUIDs into YAML is unfriendly. The plugin accepts **any of three forms** for the project component and resolves them transparently:
+
+| You write | What happens |
+|---|---|
+| `vault:shrine-test/prod/KEY` | **Name** — looked up against the project's display name (the value you typed when creating the project in Infisical) |
+| `vault:shrine-test-2jdn/prod/KEY` | **Slug** — looked up against the auto-generated slug Infisical appends to the name |
+| `vault:535143c0-6680-4980-af1a-8f27d9042bad/prod/KEY` | **UUID** — used as-is, no lookup |
+
+On the first non-UUID lookup, the plugin issues a single `GET /api/v1/workspace` request, builds a name+slug → UUID map, and caches it for the rest of the process. UUIDs (detected by regex) skip the lookup entirely and incur zero overhead. The name form is the friendliest because Infisical's auto-generated slug suffix is irrelevant — `shrine-test` keeps working even if Infisical names the slug `shrine-test-2jdn`.
 
 ## Reference a vault secret in a Resource output
 
@@ -118,8 +130,8 @@ When you run `shrine deploy --dry-run`, Shrine does not contact the vault. Any `
 Example dry-run output:
 
 ```
-env DB_PASSWORD=[VAULT:my-project/production/DB_PASSWORD]
-env API_KEY=[VAULT:my-project/production/API_KEY]
+env DB_PASSWORD=[VAULT:shrine-test/prod/DB_PASSWORD]
+env API_KEY=[VAULT:shrine-test/prod/API_KEY]
 ```
 
 This lets you validate manifest structure and dependency wiring in CI lint jobs or on developer laptops that have no vault access.
@@ -131,7 +143,8 @@ This lets you validate manifest structure and dependency wiring in CI lint jobs 
 | `vault:` ref in manifest but no `plugins.secrets.infisical` block in config | `no secrets plugin configured` (plan-time) |
 | Malformed path — not exactly three `/`-separated components | Plan-time validation error naming the offending field |
 | Wrong `client-id` or `client-secret` | Authentication error at deploy startup, before any container is started |
-| Project slug or environment slug does not exist in Infisical | Explicit error at deploy time: path not found, with the full path printed |
+| Project name/slug not visible to this machine identity | Deploy-time error listing the projects this identity *can* see (typical fix: attach the identity to the project under Project → Access Control → Identities) |
+| Environment slug does not exist in the project | Deploy-time error from Infisical with the full `vault:<path>` printed; default env slugs are `dev`, `staging`, `prod` |
 | `value:` and `valueFrom: vault:` on the same output or env entry | Mutual-exclusion validation error at plan time |
 
 ## See also

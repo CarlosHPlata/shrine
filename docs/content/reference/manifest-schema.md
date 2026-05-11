@@ -86,7 +86,7 @@ spec:
 | `spec.outputs[].value` | no* | — | Static string value. Mutually exclusive with `generated` and `template`. |
 | `spec.outputs[].generated` | no* | — | Generate a random value at deploy time. |
 | `spec.outputs[].template` | no* | — | Go `text/template` expression referencing sibling output names, e.g. `postgres://postgres:{{.password}}@{{.host}}:{{.port}}/app`. |
-| `spec.outputs[].valueFrom` | no* | — | Fetch value from the active secrets vault at deploy time: `vault:<project>/<environment>/<secret-name>`. Mutually exclusive with `value`, `generated`, and `template`. |
+| `spec.outputs[].valueFrom` | no* | — | Fetch value from the active secrets vault at deploy time: `vault:<project>/<environment>/<secret-name>`. The project component may be the project's display name, slug, or UUID (see [Secrets vault guide](/guides/secrets-vault/#how-the-project-component-is-resolved)). Mutually exclusive with `value`, `generated`, and `template`. |
 | `spec.networking.exposeToPlatform` | no | `false` | Attach the resource to the shared platform network so gateway plugins can reach it. |
 | `spec.volumes[].name` | yes (per entry) | — | Logical volume name; must be unique within the manifest. |
 | `spec.volumes[].mountPath` | yes (per entry) | — | Absolute path inside the container. |
@@ -170,7 +170,7 @@ Each env var must set exactly one of `value`, `valueFrom`, or `template`.
 |-------|-------------|
 | `name` | Environment variable name passed to the container. |
 | `value` | Static string value. |
-| `valueFrom` | Reference to a Resource output (`resource.<resource-name>.<output-name>`) or a vault secret (`vault:<project>/<environment>/<secret-name>`). |
+| `valueFrom` | Reference to a Resource output (`resource.<resource-name>.<output-name>`) or a vault secret (`vault:<project>/<environment>/<secret-name>` — project may be a name, slug, or UUID; see the [Secrets vault guide](/guides/secrets-vault/)). |
 | `template` | Go `text/template` expression; can reference other env vars or resource outputs by name. |
 
 ## Templating
