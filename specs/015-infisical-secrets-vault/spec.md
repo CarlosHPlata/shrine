@@ -29,7 +29,7 @@ As a Shrine operator, I want to declare which secrets vault plugin to use (Infis
 
 **Why this priority**: Required for the integration to be discoverable and operable; no other story works without it.
 
-**Independent Test**: Add a `plugins.secrets.infisical` block with url and token to shrine.yml, then run `shrine dry-run` — it should not error on the secrets plugin config block.
+**Independent Test**: Add a `plugins.secrets.infisical` block with `url`, `client-id`, and `client-secret` to shrine.yml, then run `shrine dry-run` — it should not error on the secrets plugin config block.
    
 **Acceptance Scenarios**:
 
@@ -70,12 +70,12 @@ As a Shrine operator, I want to be able to change the vault backend (e.g., from 
 
 ### Edge Cases
 
-- What happens when the vault token has expired or been revoked mid-deploy?
+- If credentials expire or are revoked during secret resolution, Shrine aborts immediately — no containers are started or modified. This is consistent with the all-or-nothing deploy contract (all secrets are resolved before any container operation begins).
 - What happens when the secret path uses a project or environment that does not exist in the vault?
-- What happens when the same env key is set both with `value:` and `valueFrom: vault:`?
+- If the same env key has both `value:` and `valueFrom: vault:` set, the manifest is rejected at plan time — the existing multi-resolution validation already enforces this; `vault:` registers as one more exclusive resolution type in that check.
 - What happens when `valueFrom: vault:` is used in a Resource manifest (not just Application)?
 - What happens when the vault server is reachable but returns an unexpected error response?
-- What happens when two secrets plugins are declared in shrine.yml simultaneously?
+- If more than one `plugins.secrets.*` block is declared in shrine.yml, Shrine MUST error at config load and refuse to proceed, consistent with the fail-fast config validation pattern.
 
 ## Requirements *(mandatory)*
 
@@ -89,8 +89,9 @@ As a Shrine operator, I want to be able to change the vault backend (e.g., from 
 - **FR-006**: Dry-run mode MUST NOT contact the vault backend; it MUST substitute a human-readable placeholder (e.g., `[VAULT:<path>]`) for each vault-sourced value.
 - **FR-007**: The `vault:` prefix and path format MUST be validated at plan time so malformed references are rejected before execution begins.
 - **FR-008**: If no secrets plugin is configured in shrine.yml and no manifest uses `valueFrom: vault:`, Shrine behavior MUST be identical to the current baseline (zero regression).
-- **FR-009**: Vault-sourced env vars MUST be composable with existing `value:`, `generated:`, and `template:` env types within the same manifest.
-- **FR-010**: Only one secrets plugin may be active at a time per shrine.yml; multi-vault federation is out of scope.
+- **FR-009**: Vault-sourced env vars MUST be composable with existing `value:`, `generated:`, and `template:` env types within the same manifest, on different keys. Setting `valueFrom: vault:` on the same key as any other resolution type MUST be rejected at plan time by the existing mutual-exclusion validation (no new validation logic required — `vault:` registers as one more exclusive option in the existing check).
+- **FR-010**: Only one secrets plugin may be active at a time per shrine.yml; multi-vault federation is out of scope. If more than one `plugins.secrets.*` block is declared, Shrine MUST error at config load before any planning or execution begins.
+- **FR-011**: Secret values MUST never appear in any log output, error messages, or CLI output. Only the secret path (e.g., `myproject/production/DB_PASSWORD`) may be referenced in diagnostic output.
 
 ### Key Entities
 
@@ -116,6 +117,7 @@ As a Shrine operator, I want to be able to change the vault backend (e.g., from 
 - The path structure within `vault:<path>` is treated as an opaque string by Shrine's core; interpretation is delegated entirely to the active plugin. For Infisical, the convention is `<project>/<environment>/<secret-name>`.
 - Resource manifests are out of scope for `valueFrom: vault:` in v1 — only Application env vars are supported initially.
 - The `client-id` and `client-secret` in shrine.yml are stored in plaintext on the operator's machine; secret encryption at rest for shrine.yml is out of scope.
+- The vault URL is accepted as-is with no protocol enforcement — HTTP or HTTPS is the operator's responsibility. This supports local test setups (e.g., `http://localhost:8080`) without requiring TLS.
 - Infisical is the only secrets plugin shipped in v1; the interface is designed for extensibility but no second implementation is required to ship.
 
 ## Testing Setup (Infisical Docker Compose)
@@ -133,3 +135,13 @@ Minimum environment variables for the Infisical container:
 - `SITE_URL` — the base URL Infisical is reachable at (e.g., `http://localhost:8080`)
 
 The official Docker Compose file and `.env.example` are maintained in the Infisical GitHub repository and should be used as the starting point for the test environment.
+
+## Clarifications
+
+### Session 2026-05-11
+
+- Q: What happens when the same env key has both `value:` and `valueFrom: vault:` set? → A: Rejected at plan time by the existing mutual-exclusion validation — `vault:` registers as one more exclusive resolution type in the current check; no new validation logic needed.
+- Q: What happens if more than one `plugins.secrets.*` block is declared in shrine.yml? → A: Error at config load — Shrine refuses to proceed, consistent with fail-fast config validation.
+- Q: Should secret values appear in logs or error output? → A: Never — only secret paths appear in diagnostic output; values are never logged under any mode.
+- Q: Should Shrine enforce HTTPS for the vault URL? → A: No — URL accepted as-is, no protocol validation; operator responsibility (supports local HTTP test setups).
+- Q: What happens if credentials expire or are revoked mid-deploy? → A: Abort immediately — no containers are started or modified; consistent with the all-or-nothing deploy contract.
