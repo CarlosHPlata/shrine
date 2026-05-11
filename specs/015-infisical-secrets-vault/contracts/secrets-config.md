@@ -56,8 +56,48 @@ spec:
 ### Constraints
 
 - Path must contain exactly 3 `/`-separated non-empty components. Validated at plan time.
-- `valueFrom: vault:...` is mutually exclusive with `value:`, `template:`, and `generated:` on the same env key. Enforced by existing manifest validation (no new logic required).
-- `vault:` refs in Resource manifests are not supported in v1.
+- `valueFrom: vault:...` is mutually exclusive with `value:`, `template:`, and `generated:` on the same key (env var or output). Enforced by manifest validation.
+- `valueFrom: vault:` is valid in both Application `spec.env[]` and Resource `spec.outputs[]`.
+
+---
+
+## Resource Manifest — `spec.outputs[*].valueFrom`
+
+Resource outputs can also reference vault secrets. The resolved value is stored as a named output and available to downstream Applications via `valueFrom: resource.<name>.<output>`.
+
+```yaml
+apiVersion: shrine/v1
+kind: Resource
+metadata:
+  name: mydb
+  owner: myteam
+spec:
+  type: postgres
+  version: "16"
+  outputs:
+    - name: password
+      valueFrom: vault:myproject/production/DB_PASSWORD   # fetched from vault
+
+    - name: api-key
+      valueFrom: vault:myproject/production/API_KEY       # fetched from vault
+
+    - name: host                                          # built-in output
+    - name: port
+      value: "5432"                                       # composable with vault outputs
+```
+
+Applications consume vault-backed resource outputs exactly as they would any other output:
+
+```yaml
+env:
+  - name: DATABASE_URL
+    valueFrom: resource.mydb.password   # resolved value came from vault
+```
+
+### Resource Output Constraints
+
+- `valueFrom: vault:` on a resource output is mutually exclusive with `value:`, `generated:`, and `template:` on the same output name. Validated at manifest parse time.
+- Path format and plan-time validation rules are identical to Application env vars.
 
 ### Dry-run output
 

@@ -124,11 +124,13 @@ A vault reference is a `valueFrom` string with the `vault:` prefix, e.g. `vault:
 
 | Location | Check | Error |
 |---|---|---|
-| `manifest/validate.go` | No change needed — `valueFrom` accepts any non-empty string | — |
-| `planner/resolve.go` | `vault:` path must have exactly 3 `/`-separated non-empty parts | plan-time error |
+| `manifest/types.go` | Add `ValueFrom` field to Resource `Output` struct | (struct change, no error) |
+| `manifest/validate.go` | Extend Resource output mutual-exclusion check to include `valueFrom` as fourth exclusive option | parse-time validation error |
+| `planner/resolve.go` | `vault:` path must have exactly 3 `/`-separated non-empty parts — checked for both Application env and Resource outputs | plan-time error |
 | `config.Load()` | At most one `plugins.secrets.*` block | config load error |
 | `InfisicalPlugin.New()` | Auth must succeed at construction | startup error |
-| `LiveResolver.lookupValueFrom` | Vault plugin must be active if `vault:` ref present | resolve error |
+| `LiveResolver.lookupValueFrom` | Vault plugin must be active if `vault:` ref present | resolve error — includes full path in message, never includes value |
+| `InfisicalPlugin.GetSecret` | Project/environment/secret not found in vault | resolve error — includes full path (e.g. `vault:myproject/production/DB_PASSWORD: project or environment not found`); all other vault errors surface SDK message alongside path |
 
 ## State & Caching
 
@@ -144,6 +146,6 @@ The following docs files are created or updated as part of this feature. They ar
 |---|---|---|
 | `docs/content/guides/secrets-vault.md` | New | How to activate the plugin, configure shrine.yml, write `vault:` refs, read dry-run output, and diagnose common errors |
 | `docs/content/guides/_index.md` | Update | Add "Secrets vault" entry to the Contents list |
-| `docs/content/reference/manifest-schema.md` | Update | Extend `spec.env[].valueFrom` table with `vault:<project>/<environment>/<secret-name>` row; update Templating prose |
+| `docs/content/reference/manifest-schema.md` | Update | Extend `spec.env[].valueFrom` (Application) with `vault:<path>` row; add `spec.outputs[].valueFrom` (Resource) as a new fourth output resolution type alongside `value`, `generated`, `template` |
 
 The guide follows the same structure as `docs/content/guides/traefik.md`: concept, activation, config field reference, per-manifest usage, dry-run behaviour, common pitfalls, see-also links.

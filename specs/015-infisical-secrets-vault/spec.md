@@ -71,10 +71,10 @@ As a Shrine operator, I want to be able to change the vault backend (e.g., from 
 ### Edge Cases
 
 - If credentials expire or are revoked during secret resolution, Shrine aborts immediately — no containers are started or modified. This is consistent with the all-or-nothing deploy contract (all secrets are resolved before any container operation begins).
-- What happens when the secret path uses a project or environment that does not exist in the vault?
-- If the same env key has both `value:` and `valueFrom: vault:` set, the manifest is rejected at plan time — the existing multi-resolution validation already enforces this; `vault:` registers as one more exclusive resolution type in that check.
-- What happens when `valueFrom: vault:` is used in a Resource manifest (not just Application)?
-- What happens when the vault server is reachable but returns an unexpected error response?
+- If the secret path references a project or environment that does not exist in the vault, the fetch fails with an explicit error identifying the full path (e.g., `vault:myproject/production/DB_PASSWORD: project or environment not found`). Shrine aborts the deploy immediately.
+- If the same env key (Application) or output name (Resource) has both `value:` and `valueFrom: vault:` set, the manifest is rejected at plan time — the existing multi-resolution validation already enforces this; `vault:` registers as one more exclusive resolution type in that check.
+- `valueFrom: vault:` is valid in both Application env vars and Resource outputs. The Resource output `valueFrom: vault:` field is subject to the same mutual-exclusion rules as Application env vars.
+- If the vault server is reachable but returns an unexpected error response (non-2xx, malformed payload, SDK error), Shrine aborts the deploy and surfaces the vault's error message alongside the secret path. No containers are started.
 - If more than one `plugins.secrets.*` block is declared in shrine.yml, Shrine MUST error at config load and refuse to proceed, consistent with the fail-fast config validation pattern.
 
 ## Requirements *(mandatory)*
@@ -82,7 +82,7 @@ As a Shrine operator, I want to be able to change the vault backend (e.g., from 
 ### Functional Requirements
 
 - **FR-001**: Operators MUST be able to declare a secrets vault plugin and its connection parameters in shrine.yml under `plugins.secrets.<provider>` (e.g., `plugins.secrets.infisical`).
-- **FR-002**: Application manifests MUST reference vault secrets via the provider-agnostic syntax `valueFrom: vault:<path>`, where `<path>` is an opaque string interpreted by the active vault plugin.
+- **FR-002**: Application manifests and Resource manifests MUST support referencing vault secrets via the provider-agnostic syntax `valueFrom: vault:<path>`, where `<path>` is an opaque string interpreted by the active vault plugin. For Resource manifests, `valueFrom: vault:` is a valid output resolution type alongside `value:`, `generated:`, and `template:`.
 - **FR-003**: The secrets plugin system MUST follow an interface-based design (mirroring the Traefik gateway plugin pattern) so that alternative vault providers can be added in the future by implementing the same interface, without changes to the resolver or manifest format.
 - **FR-004**: Shrine MUST resolve all vault-referenced secrets before any container is started or modified, consistent with how other secret types are resolved.
 - **FR-005**: If any vault-referenced secret cannot be fetched (missing, permission denied, vault unreachable), Shrine MUST abort the deploy and report which secret path failed.
@@ -97,8 +97,8 @@ As a Shrine operator, I want to be able to change the vault backend (e.g., from 
 ### Key Entities
 
 - **SecretsPlugin** (interface): The provider-agnostic contract that any vault backend must implement — at minimum, fetching a secret by path and reporting whether the plugin is active.
-- **SecretsPluginConfig**: The shrine.yml block that selects and configures the active secrets plugin. For Infisical this includes `url` (self-hosted instance URL), `client-id`, and `client-secret` (Machine Identity Universal Auth credentials — service tokens are deprecated upstream).
-- **VaultSecretRef**: A parsed reference of the form `<path>` extracted from a `valueFrom: vault:<path>` value, passed opaquely to the active plugin. For Infisical the path convention is `<project>/<environment>/<secret-name>`.
+- **SecretsPluginsConfig**: The shrine.yml block that selects and configures the active secrets plugin. For Infisical this includes `url` (self-hosted instance URL), `client-id`, and `client-secret` (Machine Identity Universal Auth credentials — service tokens are deprecated upstream).
+- **VaultSecretRef**: A parsed reference of the form `<path>` extracted from a `valueFrom: vault:<path>` value, passed opaquely to the active plugin. For Infisical the path convention is `<project>/<environment>/<secret-name>`. Valid in both Application `spec.env[]` and Resource `spec.outputs[]`.
 
 ## Success Criteria *(mandatory)*
 
@@ -116,7 +116,7 @@ As a Shrine operator, I want to be able to change the vault backend (e.g., from 
 - The vault backend (Infisical for v1) is already running and accessible from the Shrine host before `shrine apply` is invoked; Shrine does not manage its lifecycle.
 - Authentication to Infisical uses **Machine Identity Universal Auth** (`client-id` + `client-secret`). Service tokens are not used — they are deprecated upstream in favor of Machine Identities.
 - The path structure within `vault:<path>` is treated as an opaque string by Shrine's core; interpretation is delegated entirely to the active plugin. For Infisical, the convention is `<project>/<environment>/<secret-name>`.
-- Resource manifests are out of scope for `valueFrom: vault:` in v1 — only Application env vars are supported initially.
+- `valueFrom: vault:` is supported in both Application `spec.env[]` and Resource `spec.outputs[]`. Resource outputs resolved from the vault are available to downstream Applications via the existing `valueFrom: resource.<name>.<output>` reference mechanism.
 - The `client-id` and `client-secret` in shrine.yml are stored in plaintext on the operator's machine; secret encryption at rest for shrine.yml is out of scope.
 - The vault URL is accepted as-is with no protocol enforcement — HTTP or HTTPS is the operator's responsibility. This supports local test setups (e.g., `http://localhost:8080`) without requiring TLS.
 - Infisical is the only secrets plugin shipped in v1; the interface is designed for extensibility but no second implementation is required to ship.

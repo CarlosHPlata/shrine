@@ -67,22 +67,30 @@ internal/plugins/secrets/infisical/
 
 internal/resolver/
   resolver.go                        ← extend LiveResolver: add Vault SecretsPlugin field;
-                                        extend lookupValueFrom for vault: prefix;
+                                        extend lookupValueFrom for vault: prefix in ResolveApplication;
+                                        extend ResolveResource to handle vault: output refs;
                                         update NewLiveResolver(store, vault) signature;
                                         add isVaultRef(), parseVaultPath() helpers
   dry_run_resolver.go                ← extend placeholder logic: vault: → [VAULT:<path>]
+                                        in both ResolveApplication and ResolveResource paths
   resolver_test.go                   ← extend unit tests for vault: resolution and placeholder
 
 internal/planner/
   resolve.go                         ← extend validateValueFrom: accept vault: prefix;
-                                        validate exactly 3 non-empty path components
+                                        validate exactly 3 non-empty path components;
+                                        apply to both Application env and Resource outputs
 
 internal/engine/local/
   local_engine.go                    ← pass vault plugin to NewLiveResolver
 
+internal/manifest/
+  types.go                           ← add ValueFrom field to Resource Output struct
+  validate.go                        ← extend output mutual-exclusion check to include valueFrom
+
 internal/handler/
   deploy.go                          ← construct SecretsPlugin from cfg.Plugins.Secrets in Deploy()
-                                        and DryRun() (config validation + plugin activation)
+                                        only; DryRun() requires no changes (config validation is
+                                        automatic; DryRunResolver handles vault refs as placeholders)
   apply.go                           ← construct and pass SecretsPlugin in ApplySingle()
                                         (same pattern — ApplySingle runs its own engine path)
 
@@ -99,8 +107,9 @@ docs/content/guides/
   _index.md                          ← add "Secrets vault" entry to the Contents list
 
 docs/content/reference/
-  manifest-schema.md                 ← extend spec.env[].valueFrom table to document
-                                        vault:<path> syntax alongside resource.<name>.<output>
+  manifest-schema.md                 ← extend spec.env[].valueFrom (Application) to document
+                                        vault:<path> syntax; extend spec.outputs[].valueFrom
+                                        (Resource) to document vault:<path> as a valid output type
 ```
 
 **Structure Decision**: All changes are additive extensions to existing files within the
@@ -127,9 +136,16 @@ The plugin is then passed into `NewLocalEngineWithRouting` → `NewLocalEngine` 
 
 ### Plan-Time Validation (`planner/resolve.go`)
 
-`validateValueFrom` is extended to recognise the `vault:` prefix. A `vault:` ref is valid
-at plan time if its path has exactly 3 non-empty `/`-separated components. The actual secret
-existence is NOT validated at plan time (would require vault connectivity during `dry-run`).
+`validateValueFrom` is extended to recognise the `vault:` prefix for both Application env
+and Resource output fields. A `vault:` ref is valid at plan time if its path has exactly 3
+non-empty `/`-separated components. The actual secret existence is NOT validated at plan time
+(would require vault connectivity during `dry-run`).
+
+### Manifest Types (`manifest/types.go` + `manifest/validate.go`)
+
+`ValueFrom string` is added to the Resource `Output` struct. The existing mutual-exclusion
+check in `validate.go` is extended to include `valueFrom` as a fourth exclusive option
+alongside `value`, `generated`, and `template`.
 
 ### Resolver Extension (`resolver.go`)
 
