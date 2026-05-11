@@ -6,9 +6,9 @@ metadata:
 spec:
   type: postgres
   version: "16"
+  port: 5432
   outputs:
     - name: host
     - name: port
-      value: "5432"
     - name: password
-      valueFrom: vault:shrine-test/production/DB_PASSWORD
+      valueFrom: vault:486975e5-b3a2-49d4-8c54-9702270c25ce/prod/DB_PASSWORD

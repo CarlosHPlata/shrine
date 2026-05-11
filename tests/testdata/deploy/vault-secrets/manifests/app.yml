@@ -14,4 +14,4 @@ spec:
     - name: DB_PASSWORD
       valueFrom: resource.test-db.password
     - name: API_KEY
-      valueFrom: vault:shrine-test/production/API_KEY
+      valueFrom: vault:486975e5-b3a2-49d4-8c54-9702270c25ce/prod/API_KEY

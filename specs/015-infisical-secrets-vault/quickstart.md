@@ -37,7 +37,7 @@ spec:
       value: production
 ```
 
-Path format: `vault:<project-slug>/<environment-slug>/<secret-name>`
+Path format: `vault:<project-uuid>/<environment-slug>/<secret-name>` (the project component is Infisical's project UUID, not its display name; environment is the env slug — `prod`, `staging`, `dev` by default)
 
 ## 3. Validate with dry-run (no vault connection needed)
 

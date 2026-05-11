@@ -252,14 +252,13 @@ func TestDeploy_VaultSecrets(t *testing.T) {
 
 	s := NewDockerSuite(t, "vault-team")
 
-	// Generate shrine.yml with the real credentials into the suite's temp dir.
+	// Generate config.yml with the real credentials into a temp config dir.
 	configDir := t.TempDir()
-	configPath := filepath.Join(configDir, "shrine.yml")
 	configBody := "plugins:\n  secrets:\n    infisical:\n      url: " + url +
 		"\n      client-id: \"" + clientID +
 		"\"\n      client-secret: \"" + clientSecret + "\"\n"
-	if err := os.WriteFile(configPath, []byte(configBody), 0o600); err != nil {
-		t.Fatalf("write shrine.yml: %v", err)
+	if err := os.WriteFile(filepath.Join(configDir, "config.yml"), []byte(configBody), 0o600); err != nil {
+		t.Fatalf("write config.yml: %v", err)
 	}
 
 	s.BeforeEach(func(tc *TestCase) {
@@ -268,6 +267,7 @@ func TestDeploy_VaultSecrets(t *testing.T) {
 		tc.Run("apply", "teams",
 			"--path", fixturesPath("vault-secrets", "manifests"),
 			"--state-dir", tc.StateDir,
+			"--config-dir", configDir,
 		).AssertSuccess()
 	})
 
@@ -275,7 +275,7 @@ func TestDeploy_VaultSecrets(t *testing.T) {
 		tc.Run("deploy",
 			"--path", fixturesPath("vault-secrets", "manifests"),
 			"--state-dir", tc.StateDir,
-			"--config", configPath,
+			"--config-dir", configDir,
 		).AssertSuccess()
 
 		tc.AssertContainerRunning("vault-team.test-app")

@@ -23,19 +23,31 @@ Open `http://localhost:8080` and:
 
 1. **Sign up** as the first admin (any email + password works — this instance is ephemeral).
 2. **Create an organization** (any name).
-3. **Create a project** with slug **`shrine-test`**.
-4. Inside the project, **create an environment** with slug **`production`** (it may be created by default).
-5. **Create two secrets** in the `production` environment:
+3. **Create a project** (any name; the *display* name doesn't matter — we'll reference it by UUID).
+4. The project comes with three default environments: `dev`, `staging`, `prod`. We use **`prod`**.
+5. In the `prod` environment, **create two secrets**:
    - `DB_PASSWORD` → any value (e.g. `ci-db-password-123`)
    - `API_KEY` → any value (e.g. `ci-api-key-xyz`)
-6. **Create a Machine Identity**:
-   - Access Control → Machine Identities → Create
+6. **Create a Machine Identity** (Organization-level Access Control → Identities → Create):
    - Auth method: **Universal Auth**
-   - Note the generated **Client ID** and **Client Secret** (Client Secret is only shown once)
-7. **Attach the machine identity to the `shrine-test` project**:
-   - Project → Access Control → Machine Identities → Add → select your identity → assign a role with read access to secrets
+   - Note the generated **Client ID** and **Client Secret** (Client Secret is shown only once)
+7. **Attach the machine identity to the project**:
+   - Project → Access Control → Identities → Add → select your identity → assign a role with `secrets:read` (e.g. Developer)
+8. **Find the project UUID**: open the project; the URL contains it (e.g. `/project/<UUID>/secrets/...`). Or run:
+   ```bash
+   curl -s -H "Authorization: Bearer $TOKEN" http://localhost:8080/api/v1/workspace | python3 -m json.tool
+   ```
 
-## 3. Run the integration test
+## 3. Wire the project UUID into the fixtures
+
+The vault path in Infisical's API is `<project-uuid>/<env-slug>/<secret-name>` (project component is a UUID, not the project name). Edit:
+
+- `tests/testdata/deploy/vault-secrets/manifests/db.yml` → replace the UUID in `valueFrom: vault:<UUID>/prod/DB_PASSWORD`
+- `tests/testdata/deploy/vault-secrets/manifests/app.yml` → replace the UUID in `valueFrom: vault:<UUID>/prod/API_KEY`
+
+(The committed fixtures contain a real-looking UUID from the original test setup; substitute your own.)
+
+## 4. Run the integration test
 
 ```bash
 export INFISICAL_TEST_URL=http://localhost:8080

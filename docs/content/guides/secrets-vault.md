@@ -57,12 +57,12 @@ spec:
   port: 8080
   env:
     - name: API_KEY
-      valueFrom: vault:my-project/production/API_KEY
+      valueFrom: vault:486975e5-b3a2-49d4-8c54-9702270c25ce/prod/API_KEY
     - name: STRIPE_SECRET
-      valueFrom: vault:my-project/production/STRIPE_SECRET_KEY
+      valueFrom: vault:486975e5-b3a2-49d4-8c54-9702270c25ce/prod/STRIPE_SECRET_KEY
 ```
 
-The path has exactly three slash-separated components: project slug, environment slug, and secret name. A path with a different number of components is rejected at plan time with an explicit error.
+The path has exactly three slash-separated components: project UUID, environment slug, and secret name. The project UUID can be found in the Infisical project URL or by calling `/api/v1/workspace`. A path with a different number of components is rejected at plan time with an explicit error.
 
 `value`, `valueFrom`, and `template` are mutually exclusive on a single env entry. Combining `vault:` with any other source is a plan-time validation error.
 
@@ -84,7 +84,7 @@ spec:
     - name: port
       value: "5432"
     - name: password
-      valueFrom: vault:my-project/production/DB_PASSWORD
+      valueFrom: vault:486975e5-b3a2-49d4-8c54-9702270c25ce/prod/DB_PASSWORD
 ```
 
 A dependent Application consumes the output with the standard `resource.` reference — no vault path appears in the Application manifest at all:

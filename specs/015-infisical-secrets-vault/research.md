@@ -44,9 +44,9 @@ val := secret.SecretValue
 
 ## Path Format: `vault:<project>/<environment>/<secret-name>`
 
-**Decision**: Three slash-separated components. "Project" is the **project slug** (human-readable identifier set in Infisical UI, e.g. `myapp`). Environment is the Infisical environment slug (e.g. `production`, `staging`). Secret name is the exact key stored in Infisical.
+**Decision**: Three slash-separated components: `<project-uuid>/<env-slug>/<secret-name>`. Project must be the UUID (visible in the project URL); environment is the Infisical environment slug (`dev`, `staging`, `prod` by default); secret name is the exact key stored in Infisical.
 
-**Rationale**: Slugs are more ergonomic than UUIDs for a homelab operator writing YAML. The Infisical Go SDK's `ProjectID` field accepts both slugs and UUIDs in current versions — slugs are preferred for readability.
+**Rationale**: We initially assumed Infisical's Go SDK accepted slugs in `RetrieveSecretOptions.ProjectID`. In practice (v0.7.x) it requires a UUID — passing a slug yields "Project with ID 'X' not found during bot lookup". The path treats the project component as opaque, so the only contract for the operator is "the value Infisical's API accepts for that field". A future enhancement could add slug→UUID lookup inside the plugin to restore ergonomics.
 
 **Validation at plan time**: Path MUST have exactly 3 non-empty `/`-separated components. A malformed path (e.g. `vault:foo`, `vault:foo/bar`) is rejected before execution begins.
 
