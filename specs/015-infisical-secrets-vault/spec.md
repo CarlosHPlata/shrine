@@ -18,7 +18,7 @@ As a Shrine operator, I want to reference secrets stored in an external vault fr
 
 1. **Given** an application manifest with `env.DATABASE_PASSWORD.valueFrom: vault:myproject/production/DB_PASSWORD`, **When** `shrine apply` runs, **Then** the container is started with `DATABASE_PASSWORD` set to the value fetched from the configured vault backend.
 2. **Given** the referenced secret does not exist in the vault, **When** `shrine apply` runs, **Then** the deploy fails with a clear error identifying the missing secret path.
-3. **Given** a mix of `value:`, `generated:`, and `valueFrom: vault:` env entries in the same manifest, **When** `shrine apply` runs, **Then** all three resolution types succeed together.
+3. **Given** a manifest where different env vars each use a distinct resolution type (`value:`, `generated:`, and `valueFrom: vault:` on separate keys), **When** `shrine apply` runs, **Then** all three resolution types succeed together.
 4. **Given** a shrine.yml that switches the secrets plugin from one provider to another, **When** `shrine apply` runs, **Then** manifests using `vault:` refs work without modification.
 
 ---
