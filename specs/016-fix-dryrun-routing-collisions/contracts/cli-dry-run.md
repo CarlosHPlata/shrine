@@ -31,20 +31,18 @@ A subsequent `shrine deploy` (no `--dry-run`) against the same directory exits n
 | Aspect           | Behavior                                                                          |
 |------------------|-----------------------------------------------------------------------------------|
 | Exit code        | Non-zero                                                                          |
-| stdout           | A `Validation errors:` header followed by the collision diagnostic                |
-| stderr           | The terminal error string `Spec validation errors`                                |
+| stdout           | Standard pre-error log lines (e.g. `[shrine] Planning deployment from: …`)        |
+| stderr           | Cobra-rendered error: `Error: routing validation failed:\n- routing collision: …` |
 | Side effects     | None                                                                              |
 
 The diagnostic body has the exact shape `DetectRoutingCollisions` already produces:
 
 ```text
-Validation errors:
-routing validation failed:
+Error: routing validation failed:
 - routing collision: host="example.local" pathPrefix="" declared by "team-one/app-a" and "team-one/app-b"
-Spec validation errors
 ```
 
-When N independent collisions exist, all N `routing collision: …` lines appear under the single `routing validation failed:` header, sorted alphabetically (per `DetectRoutingCollisions`'s existing `sort.Strings(errs)` step). A single invocation reports all collisions; users do not need to re-run.
+When N independent collisions exist, all N `routing collision: …` lines appear under the single `routing validation failed:` header, sorted alphabetically (per `DetectRoutingCollisions`'s existing `sort.Strings(errs)` step). A single invocation reports all collisions; users do not need to re-run. The diagnostic goes to **stderr** (per Constitution Principle II: "errors → stderr"), matching the pre-fix behavior of `shrine deploy` so existing tooling and tests asserting against stderr continue to work.
 
 ## Behavior — Unchanged Paths
 
@@ -54,7 +52,7 @@ When N independent collisions exist, all N `routing collision: …` lines appear
 | Manifest set with malformed YAML                       | non-zero  | Existing parser error |
 | Manifest set with other `Resolve` failures             | non-zero  | Existing `Validation errors:` block |
 
-The real (non-dry-run) `shrine deploy` is changed only in that the collision diagnostic is now emitted via the planner's `ValidationErr` path (under `Validation errors:`) instead of from the handler's direct call. Same fundamental behavior — error message content is unchanged — but the surrounding diagnostic framing is now identical to dry-run, satisfying SC-001 (parity).
+The real (non-dry-run) `shrine deploy` is unchanged in stderr shape — the collision diagnostic is still returned as a plain `error`, just from `planner.Plan` instead of from the handler's direct `DetectRoutingCollisions` call. Both `Deploy` and `DryRun` now flow through identical code, satisfying SC-001 (parity).
 
 ## Backwards Compatibility
 

@@ -18,17 +18,20 @@ The spec introduced no `[NEEDS CLARIFICATION]` markers. The unknowns at planning
 - **Add the call to `handler.DryRun` only**: rejected. Duplicates an invocation that already exists in `handler.Deploy`, multiplying the maintenance surface — and the original placement is itself the bug (gated on `routing != nil`). Principle VII (DRY) and the spec's FR-002 both push against this.
 - **Add a new top-level `ValidateManifestSet` step in the planner pipeline**: rejected. YAGNI. Today there is exactly one such manifest-level check; an abstraction over one usage is premature (Principle IV).
 
-## Decision 2 — Surface the result via `PlanResult.ValidationErr`, not `PlanResult.Error`
+## Decision 2 — Surface the result via `PlanResult.Error`, not `PlanResult.ValidationErr`
 
-**Decision**: Append the single error returned by `DetectRoutingCollisions` to `PlanResult.ValidationErr` (slice of one). Do not place it in `PlanResult.Error`.
+**Decision**: Return the error from `DetectRoutingCollisions` via `PlanResult.Error`. The handlers already pass `Error` straight back to cobra, which renders it to stderr.
 
 **Rationale**:
-- The handlers already print `ValidationErr` entries under a `"Validation errors:"` header. Collision diagnostics fit this category exactly (they describe what is wrong with the manifests).
-- `PlanResult.Error` is used for hard failures from `LoadDir` and `Order` — places where the planner cannot continue. A collision is descriptive validation feedback, not a planner-internal fault.
-- The collision function already aggregates all collisions into a single multi-line error string. One slice entry is therefore the correct cardinality; no per-collision splitting is needed to satisfy FR-005 ("report all collisions in one invocation").
+- The pre-existing `handler.Deploy` returned the collision error directly to cobra, so the diagnostic appeared on **stderr**. The existing integration test `TestTraefikPlugin/should_fail_deploy_when_two_applications_collide_on_host+pathPrefix` (`tests/integration/traefik_plugin_test.go:647`) asserts against stderr. Routing the error through `ValidationErr` would have moved the diagnostic to stdout (under a `Validation errors:` header printed by the handler), silently breaking that test.
+- Constitution Principle II: "errors → stderr". Validation feedback that ends the command IS an error; it should go to stderr, not stdout.
+- The collision function already aggregates all collisions into a single multi-line error string. A single `Error` value preserves all collisions in one diagnostic — FR-005 ("report all collisions in one invocation") is satisfied without involving a slice.
 
 **Alternatives considered**:
-- **Split into one `ValidationErr` entry per collision**: rejected. Requires changing `DetectRoutingCollisions`'s return signature (currently `error`, would become `[]error`). The existing single-error shape is well-tested (`internal/planner/collisions_test.go`) and adequately user-friendly; changing its signature for cosmetics violates Principle IV.
+- **Use `PlanResult.ValidationErr`**: rejected. Routes the diagnostic to stdout via the handler's `Validation errors:` printing block, breaking the pre-existing traefik integration assertion and violating Principle II.
+- **Split into one `ValidationErr` entry per collision**: rejected for the same reason as above, plus it would require changing `DetectRoutingCollisions`'s return signature (currently `error`, would become `[]error`). The existing single-error shape is well-tested and adequately user-friendly.
+
+**Note**: An earlier iteration of this plan placed the collision in `ValidationErr`. That choice broke the pre-existing traefik collision integration test on CI; this decision corrects it.
 
 ## Decision 3 — Remove the redundant call from `handler.Deploy`
 

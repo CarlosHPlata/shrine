@@ -239,9 +239,9 @@ func TestDeploy(t *testing.T) {
 			"--path", fixturesPath("routing-collision"),
 			"--state-dir", tc.StateDir,
 		).AssertFailure().
-			AssertOutputContains("routing collision").
-			AssertOutputContains("shrine-deploy-test/app-a").
-			AssertOutputContains("shrine-deploy-test/app-b")
+			AssertStderrContains("routing collision").
+			AssertStderrContains("shrine-deploy-test/app-a").
+			AssertStderrContains("shrine-deploy-test/app-b")
 	})
 }
 
