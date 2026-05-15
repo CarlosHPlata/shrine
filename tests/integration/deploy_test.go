@@ -233,6 +233,16 @@ func TestDeploy(t *testing.T) {
 
 		tc.AssertContainerRunning(testTeam + ".whoami")
 	})
+
+	s.Test("should report routing collision on dry-run when two apps share a domain", func(tc *TestCase) {
+		tc.Run("deploy", "--dry-run",
+			"--path", fixturesPath("routing-collision"),
+			"--state-dir", tc.StateDir,
+		).AssertFailure().
+			AssertOutputContains("routing collision").
+			AssertOutputContains("shrine-deploy-test/app-a").
+			AssertOutputContains("shrine-deploy-test/app-b")
+	})
 }
 
 // TestDeploy_VaultSecrets verifies vault secret resolution end-to-end against a

@@ -31,6 +31,10 @@ func Plan(dir string, store state.TeamStore, registries []config.RegistryConfig)
 		return PlanResult{ValidationErr: errs}
 	}
 
+	if err := DetectRoutingCollisions(set); err != nil {
+		return PlanResult{ValidationErr: []error{err}, ManifestSet: set}
+	}
+
 	steps, err := Order(set)
 	if err != nil {
 		return PlanResult{Error: err}
