@@ -1,7 +1,7 @@
 <!-- SPECKIT START -->
 For additional context about technologies to be used, project structure,
 shell commands, and other important information, read the current plan
-at specs/016-fix-dryrun-routing-collisions/plan.md
+at specs/017-refactor-composition-root/plan.md
 <!-- SPECKIT END -->
 
 ## graphify

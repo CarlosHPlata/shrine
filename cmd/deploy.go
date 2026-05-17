@@ -3,6 +3,7 @@ package cmd
 import (
 	"fmt"
 
+	"github.com/CarlosHPlata/shrine/internal/app"
 	"github.com/CarlosHPlata/shrine/internal/handler"
 	"github.com/CarlosHPlata/shrine/internal/updater"
 	"github.com/spf13/cobra"
@@ -27,13 +28,12 @@ var deployCmd = &cobra.Command{
 		if dryRun {
 			return handler.DryRun(cmd.OutOrStdout(), dir, store, cfg)
 		}
-		return handler.Deploy(handler.DeployOptions{
-			Out:         cmd.OutOrStdout(),
-			ManifestDir: dir,
-			Store:       store,
-			Config:      cfg,
-			Paths:       paths,
-		})
+		bundle, cleanup, err := app.BuildDeployBundle(cfg, store, paths, dir, cmd.OutOrStdout())
+		if err != nil {
+			return err
+		}
+		defer cleanup()
+		return handler.Deploy(bundle, dir)
 	},
 }
 

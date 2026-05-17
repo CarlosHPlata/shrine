@@ -3,6 +3,7 @@ package cmd
 import (
 	"fmt"
 
+	"github.com/CarlosHPlata/shrine/internal/app"
 	"github.com/CarlosHPlata/shrine/internal/handler"
 	"github.com/spf13/cobra"
 )
@@ -20,14 +21,12 @@ var applyCmd = &cobra.Command{
 			if err != nil {
 				return err
 			}
-			return handler.ApplySingle(handler.ApplySingleOptions{
-				Out:         cmd.OutOrStdout(),
-				File:        applyFile,
-				ManifestDir: dir,
-				Store:       store,
-				Config:      cfg,
-				Paths:       paths,
-			})
+			bundle, cleanup, err := app.BuildApplyBundle(cfg, store, paths, cmd.OutOrStdout())
+			if err != nil {
+				return err
+			}
+			defer cleanup()
+			return handler.ApplySingle(bundle, applyFile, dir)
 		}
 		return fmt.Errorf("specify a subcommand (e.g. shrine apply teams) or use --file/-f to apply a single manifest")
 	},
