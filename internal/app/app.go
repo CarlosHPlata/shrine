@@ -13,7 +13,6 @@ import (
 	"github.com/CarlosHPlata/shrine/internal/config"
 	"github.com/CarlosHPlata/shrine/internal/engine"
 	"github.com/CarlosHPlata/shrine/internal/engine/local"
-	"github.com/CarlosHPlata/shrine/internal/plugins/gateway/traefik"
 	"github.com/CarlosHPlata/shrine/internal/plugins/secrets"
 	"github.com/CarlosHPlata/shrine/internal/state"
 )
@@ -28,22 +27,20 @@ type DeployBundle struct {
 	Observer         engine.Observer
 	Vault            secrets.SecretsPlugin
 	ContainerBackend engine.ContainerBackend
-	TraefikPlugin    *traefik.Plugin
 	Routing          engine.RoutingBackend
 	Engine           *engine.Engine
 }
 
 // TeardownBundle is the dependency set passed to handler.Teardown.
 type TeardownBundle struct {
-	Out           io.Writer
-	Cfg           *config.Config
-	Store         *state.Store
-	Paths         *config.Paths
-	SpecsDir      string
-	Observer      engine.Observer
-	TraefikPlugin *traefik.Plugin
-	Routing       engine.RoutingBackend
-	Engine        *engine.Engine
+	Out      io.Writer
+	Cfg      *config.Config
+	Store    *state.Store
+	Paths    *config.Paths
+	SpecsDir string
+	Observer engine.Observer
+	Routing  engine.RoutingBackend
+	Engine   *engine.Engine
 }
 
 // ApplyBundle is the dependency set passed to handler.ApplySingle.
@@ -162,7 +159,6 @@ func BuildDeployBundle(cfg *config.Config, store *state.Store, paths *config.Pat
 		Observer:         observer,
 		Vault:            vault,
 		ContainerBackend: containerBackend,
-		TraefikPlugin:    plugin,
 		Routing:          routing,
 		Engine:           deployEngine,
 	}, joinCleanup(closeObserver), nil
@@ -205,15 +201,14 @@ func BuildTeardownBundle(cfg *config.Config, store *state.Store, paths *config.P
 	}
 
 	return &TeardownBundle{
-		Out:           out,
-		Cfg:           cfg,
-		Store:         store,
-		Paths:         paths,
-		SpecsDir:      specsDir,
-		Observer:      observer,
-		TraefikPlugin: plugin,
-		Routing:       routing,
-		Engine:        deployEngine,
+		Out:      out,
+		Cfg:      cfg,
+		Store:    store,
+		Paths:    paths,
+		SpecsDir: specsDir,
+		Observer: observer,
+		Routing:  routing,
+		Engine:   deployEngine,
 	}, joinCleanup(closeObserver), nil
 }
 

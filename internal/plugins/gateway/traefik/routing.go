@@ -5,11 +5,14 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 
 	"gopkg.in/yaml.v3"
 
+	"github.com/CarlosHPlata/shrine/internal/config"
 	"github.com/CarlosHPlata/shrine/internal/engine"
+	"github.com/CarlosHPlata/shrine/internal/manifest"
 )
 
 var writeFileFn = os.WriteFile
@@ -20,6 +23,8 @@ type RoutingBackend struct {
 	routingDir       string
 	staticConfigPath string
 	observer         engine.Observer
+	cfg              *config.TraefikPluginConfig
+	containerBackend engine.ContainerBackend
 }
 
 func (r *RoutingBackend) dynamicDir() string {
@@ -193,6 +198,83 @@ func (r *RoutingBackend) WriteRoute(op engine.WriteRouteOp) error {
 		},
 	})
 	return nil
+}
+
+func (r *RoutingBackend) Finalize() error {
+	if r.cfg == nil || r.containerBackend == nil {
+		return nil
+	}
+
+	if err := mkdirAllFn(r.routingDir, 0o755); err != nil {
+		return fmt.Errorf("traefik routing: creating routing dir %q: %w", r.routingDir, err)
+	}
+	if err := mkdirAllFn(r.dynamicDir(), 0o755); err != nil {
+		return fmt.Errorf("traefik routing: creating dynamic dir: %w", err)
+	}
+
+	if err := generateStaticConfig(r.cfg, r.routingDir, r.observer); err != nil {
+		return err
+	}
+
+	if r.hasDashboard() {
+		if err := generateDashboardDynamicConfig(r.cfg, r.routingDir, r.observer); err != nil {
+			return err
+		}
+	}
+
+	op := engine.CreateContainerOp{
+		Team:             containerTeam,
+		Name:             containerName,
+		Kind:             manifest.ApplicationKind,
+		Image:            r.resolvedImage(),
+		Network:          platformNetwork,
+		ExposeToPlatform: false,
+		ImagePullPolicy:  "IfNotPresent",
+		RestartPolicy:    "always",
+		BindMounts: []engine.BindMount{
+			{Source: r.routingDir, Target: "/etc/traefik"},
+		},
+		PortBindings: r.portBindings(),
+	}
+
+	if err := r.containerBackend.CreateContainer(op); err != nil {
+		return fmt.Errorf("traefik routing: starting traefik container: %w", err)
+	}
+	return nil
+}
+
+func (r *RoutingBackend) hasDashboard() bool {
+	return r.cfg != nil && r.cfg.Dashboard != nil && r.cfg.Dashboard.Port > 0
+}
+
+func (r *RoutingBackend) resolvedImage() string {
+	if r.cfg == nil || r.cfg.Image == "" {
+		return defaultImage
+	}
+	return r.cfg.Image
+}
+
+func (r *RoutingBackend) resolvedPort() int {
+	if r.cfg == nil || r.cfg.Port == 0 {
+		return defaultPort
+	}
+	return r.cfg.Port
+}
+
+func (r *RoutingBackend) portBindings() []engine.PortBinding {
+	port := strconv.Itoa(r.resolvedPort())
+	bindings := []engine.PortBinding{
+		{HostPort: port, ContainerPort: port, Protocol: "tcp"},
+	}
+	if r.cfg != nil && r.cfg.TLSPort > 0 {
+		tp := strconv.Itoa(r.cfg.TLSPort)
+		bindings = append(bindings, engine.PortBinding{HostPort: tp, ContainerPort: "443", Protocol: "tcp"})
+	}
+	if r.hasDashboard() {
+		dp := strconv.Itoa(r.cfg.Dashboard.Port)
+		bindings = append(bindings, engine.PortBinding{HostPort: dp, ContainerPort: dp, Protocol: "tcp"})
+	}
+	return bindings
 }
 
 func (r *RoutingBackend) RemoveRoute(team string, host string) error {

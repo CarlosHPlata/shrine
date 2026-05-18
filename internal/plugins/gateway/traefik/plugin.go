@@ -2,13 +2,11 @@ package traefik
 
 import (
 	"fmt"
-	"os"
 	"path/filepath"
 	"strconv"
 
 	"github.com/CarlosHPlata/shrine/internal/config"
 	"github.com/CarlosHPlata/shrine/internal/engine"
-	"github.com/CarlosHPlata/shrine/internal/manifest"
 )
 
 const (
@@ -113,53 +111,6 @@ func (p *Plugin) resolvedRoutingDir() (string, error) {
 	return routingDir, nil
 }
 
-func (p *Plugin) Deploy() error {
-	if !p.isActive() {
-		return nil
-	}
-
-	routingDir, err := p.resolvedRoutingDir()
-	if err != nil {
-		return err
-	}
-	if err := os.MkdirAll(routingDir, 0o755); err != nil {
-		return fmt.Errorf("traefik plugin: creating routing dir %q: %w", routingDir, err)
-	}
-	if err := os.MkdirAll(filepath.Join(routingDir, "dynamic"), 0o755); err != nil {
-		return fmt.Errorf("traefik plugin: creating dynamic dir: %w", err)
-	}
-
-	if err := generateStaticConfig(p.cfg, routingDir, p.observer); err != nil {
-		return err
-	}
-
-	if p.hasDashboard() {
-		if err := generateDashboardDynamicConfig(p.cfg, routingDir, p.observer); err != nil {
-			return err
-		}
-	}
-
-	op := engine.CreateContainerOp{
-		Team:             containerTeam,
-		Name:             containerName,
-		Kind:             manifest.ApplicationKind,
-		Image:            p.resolvedImage(),
-		Network:          platformNetwork,
-		ExposeToPlatform: false,
-		ImagePullPolicy:  "IfNotPresent",
-		RestartPolicy:    "always",
-		BindMounts: []engine.BindMount{
-			{Source: routingDir, Target: "/etc/traefik"},
-		},
-		PortBindings: p.portBindings(),
-	}
-
-	if err := p.backend.CreateContainer(op); err != nil {
-		return fmt.Errorf("traefik plugin: starting traefik container: %w", err)
-	}
-	return nil
-}
-
 func (p *Plugin) portBindings() []engine.PortBinding {
 	port := strconv.Itoa(p.resolvedPort())
 	bindings := []engine.PortBinding{
@@ -181,5 +132,11 @@ func (p *Plugin) RoutingBackend() (engine.RoutingBackend, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &RoutingBackend{routingDir: routingDir, staticConfigPath: filepath.Join(routingDir, "traefik.yml"), observer: p.observer}, nil
+	return &RoutingBackend{
+		routingDir:       routingDir,
+		staticConfigPath: filepath.Join(routingDir, "traefik.yml"),
+		observer:         p.observer,
+		cfg:              p.cfg,
+		containerBackend: p.backend,
+	}, nil
 }

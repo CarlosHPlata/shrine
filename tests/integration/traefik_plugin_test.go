@@ -457,11 +457,11 @@ func TestTraefikPlugin(t *testing.T) {
 	// T007: non-IsNotExist stat error on traefik.yml must fail the deploy with a clear message.
 	// This scenario is not achievable via the CLI integration path: making routingDir
 	// unreadable (chmod 000) also blocks the routing backend's dynamic/ writes, which
-	// run in handler.Deploy() BEFORE Plugin.Deploy() reaches isStaticConfigPresent.
+	// run inside ExecuteDeploy BEFORE RoutingBackend.Finalize reaches isStaticConfigPresent.
 	// The error-wrap behavior is fully covered by the unit tests in config_gen_test.go
 	// (TestIsStaticConfigPresent_OtherError, TestGenerateStaticConfig_StatError).
 	s.Test("should fail deploy with a clear error when stat on traefik.yml fails for a reason other than NotExist", func(tc *TestCase) {
-		tc.Skip("non-IsNotExist lstat path is unreachable via the CLI: chmod on routingDir blocks the routing backend before Plugin.Deploy(); covered by config_gen_test.go unit tests")
+		tc.Skip("non-IsNotExist lstat path is unreachable via the CLI: chmod on routingDir blocks the routing backend before Finalize; covered by config_gen_test.go unit tests")
 	})
 
 	// T014: deleting traefik.yml and redeploying must regenerate it with valid content.

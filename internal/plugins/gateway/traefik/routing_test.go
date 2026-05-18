@@ -4,11 +4,13 @@ import (
 	"errors"
 	"io/fs"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
 	"gopkg.in/yaml.v3"
 
+	"github.com/CarlosHPlata/shrine/internal/config"
 	"github.com/CarlosHPlata/shrine/internal/engine"
 )
 
@@ -783,6 +785,140 @@ func TestWriteRoute_NoAliasHasTLS_NoWarning_RegardlessOfStaticConfig(t *testing.
 		if ev.Name == "gateway.alias.tls_no_websecure" {
 			t.Errorf("unexpected gateway.alias.tls_no_websecure event when no alias has TLS=true: %+v", ev)
 		}
+	}
+}
+
+// recordingContainerBackend captures CreateContainer ops for assertion.
+type recordingContainerBackend struct {
+	creates []engine.CreateContainerOp
+	err     error
+}
+
+func (r *recordingContainerBackend) CreateNetwork(string) error { return nil }
+func (r *recordingContainerBackend) RemoveNetwork(string) error { return nil }
+func (r *recordingContainerBackend) CreateContainer(op engine.CreateContainerOp) error {
+	r.creates = append(r.creates, op)
+	return r.err
+}
+func (r *recordingContainerBackend) RemoveContainer(engine.RemoveContainerOp) error { return nil }
+func (r *recordingContainerBackend) CreatePlatformNetwork() error                   { return nil }
+func (r *recordingContainerBackend) InspectContainer(string) (engine.ContainerInfo, error) {
+	return engine.ContainerInfo{}, nil
+}
+
+// T013: Finalize must ensure the routing dirs exist, generate static config +
+// dashboard dynamic config under the routing dir, and issue a Traefik
+// ContainerOp against the held ContainerBackend. This covers the body
+// previously held by Plugin.Deploy().
+//
+// We stub lstatFn so the file generators see "present" configs and short-
+// circuit on the preserved path, avoiding any real filesystem writes (per
+// unit-test isolation policy). The Finalize-level mkdir + container creation
+// remain observable via the in-test stubs.
+func TestRoutingBackend_Finalize_GeneratesConfigsAndCreatesContainer(t *testing.T) {
+	stubLstatPresent(t)
+
+	var mkdirs []string
+	origMkdir := mkdirAllFn
+	mkdirAllFn = func(path string, _ fs.FileMode) error {
+		mkdirs = append(mkdirs, path)
+		return nil
+	}
+	t.Cleanup(func() { mkdirAllFn = origMkdir })
+
+	cb := &recordingContainerBackend{}
+	cfg := &config.TraefikPluginConfig{
+		Port:    80,
+		TLSPort: 8443,
+		Dashboard: &config.TraefikDashboardConfig{
+			Port:     8080,
+			Username: "u",
+			Password: "p",
+		},
+	}
+	routingDir := "/fake/specs/traefik"
+	rec := &recordingObserver{}
+	rb := &RoutingBackend{
+		routingDir:       routingDir,
+		staticConfigPath: filepath.Join(routingDir, "traefik.yml"),
+		observer:         rec,
+		cfg:              cfg,
+		containerBackend: cb,
+	}
+
+	if err := rb.Finalize(); err != nil {
+		t.Fatalf("Finalize returned error: %v", err)
+	}
+
+	// Finalize must ensure both the routing dir and dynamic dir.
+	wantDirs := []string{routingDir, filepath.Join(routingDir, "dynamic")}
+	for _, want := range wantDirs {
+		found := false
+		for _, d := range mkdirs {
+			if d == want {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Errorf("expected mkdir for %q; got %v", want, mkdirs)
+		}
+	}
+
+	// The static config generator must have run (preserved event emitted
+	// because lstat reports present).
+	var staticEvent bool
+	var dashboardEvent bool
+	for _, ev := range rec.events {
+		if ev.Name == "gateway.config.preserved" {
+			staticEvent = true
+		}
+		if ev.Name == "gateway.dashboard.preserved" {
+			dashboardEvent = true
+		}
+	}
+	if !staticEvent {
+		t.Errorf("expected gateway.config.preserved event; got %+v", rec.events)
+	}
+	if !dashboardEvent {
+		t.Errorf("expected gateway.dashboard.preserved event; got %+v", rec.events)
+	}
+
+	// Exactly one Traefik container creation, with the routing dir bind-mounted.
+	if len(cb.creates) != 1 {
+		t.Fatalf("expected 1 CreateContainer call, got %d: %+v", len(cb.creates), cb.creates)
+	}
+	op := cb.creates[0]
+	if op.Team != containerTeam || op.Name != containerName {
+		t.Errorf("expected team=%q name=%q, got team=%q name=%q", containerTeam, containerName, op.Team, op.Name)
+	}
+	if op.Network != platformNetwork {
+		t.Errorf("expected network=%q, got %q", platformNetwork, op.Network)
+	}
+	if len(op.BindMounts) != 1 || op.BindMounts[0].Source != routingDir || op.BindMounts[0].Target != "/etc/traefik" {
+		t.Errorf("unexpected bind mounts: %+v", op.BindMounts)
+	}
+	// Three port bindings: 80, TLS->443, dashboard.
+	if len(op.PortBindings) != 3 {
+		t.Errorf("expected 3 port bindings (port, tlsPort, dashboard), got %d: %+v", len(op.PortBindings), op.PortBindings)
+	}
+}
+
+// T013 companion: when cfg/containerBackend are nil (narrow test backend),
+// Finalize must be a safe no-op so existing routing_test.go fixtures keep
+// working.
+func TestRoutingBackend_Finalize_NoCfgIsNoOp(t *testing.T) {
+	cb := &recordingContainerBackend{}
+	rb := &RoutingBackend{
+		routingDir:       "/fake",
+		staticConfigPath: "/fake/traefik.yml",
+		observer:         engine.NoopObserver{},
+	}
+	if err := rb.Finalize(); err != nil {
+		t.Errorf("Finalize without cfg must be a no-op; got %v", err)
+	}
+	if len(cb.creates) != 0 {
+		t.Errorf("Finalize without cfg must not create containers; got %+v", cb.creates)
 	}
 }
 
