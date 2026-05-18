@@ -75,11 +75,5 @@ func Deploy(b *app.DeployBundle, manifestDir string) error {
 		return err
 	}
 
-	if b.TraefikPlugin.IsActive() {
-		if err := b.TraefikPlugin.Deploy(); err != nil {
-			return err
-		}
-	}
-
 	return nil
 }

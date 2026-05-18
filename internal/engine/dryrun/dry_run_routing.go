@@ -21,3 +21,8 @@ func (d *DryRunRoutingBackend) RemoveRoute(team string, domain string) error {
 	fmt.Fprintf(d.Out, "[ROUTE]  RemoveRoute: domain=%s (team=%s)\n", domain, team)
 	return nil
 }
+
+func (d *DryRunRoutingBackend) Finalize() error {
+	fmt.Fprintf(d.Out, "[ROUTE]  Finalize\n")
+	return nil
+}

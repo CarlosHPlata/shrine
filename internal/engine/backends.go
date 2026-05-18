@@ -70,6 +70,7 @@ type WriteRouteOp struct {
 type RoutingBackend interface {
 	WriteRoute(op WriteRouteOp) error
 	RemoveRoute(team string, host string) error
+	Finalize() error
 }
 
 type WriteRecordOp struct {

@@ -20,8 +20,8 @@
     "hash": "117bb7ee2942ed909c70da7952187cbd"
   },
   "/root/projects/shrine/tests/integration/traefik_plugin_test.go": {
-    "mtime": 1777716536.1401103,
-    "hash": "8fdfaaa57090e5668f79074ff9eae784"
+    "mtime": 1779120428.2430704,
+    "hash": "ba59b19a42055f428ac22301b33ce072"
   },
   "/root/projects/shrine/tests/integration/deploy_test.go": {
     "mtime": 1778886000.6427557,
@@ -96,7 +96,7 @@
     "hash": "c0ff39b4cbc425737d03e5e0c272d218"
   },
   "/root/projects/shrine/cmd/deploy.go": {
-    "mtime": 1778887951.4327126,
+    "mtime": 1779018228.891621,
     "hash": "896ce809a6f7ca8124113ef002659d8e"
   },
   "/root/projects/shrine/cmd/generate.go": {
@@ -104,7 +104,7 @@
     "hash": "c3ed1e6f73acfb7373f0294df365ab44"
   },
   "/root/projects/shrine/cmd/apply.go": {
-    "mtime": 1778887865.2616456,
+    "mtime": 1779018228.891621,
     "hash": "1f5464c4f7175b0e27ae7b984754f15b"
   },
   "/root/projects/shrine/cmd/get.go": {
@@ -116,7 +116,7 @@
     "hash": "d5298d91760c31ad0c2ffb3239874270"
   },
   "/root/projects/shrine/cmd/teardown.go": {
-    "mtime": 1778887956.4430177,
+    "mtime": 1779018228.891621,
     "hash": "54f9f13b33a40edb5f6f8d53d50f1c41"
   },
   "/root/projects/shrine/cmd/create.go": {
@@ -192,20 +192,20 @@
     "hash": "feb1f4679630cee431e623aaa790aaea"
   },
   "/root/projects/shrine/internal/engine/backends.go": {
-    "mtime": 1777721115.114904,
-    "hash": "3baadd66ae98177eb000ea91b097ce74"
+    "mtime": 1779119882.8588376,
+    "hash": "7bdb173f1fa65d50acb48062332de1db"
   },
   "/root/projects/shrine/internal/engine/engine_aliases_test.go": {
     "mtime": 1777721115.115059,
     "hash": "b761735a393b47cd5f0edb9baf9e9906"
   },
   "/root/projects/shrine/internal/engine/engine_test.go": {
-    "mtime": 1777669907.2838583,
-    "hash": "8591eebfe6ff1fe84ccbbe430f52ea0d"
+    "mtime": 1779120041.917739,
+    "hash": "7f62bf9592be0037e3cdc1f63580f5b2"
   },
   "/root/projects/shrine/internal/engine/engine.go": {
-    "mtime": 1777721115.1149898,
-    "hash": "a598d93527aadf1430fd06a98ff123b9"
+    "mtime": 1779119907.3126688,
+    "hash": "89ec793649d38f712db75adc424937af"
   },
   "/root/projects/shrine/internal/engine/local/local_engine.go": {
     "mtime": 1778879083.3701684,
@@ -248,8 +248,8 @@
     "hash": "a9f0a8b290a1c6e84a70f12e71d10e28"
   },
   "/root/projects/shrine/internal/engine/dryrun/dry_run_routing.go": {
-    "mtime": 1776692840.0309017,
-    "hash": "65ae47355a01bc1eea72053638e74647"
+    "mtime": 1779119887.7398038,
+    "hash": "9d564178bc90895d14bed8e6607194af"
   },
   "/root/projects/shrine/internal/engine/dryrun/dry_run_container.go": {
     "mtime": 1777320773.5446653,
@@ -312,8 +312,8 @@
     "hash": "1da920dc516aae8b7a021cdb5b5f3d97"
   },
   "/root/projects/shrine/internal/plugins/gateway/traefik/routing.go": {
-    "mtime": 1777721115.115459,
-    "hash": "ba8f7eecaa1576395224eb554d787e8f"
+    "mtime": 1779120176.3438103,
+    "hash": "88d35fcaa26688788fff2d92d1b27280"
   },
   "/root/projects/shrine/internal/plugins/gateway/traefik/config_gen_test.go": {
     "mtime": 1777716536.138597,
@@ -328,8 +328,8 @@
     "hash": "265dd6240c1e5c16dda23ee0218e8f28"
   },
   "/root/projects/shrine/internal/plugins/gateway/traefik/plugin.go": {
-    "mtime": 1777721115.115459,
-    "hash": "f9fa32cd50bda6b01c7177beae8d3639"
+    "mtime": 1779120326.5747726,
+    "hash": "f778ad3366eb70e16ca1642aa7365b2c"
   },
   "/root/projects/shrine/internal/plugins/gateway/traefik/helpers_test.go": {
     "mtime": 1777669907.2838583,
@@ -340,16 +340,16 @@
     "hash": "ac3c6f6c1fa6526dde34364763af48f1"
   },
   "/root/projects/shrine/internal/plugins/gateway/traefik/routing_test.go": {
-    "mtime": 1777721115.1156638,
-    "hash": "0340062fa4239ed26e67dc1be2ecb6c4"
+    "mtime": 1779120276.28912,
+    "hash": "c442a48f5027b724b48ddb9d1e6eb17c"
   },
   "/root/projects/shrine/internal/app/components.go": {
-    "mtime": 1778887806.8330479,
+    "mtime": 1779018228.901621,
     "hash": "a8759b1097f3ef717d68d22b699afa7f"
   },
   "/root/projects/shrine/internal/app/app.go": {
-    "mtime": 1778888340.207375,
-    "hash": "04974cdec003d7c9a8a7f3de5d3aa3c5"
+    "mtime": 1779120393.679309,
+    "hash": "4b152f36cb0ad60339961b8b26d86aca"
   },
   "/root/projects/shrine/internal/state/deployments.go": {
     "mtime": 1777716536.138597,
@@ -452,11 +452,11 @@
     "hash": "3e189a841f34130c9a0127fdcc1f26e9"
   },
   "/root/projects/shrine/internal/handler/deploy.go": {
-    "mtime": 1778887936.1301575,
-    "hash": "2445d711239212656ef520f2e952a5f9"
+    "mtime": 1779120310.584883,
+    "hash": "c0c5619ee6deb1ed8daa3bea6722ae0b"
   },
   "/root/projects/shrine/internal/handler/apply.go": {
-    "mtime": 1778887855.019716,
+    "mtime": 1779018228.901621,
     "hash": "ba6eeaff42e6629d8346209da7815663"
   },
   "/root/projects/shrine/internal/handler/deployments.go": {
@@ -464,7 +464,7 @@
     "hash": "0b41d34375062befe784228a2b7e71b5"
   },
   "/root/projects/shrine/internal/handler/teardown.go": {
-    "mtime": 1778887939.1771367,
+    "mtime": 1779018228.901621,
     "hash": "3774205a766b80efa121136134151a88"
   },
   "/root/projects/shrine/internal/handler/resources.go": {
@@ -524,8 +524,8 @@
     "hash": "2323d0e6352bff0fa83175a0cdd56511"
   },
   "/root/projects/shrine/CLAUDE.md": {
-    "mtime": 1778887134.7646754,
-    "hash": "25598206eaedb865183b565cabbb1e24"
+    "mtime": 1779055924.4186912,
+    "hash": "ff1f5cedb2d260186edbedbbac37b4d0"
   },
   "/root/projects/shrine/CONTRIBUTING.md": {
     "mtime": 1777365753.5124683,
@@ -1031,6 +1031,38 @@
     "mtime": 1777721115.1159577,
     "hash": "e8f1e294d7ccc511a38dfc7b8fb7dea0"
   },
+  "/root/projects/shrine/specs/018-routing-backend-finalize/tasks.md": {
+    "mtime": 1779120451.3679106,
+    "hash": "3e3b7c66745cfd62b994284377af46c9"
+  },
+  "/root/projects/shrine/specs/018-routing-backend-finalize/spec.md": {
+    "mtime": 1779055739.5419624,
+    "hash": "459b572c7e29d96baad42c648e30c5a7"
+  },
+  "/root/projects/shrine/specs/018-routing-backend-finalize/quickstart.md": {
+    "mtime": 1779055917.9477355,
+    "hash": "94a9ee1e9018a222a93a80608abc8ebd"
+  },
+  "/root/projects/shrine/specs/018-routing-backend-finalize/plan.md": {
+    "mtime": 1779055783.0576632,
+    "hash": "6a11dcf3947270c0b43b3e6c305cd996"
+  },
+  "/root/projects/shrine/specs/018-routing-backend-finalize/data-model.md": {
+    "mtime": 1779055857.4081519,
+    "hash": "5a11a46c66ec0d14d2283e7ce88562f3"
+  },
+  "/root/projects/shrine/specs/018-routing-backend-finalize/research.md": {
+    "mtime": 1779055828.9443476,
+    "hash": "223a7c2527934c026ddb661992eeaea2"
+  },
+  "/root/projects/shrine/specs/018-routing-backend-finalize/checklists/requirements.md": {
+    "mtime": 1779023903.2849832,
+    "hash": "130de80ecccf6df8675bc4c9b5ffa8c0"
+  },
+  "/root/projects/shrine/specs/018-routing-backend-finalize/contracts/routing-backend.md": {
+    "mtime": 1779055890.3589656,
+    "hash": "fe2deac417f7afde699149a131f0af1d"
+  },
   "/root/projects/shrine/specs/006-routing-aliases/tasks.md": {
     "mtime": 1777635971.0239942,
     "hash": "b6abf6a46587d7aa2391f0c58c6d820b"
@@ -1128,35 +1160,35 @@
     "hash": "d8ff598ee1abe025860e263e76a9878f"
   },
   "/root/projects/shrine/specs/017-refactor-composition-root/tasks.md": {
-    "mtime": 1778887593.3835175,
-    "hash": "890480c00e39183f0f5740d687e9fcca"
+    "mtime": 1779018228.9026604,
+    "hash": "b3b8f0322d44496b2e439c00e7415361"
   },
   "/root/projects/shrine/specs/017-refactor-composition-root/spec.md": {
-    "mtime": 1778886226.19793,
+    "mtime": 1779018228.9026604,
     "hash": "4687a9140c9b22541dd32232e1eadc24"
   },
   "/root/projects/shrine/specs/017-refactor-composition-root/quickstart.md": {
-    "mtime": 1778888465.0525155,
+    "mtime": 1779018228.9026604,
     "hash": "ea9923743626ceb0e8c3d053f2c55b91"
   },
   "/root/projects/shrine/specs/017-refactor-composition-root/plan.md": {
-    "mtime": 1778886900.4532888,
+    "mtime": 1779018228.9026604,
     "hash": "67c233924aff1f4399eb11b0ae7ad8e6"
   },
   "/root/projects/shrine/specs/017-refactor-composition-root/data-model.md": {
-    "mtime": 1778887059.7781918,
+    "mtime": 1779018228.9026604,
     "hash": "273920cf92133e198990c1c34bfe2f45"
   },
   "/root/projects/shrine/specs/017-refactor-composition-root/research.md": {
-    "mtime": 1778887006.6415577,
+    "mtime": 1779018228.9026604,
     "hash": "1c3c298321654b5839ac2d3acfce0b9e"
   },
   "/root/projects/shrine/specs/017-refactor-composition-root/checklists/requirements.md": {
-    "mtime": 1778886237.0608554,
+    "mtime": 1779018228.9026604,
     "hash": "c57416a6371e897d0c2679f18a3c7960"
   },
   "/root/projects/shrine/specs/017-refactor-composition-root/contracts/app-package.md": {
-    "mtime": 1778887096.045942,
+    "mtime": 1779018228.9026604,
     "hash": "15f444a3e7404ae78100c156bbf57c65"
   },
   "/root/projects/shrine/specs/015-infisical-secrets-vault/tasks.md": {

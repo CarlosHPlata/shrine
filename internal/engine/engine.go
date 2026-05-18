@@ -77,6 +77,10 @@ func (engine *Engine) ExecuteDeploy(steps []planner.PlannedStep, set *planner.Ma
 			}
 		}
 	}
+
+	if err := engine.finalizeRouting(); err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -92,10 +96,27 @@ func (engine *Engine) ExecuteTeardown(team string, steps []planner.PlannedStep) 
 		}
 	}
 
+	if err := engine.finalizeRouting(); err != nil {
+		return err
+	}
+
 	if err := engine.Container.RemoveNetwork(team); err != nil {
 		return engine.emitErr("network.remove", map[string]string{"team": team},
 			fmt.Errorf("removing network for team %q: %w", team, err))
 	}
+	return nil
+}
+
+func (engine *Engine) finalizeRouting() error {
+	if engine.Routing == nil {
+		return nil
+	}
+	engine.Observer.OnEvent(Event{Name: "routing.finalize", Status: StatusStarted})
+	if err := engine.Routing.Finalize(); err != nil {
+		return engine.emitErr("routing.finalize", nil,
+			fmt.Errorf("routing finalize: %w", err))
+	}
+	engine.Observer.OnEvent(Event{Name: "routing.finalize", Status: StatusInfo})
 	return nil
 }
 
