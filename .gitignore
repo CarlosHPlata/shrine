@@ -41,3 +41,6 @@ dist/
 
 # Claude Code local config
 .claude/
+
+# Graphify knowledge graph output (local-only)
+graphify-out/
