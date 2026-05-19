@@ -42,9 +42,9 @@ func runDeploy(filter planner.Filter) func(*cobra.Command, []string) error {
 		printDeployHeader(cmd, filter, dir)
 
 		if dryRun {
-			return handler.DryRun(cmd.OutOrStdout(), dir, store, cfg, filter)
+			return handler.DryRun(cmd.OutOrStdout(), cmd.ErrOrStderr(), dir, store, cfg, filter)
 		}
-		bundle, cleanup, err := app.BuildDeployBundle(cfg, store, paths, dir, cmd.OutOrStdout())
+		bundle, cleanup, err := app.BuildDeployBundle(cfg, store, paths, dir, cmd.OutOrStdout(), cmd.ErrOrStderr())
 		if err != nil {
 			return err
 		}

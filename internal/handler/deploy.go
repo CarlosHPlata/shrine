@@ -13,8 +13,9 @@ import (
 
 // DryRun runs a dry-run deploy scoped by filter. When cfg is non-nil, registries
 // and the Traefik config are validated; the dry-run engine prints route
-// operations instead of writing files.
-func DryRun(out io.Writer, manifestDir string, store *state.Store, cfg *config.Config, filter planner.Filter) error {
+// operations instead of writing files. Planning output goes to out, validation
+// errors to errOut.
+func DryRun(out, errOut io.Writer, manifestDir string, store *state.Store, cfg *config.Config, filter planner.Filter) error {
 	if cfg != nil {
 		if err := cfg.ValidateRegistries(); err != nil {
 			return err
@@ -36,9 +37,9 @@ func DryRun(out io.Writer, manifestDir string, store *state.Store, cfg *config.C
 	}
 
 	if len(result.ValidationErr) > 0 {
-		fmt.Fprintln(out, "Validation errors:")
+		fmt.Fprintln(errOut, "Validation errors:")
 		for _, err := range result.ValidationErr {
-			fmt.Fprintln(out, err)
+			fmt.Fprintln(errOut, err)
 		}
 		return fmt.Errorf("Spec validation errors")
 	}
@@ -69,9 +70,9 @@ func Deploy(b *app.DeployBundle, manifestDir string, filter planner.Filter) erro
 	}
 
 	if len(result.ValidationErr) > 0 {
-		fmt.Fprintln(b.Out, "Validation errors:")
+		fmt.Fprintln(b.ErrOut, "Validation errors:")
 		for _, err := range result.ValidationErr {
-			fmt.Fprintln(b.Out, err)
+			fmt.Fprintln(b.ErrOut, err)
 		}
 		return fmt.Errorf("Spec validation errors")
 	}

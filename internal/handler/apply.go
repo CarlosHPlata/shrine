@@ -35,9 +35,9 @@ func ApplySingle(b *app.ApplyBundle, file, manifestDir string) error {
 	}
 
 	if len(result.ValidationErr) > 0 {
-		fmt.Fprintln(b.Out, "Validation errors:")
+		fmt.Fprintln(b.ErrOut, "Validation errors:")
 		for _, err := range result.ValidationErr {
-			fmt.Fprintln(b.Out, err)
+			fmt.Fprintln(b.ErrOut, err)
 		}
 		return fmt.Errorf("Spec validation errors")
 	}
