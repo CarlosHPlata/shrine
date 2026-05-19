@@ -75,6 +75,12 @@ shrine deploy --path .
 
 Shrine creates the team network, pulls the image if needed, and starts the container.
 
+> **Multiple teams in one specs directory?** Use `shrine deploy team <name>` to
+> reconcile only one team's apps and resources. Cross-team dependencies are
+> still resolved from the directory but are not redeployed. See the
+> [team-scoped deploy guide](/guides/team-scoped-deploy/) for the full
+> workflow.
+
 ## Step 6: verify
 
 ```bash

@@ -1,7 +1,6 @@
 package planner
 
 import (
-	"fmt"
 	"sort"
 
 	"github.com/CarlosHPlata/shrine/internal/config"
@@ -21,9 +20,13 @@ type PlanTeardownResult struct {
 	Error error
 }
 
-func Plan(dir string, store state.TeamStore, registries []config.RegistryConfig) PlanResult {
-	set, err := LoadDir(dir)
-	if err != nil {
+// Plan is the single planning entry point. It walks a pre-loaded ManifestSet
+// and emits the deploy steps selected by filter.
+//
+// Loading is the caller's job: use LoadDir for a full directory, or
+// NewManifestSet + MergeManifest to assemble a set from individual files.
+func Plan(set *ManifestSet, store state.TeamStore, registries []config.RegistryConfig, filter Filter) PlanResult {
+	if err := filter.Validate(set); err != nil {
 		return PlanResult{Error: err}
 	}
 
@@ -31,89 +34,59 @@ func Plan(dir string, store state.TeamStore, registries []config.RegistryConfig)
 		return PlanResult{ValidationErr: errs}
 	}
 
-	if err := DetectRoutingCollisions(set); err != nil {
-		return PlanResult{Error: err}
-	}
-
-	steps, err := Order(set)
-	if err != nil {
-		return PlanResult{Error: err}
-	}
-
-	return PlanResult{Steps: steps, ManifestSet: set}
-}
-
-// PlanSingle plans the deployment of a single manifest file.
-// If specsDir is non-empty it loads the full directory as resolution context;
-// otherwise a minimal ManifestSet containing only the parsed manifest is used.
-func PlanSingle(file, specsDir string, store state.TeamStore, registries []config.RegistryConfig) PlanResult {
-	// Step 1: Parse and validate the target manifest.
-	m, err := manifest.Parse(file)
-	if err != nil {
-		return PlanResult{Error: fmt.Errorf("parsing manifest %q: %w", file, err)}
-	}
-	if err := manifest.Validate(m); err != nil {
-		return PlanResult{Error: fmt.Errorf("validating manifest %q: %w", file, err)}
-	}
-
-	// Derive the name from the concrete sub-manifest.
-	var name string
-	switch m.Kind {
-	case manifest.ApplicationKind:
-		name = m.Application.Metadata.Name
-	case manifest.ResourceKind:
-		name = m.Resource.Metadata.Name
-	case manifest.TeamKind:
-		return PlanResult{Error: fmt.Errorf("team manifests cannot be applied with --file; use 'shrine apply teams' instead")}
-	default:
-		return PlanResult{Error: fmt.Errorf("unsupported manifest kind %q for single-file apply", m.Kind)}
-	}
-
-	var set *ManifestSet
-
-	if specsDir != "" {
-		// Step 2a: Load the full directory for dependency resolution context.
-		set, err = LoadDir(specsDir)
+	switch filter.Kind {
+	case FilterNone, FilterTeam:
+		if err := DetectRoutingCollisions(set); err != nil {
+			return PlanResult{Error: err}
+		}
+		steps, err := Order(set)
 		if err != nil {
 			return PlanResult{Error: err}
 		}
+		if filter.Kind == FilterTeam {
+			steps = filterStepsByOwner(steps, set, filter.Name)
+		}
+		return PlanResult{Steps: steps, ManifestSet: set}
 
-		// Add the target manifest to the set if it is not already present.
-		alreadyPresent := false
-		switch m.Kind {
-		case manifest.ApplicationKind:
-			_, alreadyPresent = set.Applications[name]
-		case manifest.ResourceKind:
-			_, alreadyPresent = set.Resources[name]
+	case FilterApp:
+		return PlanResult{
+			Steps:       []PlannedStep{{Kind: manifest.ApplicationKind, Name: filter.Name}},
+			ManifestSet: set,
 		}
 
-		if !alreadyPresent {
-			if err := set.mapKind(m, file); err != nil {
-				return PlanResult{Error: err}
-			}
-		}
-	} else {
-		// Step 2b: Minimal set — only the single manifest.
-		set = &ManifestSet{
-			Applications: make(map[string]*manifest.ApplicationManifest),
-			Resources:    make(map[string]*manifest.ResourceManifest),
-		}
-		if err := set.mapKind(m, file); err != nil {
-			return PlanResult{Error: err}
+	case FilterRes:
+		return PlanResult{
+			Steps:       []PlannedStep{{Kind: manifest.ResourceKind, Name: filter.Name}},
+			ManifestSet: set,
 		}
 	}
 
-	// Step 3: Resolve dependencies, quotas, access control, and registry aliases.
-	if errs := Resolve(set, store, registries); len(errs) > 0 {
-		return PlanResult{ValidationErr: errs}
-	}
+	// Unreachable: Validate already rejected unknown kinds.
+	return PlanResult{}
+}
 
-	// Step 4: Return a single-step plan; ManifestSet is carried for callers that
-	// need the resolution context (e.g. value injection).
-	return PlanResult{
-		Steps:       []PlannedStep{{Kind: m.Kind, Name: name}},
-		ManifestSet: set,
+func filterStepsByOwner(steps []PlannedStep, set *ManifestSet, owner string) []PlannedStep {
+	out := make([]PlannedStep, 0, len(steps))
+	for _, step := range steps {
+		if stepOwner(set, step) == owner {
+			out = append(out, step)
+		}
 	}
+	return out
+}
+
+func stepOwner(set *ManifestSet, step PlannedStep) string {
+	switch step.Kind {
+	case manifest.ApplicationKind:
+		if app, ok := set.Applications[step.Name]; ok {
+			return app.Metadata.Owner
+		}
+	case manifest.ResourceKind:
+		if res, ok := set.Resources[step.Name]; ok {
+			return res.Metadata.Owner
+		}
+	}
+	return ""
 }
 
 func PlanTeardown(team string, store state.DeploymentStore) PlanTeardownResult {
