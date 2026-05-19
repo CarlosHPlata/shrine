@@ -36,4 +36,5 @@ shrine deploy [flags]
 ### SEE ALSO
 
 * [shrine](shrine/)	 - shrine is a CLI tool that interprets declarative YAML manifests and orchestrates Docker containers.
+* [shrine deploy team](shrine-deploy-team/)	 - Deploy only the apps and resources owned by one team
 

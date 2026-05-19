@@ -8,6 +8,7 @@ Shrine is a Go CLI that orchestrates homelab services via declarative YAML manif
 go build -o shrine .
 
 shrine deploy                              # deploy all manifests (uses specsDir from config)
+shrine deploy team team-a                  # deploy only one team's apps and resources
 shrine deploy --path ./manifests/          # override specsDir
 shrine deploy --dry-run                    # print plan, no side effects
 shrine apply -f ./manifests/my-app.yml    # deploy a single manifest
@@ -21,6 +22,9 @@ shrine status app my-api                  # show status for a specific app
 
 ### shrine deploy
 No positional path argument. Uses --path/-p flag or specsDir from config.yml. Examples: shrine deploy, shrine deploy --path ./manifests/, shrine deploy --dry-run
+
+### shrine deploy team <name>
+Reconciles only the apps and resources whose metadata.owner matches <name>. The full specs directory is loaded as resolution context (so cross-team dependencies still resolve), but deploy steps are emitted only for team-owned manifests. Inherits --dry-run and --path from `shrine deploy`. Unknown-team errors list the team names discovered in the directory.
 
 ### shrine apply -f <file>
 New command. Deploys a single manifest file. Kind is inferred from the YAML kind: field. Uses specsDir (or --path) as resolution context for valueFrom dependencies.
@@ -151,7 +155,7 @@ spec:
 shrine/
 ├── cmd/                        # Cobra commands (thin dispatchers)
 │   ├── root.go                 # Global flags: --config-dir, --state-dir
-│   ├── deploy.go               # shrine deploy [--path] [--dry-run]
+│   ├── deploy.go               # shrine deploy [--path] [--dry-run] + `team <name>` subcommand
 │   ├── teardown.go             # shrine teardown <team>
 │   ├── generate.go             # shrine generate team|app|resource <name>
 │   └── ...

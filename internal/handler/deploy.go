@@ -11,10 +11,10 @@ import (
 	"github.com/CarlosHPlata/shrine/internal/state"
 )
 
-// DryRun runs a dry-run deploy. When cfg is non-nil, registries and the
-// Traefik config are validated; the dry-run engine prints route operations
-// instead of writing files.
-func DryRun(out io.Writer, manifestDir string, store *state.Store, cfg *config.Config) error {
+// DryRun runs a dry-run deploy scoped by filter. When cfg is non-nil, registries
+// and the Traefik config are validated; the dry-run engine prints route
+// operations instead of writing files.
+func DryRun(out io.Writer, manifestDir string, store *state.Store, cfg *config.Config, filter planner.Filter) error {
 	if cfg != nil {
 		if err := cfg.ValidateRegistries(); err != nil {
 			return err
@@ -24,7 +24,12 @@ func DryRun(out io.Writer, manifestDir string, store *state.Store, cfg *config.C
 		}
 	}
 
-	result := planner.Plan(manifestDir, store.Teams, cfg.Registries)
+	set, err := planner.LoadDir(manifestDir)
+	if err != nil {
+		return err
+	}
+
+	result := planner.Plan(set, store.Teams, cfg.Registries, filter)
 
 	if result.Error != nil {
 		return result.Error
@@ -51,8 +56,13 @@ func DryRun(out io.Writer, manifestDir string, store *state.Store, cfg *config.C
 	return nil
 }
 
-func Deploy(b *app.DeployBundle, manifestDir string) error {
-	result := planner.Plan(manifestDir, b.Store.Teams, b.Cfg.Registries)
+func Deploy(b *app.DeployBundle, manifestDir string, filter planner.Filter) error {
+	set, err := planner.LoadDir(manifestDir)
+	if err != nil {
+		return err
+	}
+
+	result := planner.Plan(set, b.Store.Teams, b.Cfg.Registries, filter)
 
 	if result.Error != nil {
 		return result.Error

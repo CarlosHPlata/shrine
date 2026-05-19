@@ -1,0 +1,13 @@
+apiVersion: shrine/v1
+kind: Application
+metadata:
+  name: alpha2
+  owner: shrine-team-a
+spec:
+  image: traefik/whoami
+  port: 80
+  replicas: 1
+  routing:
+    domain: collide.test.local
+  networking:
+    exposeToPlatform: false
