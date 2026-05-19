@@ -55,10 +55,10 @@ func runDeploy(filter planner.Filter) func(*cobra.Command, []string) error {
 
 func printDeployHeader(cmd *cobra.Command, filter planner.Filter, dir string) {
 	if filter.Kind == planner.FilterTeam {
-		cmd.Printf("[shrine] Planning deployment for team %q from: %s\n", filter.Name, dir)
+		fmt.Fprintf(cmd.OutOrStdout(), "[shrine] Planning deployment for team %q from: %s\n", filter.Name, dir)
 		return
 	}
-	cmd.Printf("[shrine] Planning deployment from: %s\n", dir)
+	fmt.Fprintf(cmd.OutOrStdout(), "[shrine] Planning deployment from: %s\n", dir)
 }
 
 func checkForUpdate(cmd *cobra.Command) {
