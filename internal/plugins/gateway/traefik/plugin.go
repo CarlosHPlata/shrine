@@ -89,13 +89,6 @@ func (p *Plugin) validate() error {
 	return nil
 }
 
-func (p *Plugin) resolvedImage() string {
-	if p.cfg == nil || p.cfg.Image == "" {
-		return defaultImage
-	}
-	return p.cfg.Image
-}
-
 func (p *Plugin) resolvedPort() int {
 	if p.cfg == nil || p.cfg.Port == 0 {
 		return defaultPort

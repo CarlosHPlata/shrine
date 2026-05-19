@@ -16,11 +16,6 @@ func normalizePrefix(p string) string {
 }
 
 func DetectRoutingCollisions(set *ManifestSet) error {
-	type record struct {
-		appRef string
-		key    routeKey
-	}
-
 	// Collect all (appRef, routeKey) pairs in deterministic order.
 	appRefs := make([]string, 0, len(set.Applications))
 	for name := range set.Applications {
