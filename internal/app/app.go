@@ -20,6 +20,7 @@ import (
 // DeployBundle is the dependency set passed to handler.Deploy.
 type DeployBundle struct {
 	Out              io.Writer
+	ErrOut           io.Writer
 	Cfg              *config.Config
 	Store            *state.Store
 	Paths            *config.Paths
@@ -46,6 +47,7 @@ type TeardownBundle struct {
 // ApplyBundle is the dependency set passed to handler.ApplySingle.
 type ApplyBundle struct {
 	Out      io.Writer
+	ErrOut   io.Writer
 	Cfg      *config.Config
 	Store    *state.Store
 	Paths    *config.Paths
@@ -59,7 +61,7 @@ type ApplyBundle struct {
 // On success the returned cleanup func is non-nil and idempotent — callers
 // MUST defer it. On failure all three return values are zero; partial state
 // has been unwound internally.
-func BuildApplyBundle(cfg *config.Config, store *state.Store, paths *config.Paths, out io.Writer) (*ApplyBundle, func() error, error) {
+func BuildApplyBundle(cfg *config.Config, store *state.Store, paths *config.Paths, out, errOut io.Writer) (*ApplyBundle, func() error, error) {
 	if err := cfg.ValidateRegistries(); err != nil {
 		return nil, nil, fmt.Errorf("validating registries: %w", err)
 	}
@@ -88,6 +90,7 @@ func BuildApplyBundle(cfg *config.Config, store *state.Store, paths *config.Path
 
 	return &ApplyBundle{
 		Out:      out,
+		ErrOut:   errOut,
 		Cfg:      cfg,
 		Store:    store,
 		Paths:    paths,
@@ -102,7 +105,7 @@ func BuildApplyBundle(cfg *config.Config, store *state.Store, paths *config.Path
 // Sequence mirrors the historical handler.Deploy wiring: validate registries,
 // resolve specsDir, observers, container backend, Traefik plugin, vault,
 // routing backend, local engine.
-func BuildDeployBundle(cfg *config.Config, store *state.Store, paths *config.Paths, manifestDir string, out io.Writer) (*DeployBundle, func() error, error) {
+func BuildDeployBundle(cfg *config.Config, store *state.Store, paths *config.Paths, manifestDir string, out, errOut io.Writer) (*DeployBundle, func() error, error) {
 	if err := cfg.ValidateRegistries(); err != nil {
 		return nil, nil, fmt.Errorf("validating registries: %w", err)
 	}
@@ -152,6 +155,7 @@ func BuildDeployBundle(cfg *config.Config, store *state.Store, paths *config.Pat
 
 	return &DeployBundle{
 		Out:              out,
+		ErrOut:           errOut,
 		Cfg:              cfg,
 		Store:            store,
 		Paths:            paths,

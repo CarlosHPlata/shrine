@@ -1,7 +1,7 @@
 package planner
 
 import (
-	"fmt"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -9,15 +9,6 @@ import (
 
 	"github.com/CarlosHPlata/shrine/internal/manifest"
 )
-
-// nullTeamStore is a minimal state.TeamStore stub for unit tests that only need
-// the store interface to satisfy PlanSingle's signature without any real I/O.
-type nullTeamStore struct{}
-
-func (nullTeamStore) SaveTeam(*manifest.TeamManifest) error              { return nil }
-func (nullTeamStore) LoadTeam(string) (*manifest.TeamManifest, error)    { return nil, fmt.Errorf("not found") }
-func (nullTeamStore) ListTeams() ([]*manifest.TeamManifest, error)       { return nil, nil }
-func (nullTeamStore) DeleteTeam(string) error                            { return nil }
 
 func TestLoadDir(t *testing.T) {
 	tmp := t.TempDir()
@@ -216,38 +207,88 @@ kind: [unclosed`
 	}
 }
 
-// TestPlanSingle_BadKind_WrapsFilePath pins the FR-007 guarantee that PlanSingle
-// includes the target file path in the error message when manifest.Parse fails on
-// a shrine manifest with an unknown kind. This was a regression introduced during
-// the Phase 3/4 refactor where PlanSingle returned the bare parse error without
-// wrapping it with the file path — T036 restores the wrapping.
-func TestPlanSingle_BadKind_WrapsFilePath(t *testing.T) {
-	tmp := t.TempDir()
+func TestNewManifestSet(t *testing.T) {
+	set := NewManifestSet()
+	if set == nil {
+		t.Fatal("NewManifestSet returned nil")
+	}
+	if set.Applications == nil {
+		t.Error("Applications map not allocated")
+	}
+	if set.Resources == nil {
+		t.Error("Resources map not allocated")
+	}
+	if len(set.Applications) != 0 || len(set.Resources) != 0 {
+		t.Error("expected empty maps")
+	}
+}
 
-	typoYAML := `apiVersion: shrine/v1
-kind: Aplication
-metadata:
-  name: typo-app
-  owner: team-x
-spec:
-  image: traefik/whoami
-  port: 80
-`
-	typoFile := filepath.Join(tmp, "typo.yaml")
-	if err := os.WriteFile(typoFile, []byte(typoYAML), 0644); err != nil {
-		t.Fatal(err)
+func TestMergeManifest_Application(t *testing.T) {
+	set := NewManifestSet()
+	m := &manifest.Manifest{
+		TypeMeta: manifest.TypeMeta{Kind: manifest.ApplicationKind, APIVersion: "shrine/v1"},
+		Application: &manifest.ApplicationManifest{
+			TypeMeta: manifest.TypeMeta{Kind: manifest.ApplicationKind, APIVersion: "shrine/v1"},
+			Metadata: manifest.Metadata{Name: "alpha", Owner: "team-a"},
+		},
+	}
+	if err := set.MergeManifest(m, "alpha.yaml"); err != nil {
+		t.Fatalf("first merge: %v", err)
+	}
+	if _, ok := set.Applications["alpha"]; !ok {
+		t.Error("alpha not in Applications map")
 	}
 
-	result := PlanSingle(typoFile, "", nullTeamStore{}, nil)
-	if result.Error == nil {
-		t.Fatal("expected PlanSingle to return an error for bad-kind manifest, got nil")
+	if err := set.MergeManifest(m, "alpha.yaml"); err == nil {
+		t.Fatal("expected duplicate merge to error, got nil")
+	} else if !errors.Is(err, ErrDuplicateManifest) {
+		t.Errorf("expected errors.Is(err, ErrDuplicateManifest), got: %v", err)
 	}
+}
 
-	msg := result.Error.Error()
-	if !strings.Contains(msg, "typo.yaml") {
-		t.Errorf("expected error to contain file name %q, got: %v", "typo.yaml", msg)
+func TestMergeManifest_Resource_Duplicate(t *testing.T) {
+	set := NewManifestSet()
+	m := &manifest.Manifest{
+		TypeMeta: manifest.TypeMeta{Kind: manifest.ResourceKind, APIVersion: "shrine/v1"},
+		Resource: &manifest.ResourceManifest{
+			TypeMeta: manifest.TypeMeta{Kind: manifest.ResourceKind, APIVersion: "shrine/v1"},
+			Metadata: manifest.Metadata{Name: "db", Owner: "team-a"},
+		},
 	}
-	if !strings.Contains(msg, "Aplication") {
-		t.Errorf("expected error to contain offending kind %q, got: %v", "Aplication", msg)
+	if err := set.MergeManifest(m, "db.yaml"); err != nil {
+		t.Fatalf("first merge: %v", err)
+	}
+	err := set.MergeManifest(m, "db.yaml")
+	if !errors.Is(err, ErrDuplicateManifest) {
+		t.Errorf("expected ErrDuplicateManifest, got: %v", err)
+	}
+}
+
+func TestMergeManifest_TeamKindIsNoOp(t *testing.T) {
+	set := NewManifestSet()
+	m := &manifest.Manifest{
+		TypeMeta: manifest.TypeMeta{Kind: manifest.TeamKind, APIVersion: "shrine/v1"},
+		Team: &manifest.TeamManifest{
+			TypeMeta: manifest.TypeMeta{Kind: manifest.TeamKind, APIVersion: "shrine/v1"},
+			Metadata: manifest.Metadata{Name: "team-a"},
+		},
+	}
+	if err := set.MergeManifest(m, "team.yaml"); err != nil {
+		t.Fatalf("team merge should be no-op, got error: %v", err)
+	}
+	if len(set.Applications) != 0 || len(set.Resources) != 0 {
+		t.Error("Team merge should not populate Applications or Resources")
+	}
+}
+
+func TestMergeManifest_UnsupportedKind(t *testing.T) {
+	set := NewManifestSet()
+	m := &manifest.Manifest{TypeMeta: manifest.TypeMeta{Kind: "Sidecar", APIVersion: "shrine/v1"}}
+	err := set.MergeManifest(m, "sidecar.yaml")
+	if err == nil {
+		t.Fatal("expected error for unsupported kind, got nil")
+	}
+	if !strings.Contains(err.Error(), "Sidecar") || !strings.Contains(err.Error(), "sidecar.yaml") {
+		t.Errorf("error should name the kind and file, got: %v", err)
 	}
 }

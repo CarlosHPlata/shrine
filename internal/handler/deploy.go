@@ -11,10 +11,11 @@ import (
 	"github.com/CarlosHPlata/shrine/internal/state"
 )
 
-// DryRun runs a dry-run deploy. When cfg is non-nil, registries and the
-// Traefik config are validated; the dry-run engine prints route operations
-// instead of writing files.
-func DryRun(out io.Writer, manifestDir string, store *state.Store, cfg *config.Config) error {
+// DryRun runs a dry-run deploy scoped by filter. When cfg is non-nil, registries
+// and the Traefik config are validated; the dry-run engine prints route
+// operations instead of writing files. Planning output goes to out, validation
+// errors to errOut.
+func DryRun(out, errOut io.Writer, manifestDir string, store *state.Store, cfg *config.Config, filter planner.Filter) error {
 	if cfg != nil {
 		if err := cfg.ValidateRegistries(); err != nil {
 			return err
@@ -24,16 +25,21 @@ func DryRun(out io.Writer, manifestDir string, store *state.Store, cfg *config.C
 		}
 	}
 
-	result := planner.Plan(manifestDir, store.Teams, cfg.Registries)
+	set, err := planner.LoadDir(manifestDir)
+	if err != nil {
+		return err
+	}
+
+	result := planner.Plan(set, store.Teams, cfg.Registries, filter)
 
 	if result.Error != nil {
 		return result.Error
 	}
 
 	if len(result.ValidationErr) > 0 {
-		fmt.Fprintln(out, "Validation errors:")
+		fmt.Fprintln(errOut, "Validation errors:")
 		for _, err := range result.ValidationErr {
-			fmt.Fprintln(out, err)
+			fmt.Fprintln(errOut, err)
 		}
 		return fmt.Errorf("Spec validation errors")
 	}
@@ -51,17 +57,22 @@ func DryRun(out io.Writer, manifestDir string, store *state.Store, cfg *config.C
 	return nil
 }
 
-func Deploy(b *app.DeployBundle, manifestDir string) error {
-	result := planner.Plan(manifestDir, b.Store.Teams, b.Cfg.Registries)
+func Deploy(b *app.DeployBundle, manifestDir string, filter planner.Filter) error {
+	set, err := planner.LoadDir(manifestDir)
+	if err != nil {
+		return err
+	}
+
+	result := planner.Plan(set, b.Store.Teams, b.Cfg.Registries, filter)
 
 	if result.Error != nil {
 		return result.Error
 	}
 
 	if len(result.ValidationErr) > 0 {
-		fmt.Fprintln(b.Out, "Validation errors:")
+		fmt.Fprintln(b.ErrOut, "Validation errors:")
 		for _, err := range result.ValidationErr {
-			fmt.Fprintln(b.Out, err)
+			fmt.Fprintln(b.ErrOut, err)
 		}
 		return fmt.Errorf("Spec validation errors")
 	}

@@ -21,7 +21,7 @@ var applyCmd = &cobra.Command{
 			if err != nil {
 				return err
 			}
-			bundle, cleanup, err := app.BuildApplyBundle(cfg, store, paths, cmd.OutOrStdout())
+			bundle, cleanup, err := app.BuildApplyBundle(cfg, store, paths, cmd.OutOrStdout(), cmd.ErrOrStderr())
 			if err != nil {
 				return err
 			}
