@@ -1,0 +1,16 @@
+apiVersion: shrine/v1
+kind: Application
+metadata:
+  name: ops-bot
+  owner: shrine-team-a
+spec:
+  image: traefik/whoami
+  port: 80
+  replicas: 1
+  dependencies:
+    - kind: Resource
+      name: ops-bot-db
+      owner: shrine-team-a
+  env:
+    - name: DB_CONNECTION_URL
+      valueFrom: resource.ops-bot-db.DB_CONNECTION_URL

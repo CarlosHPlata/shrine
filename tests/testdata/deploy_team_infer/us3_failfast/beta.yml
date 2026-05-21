@@ -1,0 +1,14 @@
+apiVersion: shrine/v1
+kind: Application
+metadata:
+  name: beta
+  owner: shrine-team-a
+spec:
+  image: traefik/whoami
+  port: 80
+  replicas: 1
+  env:
+    - name: B1
+      valueFrom: resource.missing-b1.HOST
+    - name: B2
+      valueFrom: resource.missing-b2.HOST

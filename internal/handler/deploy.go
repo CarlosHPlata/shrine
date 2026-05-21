@@ -49,6 +49,8 @@ func DryRun(out, errOut io.Writer, manifestDir string, store *state.Store, cfg *
 		return nil
 	}
 
+	fmt.Fprint(out, formatDeployPlan(result.Steps, result.ManifestSet, result.InferredEdges))
+
 	engineInst := dryrun.NewDryRunEngine(out)
 	if err := engineInst.ExecuteDeploy(result.Steps, result.ManifestSet); err != nil {
 		return err

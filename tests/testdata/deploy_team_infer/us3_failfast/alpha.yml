@@ -1,0 +1,14 @@
+apiVersion: shrine/v1
+kind: Application
+metadata:
+  name: alpha
+  owner: shrine-team-a
+spec:
+  image: traefik/whoami
+  port: 80
+  replicas: 1
+  env:
+    - name: A1
+      valueFrom: resource.missing-a1.HOST
+    - name: A2
+      valueFrom: resource.missing-a2.HOST

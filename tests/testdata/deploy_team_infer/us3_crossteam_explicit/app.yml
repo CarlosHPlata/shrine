@@ -1,0 +1,16 @@
+apiVersion: shrine/v1
+kind: Application
+metadata:
+  name: ops-bot
+  owner: shrine-team-a
+spec:
+  image: traefik/whoami
+  port: 80
+  replicas: 1
+  dependencies:
+    - kind: Resource
+      name: shared-cache
+      owner: shrine-team-b
+  env:
+    - name: CACHE_HOST
+      valueFrom: resource.shared-cache.HOST

@@ -1,0 +1,12 @@
+apiVersion: shrine/v1
+kind: Application
+metadata:
+  name: ops-bot
+  owner: shrine-team-a
+spec:
+  image: traefik/whoami
+  port: 80
+  replicas: 1
+  env:
+    - name: BAD_REF
+      valueFrom: resource.does-not-exist.HOST
