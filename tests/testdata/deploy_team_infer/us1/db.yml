@@ -1,0 +1,12 @@
+apiVersion: shrine/v1
+kind: Resource
+metadata:
+  name: ops-bot-db
+  owner: shrine-team-a
+spec:
+  type: postgres
+  version: "16"
+  image: traefik/whoami
+  outputs:
+    - name: DB_CONNECTION_URL
+      value: "postgres://example"

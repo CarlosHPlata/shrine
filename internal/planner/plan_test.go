@@ -1,6 +1,8 @@
 package planner
 
 import (
+	"os"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -61,8 +63,11 @@ func TestPlan_NoFilter_EmitsAllSteps(t *testing.T) {
 	if len(result.Steps) != 4 {
 		t.Errorf("expected 4 steps (2 apps + 2 resources), got %d: %+v", len(result.Steps), result.Steps)
 	}
-	if result.ManifestSet != set {
-		t.Error("ManifestSet should be returned unchanged")
+	// Post-enrichment, ManifestSet is a shallow copy with pointer-shared
+	// values; assert content equivalence rather than pointer identity.
+	if len(result.ManifestSet.Applications) != len(set.Applications) ||
+		len(result.ManifestSet.Resources) != len(set.Resources) {
+		t.Error("ManifestSet content should match input set")
 	}
 }
 
@@ -141,6 +146,97 @@ func TestPlan_ByApp_Missing_ReturnsError(t *testing.T) {
 	if !strings.Contains(result.Error.Error(), "nope") {
 		t.Errorf("error should name missing app, got: %v", result.Error)
 	}
+}
+
+// inferenceSet returns a set where alpha has a same-team valueFrom that
+// will yield an inferred edge and a cross-team-ish setup for failure cases.
+func inferenceSet(t *testing.T) *ManifestSet {
+	t.Helper()
+	set := NewManifestSet()
+	set.Resources["db"] = &manifest.ResourceManifest{
+		TypeMeta: manifest.TypeMeta{Kind: manifest.ResourceKind, APIVersion: "shrine/v1"},
+		Metadata: manifest.Metadata{Name: "db", Owner: "team-a"},
+		Spec: manifest.ResourceSpec{
+			Type: "postgres", Version: "16",
+			Outputs: []manifest.Output{{Name: "URL", Value: "v"}},
+		},
+	}
+	set.Applications["alpha"] = &manifest.ApplicationManifest{
+		TypeMeta: manifest.TypeMeta{Kind: manifest.ApplicationKind, APIVersion: "shrine/v1"},
+		Metadata: manifest.Metadata{Name: "alpha", Owner: "team-a"},
+		Spec: manifest.ApplicationSpec{
+			Image: "nginx",
+			Env:   []manifest.EnvVar{{Name: "DB_URL", ValueFrom: "resource.db.URL"}},
+		},
+	}
+	return set
+}
+
+// crossTeamFailureSet triggers an *EnrichmentError on Plan().
+func crossTeamFailureSet(t *testing.T) *ManifestSet {
+	t.Helper()
+	set := inferenceSet(t)
+	set.Resources["db"].Metadata.Owner = "team-b" // becomes cross-team
+	return set
+}
+
+func TestPlan_DoesNotWriteToDisk(t *testing.T) {
+	cwd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	before, err := os.Stat(cwd)
+	if err != nil {
+		t.Fatalf("stat cwd: %v", err)
+	}
+
+	// Success path.
+	_ = Plan(inferenceSet(t), stubTeamStore{}, nil, NoFilter())
+	// Failure path.
+	_ = Plan(crossTeamFailureSet(t), stubTeamStore{}, nil, NoFilter())
+
+	after, err := os.Stat(cwd)
+	if err != nil {
+		t.Fatalf("stat cwd: %v", err)
+	}
+	if !before.ModTime().Equal(after.ModTime()) {
+		t.Errorf("Plan() must not modify the working directory; mtime changed: %v → %v",
+			before.ModTime(), after.ModTime())
+	}
+}
+
+func TestPlan_DoesNotMutateInputSet(t *testing.T) {
+	check := func(label string, set *ManifestSet, runPlan func()) {
+		snap := make(map[string][]manifest.Dependency, len(set.Applications))
+		for name, app := range set.Applications {
+			if app.Spec.Dependencies == nil {
+				snap[name] = nil
+				continue
+			}
+			cp := make([]manifest.Dependency, len(app.Spec.Dependencies))
+			copy(cp, app.Spec.Dependencies)
+			snap[name] = cp
+		}
+		runPlan()
+		for name, app := range set.Applications {
+			if !reflect.DeepEqual(snap[name], app.Spec.Dependencies) {
+				t.Errorf("%s: Plan mutated app %q Spec.Dependencies\nbefore: %+v\nafter:  %+v",
+					label, name, snap[name], app.Spec.Dependencies)
+			}
+		}
+	}
+
+	// Success path.
+	successSet := inferenceSet(t)
+	check("success", successSet, func() {
+		_ = Plan(successSet, stubTeamStore{}, nil, NoFilter())
+	})
+
+	// Failure path.
+	failSet := crossTeamFailureSet(t)
+	check("failure", failSet, func() {
+		_ = Plan(failSet, stubTeamStore{}, nil, NoFilter())
+	})
 }
 
 // TestPlan_ByTeam_CrossTeamDepResolution proves that even when a team-scoped

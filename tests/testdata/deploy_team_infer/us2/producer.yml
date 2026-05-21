@@ -1,0 +1,9 @@
+apiVersion: shrine/v1
+kind: Application
+metadata:
+  name: producer
+  owner: shrine-team-a
+spec:
+  image: traefik/whoami
+  port: 80
+  replicas: 1

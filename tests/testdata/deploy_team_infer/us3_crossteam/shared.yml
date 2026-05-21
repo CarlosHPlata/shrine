@@ -1,0 +1,14 @@
+apiVersion: shrine/v1
+kind: Resource
+metadata:
+  name: shared-cache
+  owner: shrine-team-b
+  access: [shrine-team-a]
+spec:
+  type: redis
+  version: "7"
+  networking:
+    exposeToPlatform: true
+  outputs:
+    - name: HOST
+      value: "shared-cache.svc"

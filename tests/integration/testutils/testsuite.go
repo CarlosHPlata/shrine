@@ -84,6 +84,17 @@ func (tc *TestCase) Setenv(key, value string) {
 	tc.t.Setenv(key, value)
 }
 
+// RunResult returns the captured Result from the most recent Run call.
+func (tc *TestCase) RunResult() *Result { return tc.result }
+
+// Fatalf delegates to the underlying *testing.T's Fatalf, marking this test
+// as a helper. Use it when an assertion needs custom formatting that the
+// built-in Assert* helpers don't cover.
+func (tc *TestCase) Fatalf(format string, args ...interface{}) {
+	tc.t.Helper()
+	tc.t.Fatalf(format, args...)
+}
+
 func (tc *TestCase) Skip(reason string) {
 	tc.t.Helper()
 	tc.t.Skip(reason)

@@ -274,8 +274,9 @@ func validateValueFrom(set *ManifestSet, app *manifest.ApplicationManifest) []er
 		case "resource":
 			res, exists := set.Resources[name]
 			if !exists {
-				errs = append(errs, fmt.Errorf("app %q: env %q references missing resource %q",
-					app.Metadata.Name, env.Name, name))
+				// Absent target is handled by the enrichment layer (FR-010, Q2):
+				// it raises the typed EnrichmentError unless an explicit
+				// spec.dependencies entry covers the reference. Skip here.
 				continue
 			}
 
@@ -294,8 +295,7 @@ func validateValueFrom(set *ManifestSet, app *manifest.ApplicationManifest) []er
 		case "application":
 			_, exists := set.Applications[name]
 			if !exists {
-				errs = append(errs, fmt.Errorf("app %q: env %q references missing application %q",
-					app.Metadata.Name, env.Name, name))
+				// Same reasoning as the resource branch above.
 				continue
 			}
 			if output != "host" && output != "port" {

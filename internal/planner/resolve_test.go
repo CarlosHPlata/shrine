@@ -256,13 +256,14 @@ func TestResolve(t *testing.T) {
 
 		errs := Resolve(set, store, nil)
 
+		// Absent-target cases (MISSING_RES, MISSING_APP) are no longer reported
+		// by Resolve — enrichment owns those and emits *EnrichmentError instead
+		// (FR-010, Q2). Resolve still flags format errors and bad-output refs.
 		expectedErrors := []string{
 			"invalid valueFrom format \"resource.db1\"",
 			"invalid valueFrom format \"config.db1.url\"",
-			"references missing resource \"db2\"",
 			"references non-existent output \"host\" on resource \"db1\"",
 			"application \"worker\" has no built-in output \"url\" (only host and port are supported)",
-			"references missing application \"ghost\"",
 		}
 
 		for _, expected := range expectedErrors {

@@ -13,6 +13,10 @@ type PlanResult struct {
 	ManifestSet   *ManifestSet
 	Error         error
 	ValidationErr []error
+	// InferredEdges carries per-rule provenance for inferred deploy-order
+	// edges added by enrichment. Populated on the success path only; nil on
+	// validation failure or enrichment failure.
+	InferredEdges []InferredEdge
 }
 
 type PlanTeardownResult struct {
@@ -34,6 +38,12 @@ func Plan(set *ManifestSet, store state.TeamStore, registries []config.RegistryC
 		return PlanResult{ValidationErr: errs}
 	}
 
+	enriched, edges, err := ChainEnrich(set, DefaultEnrichers()...)
+	if err != nil {
+		return PlanResult{Error: err}
+	}
+	set = enriched
+
 	switch filter.Kind {
 	case FilterNone, FilterTeam:
 		if err := DetectRoutingCollisions(set); err != nil {
@@ -46,18 +56,20 @@ func Plan(set *ManifestSet, store state.TeamStore, registries []config.RegistryC
 		if filter.Kind == FilterTeam {
 			steps = filterStepsByOwner(steps, set, filter.Name)
 		}
-		return PlanResult{Steps: steps, ManifestSet: set}
+		return PlanResult{Steps: steps, ManifestSet: set, InferredEdges: edges}
 
 	case FilterApp:
 		return PlanResult{
-			Steps:       []PlannedStep{{Kind: manifest.ApplicationKind, Name: filter.Name}},
-			ManifestSet: set,
+			Steps:         []PlannedStep{{Kind: manifest.ApplicationKind, Name: filter.Name}},
+			ManifestSet:   set,
+			InferredEdges: edges,
 		}
 
 	case FilterRes:
 		return PlanResult{
-			Steps:       []PlannedStep{{Kind: manifest.ResourceKind, Name: filter.Name}},
-			ManifestSet: set,
+			Steps:         []PlannedStep{{Kind: manifest.ResourceKind, Name: filter.Name}},
+			ManifestSet:   set,
+			InferredEdges: edges,
 		}
 	}
 

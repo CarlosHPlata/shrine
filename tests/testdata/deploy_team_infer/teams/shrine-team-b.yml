@@ -1,0 +1,11 @@
+apiVersion: shrine/v1
+kind: Team
+metadata:
+  name: shrine-team-b
+spec:
+  displayName: "Shrine Team B"
+  contact: "b@shrine-test.com"
+  quotas:
+    maxApps: 10
+    maxResources: 10
+  registryUser: shrine-test

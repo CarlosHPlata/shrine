@@ -171,8 +171,10 @@ shrine/
 │   │   ├── loader.go           # LoadDir → ManifestSet (duplicate detection, recursive scan)
 │   │   ├── resolve.go          # validateDependencies, access checks, quota enforcement
 │   │   ├── templates.go        # Plan-time template ref validation (unknown refs rejected)
+│   │   ├── enrich.go           # Enricher chain + helpers — infers same-team valueFrom edges; fail-fast on cross-team. See specs/020-infer-valuefrom-deps/spec.md
+│   │   ├── enrich_valuefrom.go # Production rules for valueFrom: resource.*/application.* refs (see specs/020-infer-valuefrom-deps/quickstart.md)
 │   │   ├── order.go            # Topo sort over Resource+Application graph → []PlannedStep
-│   │   └── plan.go             # Plan(), PlanSingle() entry points: load → resolve → order/single-step
+│   │   └── plan.go             # Plan(), PlanSingle() entry points: load → resolve → enrich → order/single-step
 │   ├── resolver/               # Materializes outputs and env at deploy time
 │   │   ├── resolver.go         # LiveResolver: secrets, templates, valueFrom lookup
 │   │   └── dry_run_resolver.go # DryRunResolver: same API, placeholder values
@@ -216,6 +218,7 @@ shrine deploy
      │
      ├── manifest.LoadDir()          → ManifestSet (all Applications + Resources, recursive)
      ├── planner.Resolve()           → validates deps, access, quotas, template refs
+     ├── planner.ChainEnrich()       → infers deploy-order edges from same-team valueFrom refs; fail-fast on cross-team or absent target unless an explicit spec.dependencies entry covers it
      ├── planner.Order()             → topo-sorted []PlannedStep (Kahn's algorithm)
      ├── resolver.ResolveResource()  → materializes each Resource's outputs (literals, secrets, templates)
      ├── engine.ExecuteDeploy()
