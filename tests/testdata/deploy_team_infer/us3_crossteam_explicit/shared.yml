@@ -9,6 +9,8 @@ spec:
   version: "7"
   networking:
     exposeToPlatform: true
-  outputs:
+  env:
     - name: HOST
       value: "shared-cache.svc"
+  outputs:
+    - name: HOST

@@ -56,8 +56,8 @@ func (r *recordingObserver) OnEvent(e Event) { r.events = append(r.events, e) }
 // stubResolver returns empty resolved values for any resource/application.
 type stubResolver struct{}
 
-func (stubResolver) ResolveResource(*manifest.ResourceManifest) (map[string]string, error) {
-	return map[string]string{}, nil
+func (stubResolver) ResolveResource(*manifest.ResourceManifest, resolver.ResolvedDependencies) (resolver.ResolvedResource, error) {
+	return resolver.ResolvedResource{Env: map[string]string{}, Exports: map[string]string{}}, nil
 }
 func (stubResolver) ResolveApplication(*manifest.ApplicationManifest, resolver.ResolvedDependencies) (map[string]string, error) {
 	return map[string]string{}, nil

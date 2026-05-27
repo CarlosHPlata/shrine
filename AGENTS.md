@@ -98,7 +98,7 @@ For TLS-terminated aliases, set `tls: true` to open the routing/entrypoint side 
 
 ### Resource
 
-A managed dependency (postgres, redis, rabbitmq, …). Declares an image and named outputs that apps can reference via `valueFrom`.
+A managed dependency (postgres, redis, rabbitmq, …). It has two distinct blocks: `env` is the container's runtime configuration (just like an Application's `env`, plus `generated` secrets); `outputs` is a pure export allowlist of what other manifests may read via `valueFrom`.
 
 ```yaml
 apiVersion: shrine/v1
@@ -112,14 +112,17 @@ spec:
   type: postgres
   version: "16"
   image: postgres:16  # optional, defaults to type:version
-  outputs:
-    - name: host      # infrastructure-synthesized → team-a.hello-db (Docker container DNS name)
-    - name: port
-      value: "5432"
-    - name: password
+  port: 5432
+  env:                # runtime configuration → the container's environment
+    - name: POSTGRES_DB
+      value: hello
+    - name: POSTGRES_PASSWORD
       generated: true # random secret, persisted across redeploys via SecretStore
+  outputs:            # export allowlist → what consumers may read (name + optional template)
+    - name: POSTGRES_DB   # re-export an env var by name
+    - name: host          # built-in → team-a.hello-db (container DNS name)
     - name: url
-      template: "postgres://postgres:{{.password}}@{{.host}}:{{.port}}/hello"
+      template: "postgres://postgres:{{.POSTGRES_PASSWORD}}@{{.host}}:{{.port}}/{{.POSTGRES_DB}}"
   networking:
     exposeToPlatform: false
   volumes:
@@ -127,7 +130,9 @@ spec:
       mountPath: /var/lib/postgresql/data
 ```
 
-Output kinds: `value` (literal), `generated` (random secret), `template` (Go `text/template` referencing sibling outputs and built-ins `{{.team}}`, `{{.name}}`). The `host` output is always infrastructure-synthesized and must be declared bare (no `value`/`generated`/`template`).
+- **`env`** entries set exactly one of `value` (literal), `valueFrom` (`vault:…`, or another manifest's exported output), `template` (Go `text/template` over sibling env + `{{.team}}`/`{{.name}}`), or `generated` (random secret). Reserved names `host`/`port`/`team`/`name` are not allowed.
+- **`outputs`** entries set only a `name` and an optional `template`. A bare `name` re-exports a declared env var or the built-in `host`/`port`. A `template` may reference any declared env var (exported or not) plus `{{.host}}`/`{{.port}}`/`{{.team}}`/`{{.name}}`. Setting `value`/`valueFrom`/`generated` on an output is rejected (declare it under `env` instead).
+- **Strict allowlist:** consumers may reference only keys present in `outputs`. An env var that is not exported is private to the resource. Resources are first-class consumers too — a resource's `env` `valueFrom` may reference other manifests' exported outputs.
 
 ### Team
 
@@ -220,7 +225,7 @@ shrine deploy
      ├── planner.Resolve()           → validates deps, access, quotas, template refs
      ├── planner.ChainEnrich()       → infers deploy-order edges from same-team valueFrom refs; fail-fast on cross-team or absent target unless an explicit spec.dependencies entry covers it
      ├── planner.Order()             → topo-sorted []PlannedStep (Kahn's algorithm)
-     ├── resolver.ResolveResource()  → materializes each Resource's outputs (literals, secrets, templates)
+     ├── resolver.ResolveResource()  → ResolvedResource{Env, Exports}: Env feeds the container; Exports (the spec.outputs allowlist) feeds consumers. Resolved in dependency order so a resource can read another's exports.
      ├── engine.ExecuteDeploy()
      │     ├── Container.CreatePlatformNetwork()
      │     ├── for each step (topo order):
@@ -236,7 +241,7 @@ shrine deploy
 
 ## Key Design Decisions
 
-**Explicit outputs (Option B).** Resources declare exactly what they expose. The planner validates `valueFrom` references against declared output names. No type-specific knowledge in the resolver — any resource type works without code changes.
+**Env/output split (SRP).** A Resource's `env` is its runtime configuration; its `outputs` is a pure export allowlist (name + optional template, no values). The planner validates `valueFrom` references against the exported output names (strict allowlist) — an un-exported env var is private. No type-specific knowledge in the resolver; any resource type works without code changes.
 
 **No `url` built-in.** Applications expose `host` and `port` only. Scheme composition (`http://`, `grpc://`, `ws://`) is the consumer's job via `template` env entries. Avoids baking HTTP assumptions into the engine.
 

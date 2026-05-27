@@ -1,0 +1,15 @@
+apiVersion: shrine/v1
+kind: Application
+metadata:
+  name: api
+  owner: shrine-reo
+spec:
+  image: traefik/whoami
+  port: 80
+  dependencies:
+    - kind: Resource
+      name: pg
+      owner: shrine-reo
+  env:
+    - name: LEAK
+      valueFrom: resource.pg.POSTGRES_PASSWORD

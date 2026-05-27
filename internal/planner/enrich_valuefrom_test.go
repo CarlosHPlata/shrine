@@ -193,6 +193,58 @@ func TestEnrichValueFromResource_SkipsVaultAndLiteral(t *testing.T) {
 	}
 }
 
+// FR-014 unit tests: resources are first-class consumers.
+
+func TestEnrichValueFromResource_ResourceConsumer_SameTeam(t *testing.T) {
+	set := NewManifestSet()
+	set.Resources["pg"] = &manifest.ResourceManifest{
+		Metadata: manifest.Metadata{Name: "pg", Owner: "team-a"},
+		Spec:     manifest.ResourceSpec{Type: "postgres", Version: "16", Outputs: []manifest.Output{{Name: "host"}}},
+	}
+	set.Resources["cache"] = &manifest.ResourceManifest{
+		Metadata: manifest.Metadata{Name: "cache", Owner: "team-a"},
+		Spec: manifest.ResourceSpec{Type: "redis", Version: "7",
+			Env: []manifest.EnvVar{{Name: "UPSTREAM", ValueFrom: "resource.pg.host"}}},
+	}
+
+	out, edges, err := applyEnrichmentRule(set, manifest.ResourceKind, lookupResourceOwner(set), parseResourceRef)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(edges) != 1 || edges[0].Consumer.Kind != manifest.ResourceKind || edges[0].Consumer.Name != "cache" || edges[0].Target.Name != "pg" {
+		t.Fatalf("expected resource→resource inferred edge, got: %+v", edges)
+	}
+	cache := out.Resources["cache"]
+	if len(cache.Spec.Dependencies) != 1 || cache.Spec.Dependencies[0].Name != "pg" {
+		t.Errorf("expected inferred dep on pg, got: %+v", cache.Spec.Dependencies)
+	}
+	if len(set.Resources["cache"].Spec.Dependencies) != 0 {
+		t.Error("input set was mutated")
+	}
+}
+
+func TestEnrichValueFromResource_ResourceConsumer_CrossTeamFails(t *testing.T) {
+	set := NewManifestSet()
+	set.Resources["pg"] = &manifest.ResourceManifest{
+		Metadata: manifest.Metadata{Name: "pg", Owner: "team-b"},
+		Spec:     manifest.ResourceSpec{Type: "postgres", Version: "16", Outputs: []manifest.Output{{Name: "host"}}},
+	}
+	set.Resources["cache"] = &manifest.ResourceManifest{
+		Metadata: manifest.Metadata{Name: "cache", Owner: "team-a"},
+		Spec: manifest.ResourceSpec{Type: "redis", Version: "7",
+			Env: []manifest.EnvVar{{Name: "UPSTREAM", ValueFrom: "resource.pg.host"}}},
+	}
+
+	_, _, err := applyEnrichmentRule(set, manifest.ResourceKind, lookupResourceOwner(set), parseResourceRef)
+	var ee *EnrichmentError
+	if !errors.As(err, &ee) {
+		t.Fatalf("expected *EnrichmentError, got %T: %v", err, err)
+	}
+	if ee.ConsumerKind != manifest.ResourceKind || ee.ConsumerName != "cache" {
+		t.Errorf("unexpected error fields: %+v", ee)
+	}
+}
+
 // US2 unit tests for enrichValueFromApplication.
 
 func appAppSet(t *testing.T) *ManifestSet {

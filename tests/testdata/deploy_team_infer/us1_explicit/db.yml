@@ -7,6 +7,8 @@ spec:
   type: postgres
   version: "16"
   image: traefik/whoami
-  outputs:
+  env:
     - name: DB_CONNECTION_URL
       value: "postgres://example"
+  outputs:
+    - name: DB_CONNECTION_URL

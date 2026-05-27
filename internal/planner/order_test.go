@@ -83,6 +83,57 @@ func TestOrder(t *testing.T) {
 		}
 	})
 
+	t.Run("resource depends on resource (FR-014)", func(t *testing.T) {
+		set := &ManifestSet{
+			Resources: map[string]*manifest.ResourceManifest{
+				"cache": {
+					Metadata: manifest.Metadata{Name: "cache"},
+					Spec: manifest.ResourceSpec{
+						Dependencies: []manifest.Dependency{
+							{Kind: manifest.ResourceKind, Name: "pg"},
+						},
+					},
+				},
+				"pg": {Metadata: manifest.Metadata{Name: "pg"}},
+			},
+		}
+
+		actual, err := Order(set)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		indexOf := func(name string) int {
+			for i, step := range actual {
+				if step.Kind == manifest.ResourceKind && step.Name == name {
+					return i
+				}
+			}
+			t.Fatalf("resource %q not found in plan", name)
+			return -1
+		}
+		if indexOf("pg") > indexOf("cache") {
+			t.Errorf("pg should be ordered before cache")
+		}
+	})
+
+	t.Run("resource-to-resource cycle", func(t *testing.T) {
+		set := &ManifestSet{
+			Resources: map[string]*manifest.ResourceManifest{
+				"a": {
+					Metadata: manifest.Metadata{Name: "a"},
+					Spec:     manifest.ResourceSpec{Dependencies: []manifest.Dependency{{Kind: manifest.ResourceKind, Name: "b"}}},
+				},
+				"b": {
+					Metadata: manifest.Metadata{Name: "b"},
+					Spec:     manifest.ResourceSpec{Dependencies: []manifest.Dependency{{Kind: manifest.ResourceKind, Name: "a"}}},
+				},
+			},
+		}
+		if _, err := Order(set); err == nil || !strings.Contains(err.Error(), "dependency cycle") {
+			t.Errorf("expected dependency cycle error, got: %v", err)
+		}
+	})
+
 	t.Run("independent nodes", func(t *testing.T) {
 		set := &ManifestSet{
 			Applications: map[string]*manifest.ApplicationManifest{

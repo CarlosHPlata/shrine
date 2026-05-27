@@ -18,18 +18,28 @@ import (
 // outputs marked `generated: true`.
 const generatedSecretLength = 32
 
-// ResolvedDependencies bundles the materialized outputs of resources and the
+// ResolvedDependencies bundles the exported interface of resources and the
 // synthesized built-ins of applications for use during final resolution.
+// Resources entries hold only a resource's exported keys (its allowlist), not
+// its full environment.
 type ResolvedDependencies struct {
 	Resources    map[string]map[string]string
 	Applications map[string]map[string]string
 }
 
-// Resolver materializes manifest outputs and application env vars into final
+// ResolvedResource separates a resource's container environment from the
+// interface it publishes to consumers. Env feeds the container; Exports
+// (the spec.output allowlist) feeds deps.Resources for consumers.
+type ResolvedResource struct {
+	Env     map[string]string
+	Exports map[string]string
+}
+
+// Resolver materializes manifest env vars and exported outputs into final
 // string values. Use NewLiveResolver for real deployments or NewDryRunResolver
 // for planning/previewing.
 type Resolver interface {
-	ResolveResource(res *manifest.ResourceManifest) (map[string]string, error)
+	ResolveResource(res *manifest.ResourceManifest, deps ResolvedDependencies) (ResolvedResource, error)
 	ResolveApplication(
 		app *manifest.ApplicationManifest,
 		deps ResolvedDependencies,
@@ -55,75 +65,135 @@ func parseVaultPath(s string) string {
 	return strings.TrimPrefix(s, "vault:")
 }
 
-// ResolveResource returns all output values for a single resource. The returned
-// map includes the built-ins `team` and `name` alongside the resource's
-// declared outputs.
-func (r *LiveResolver) ResolveResource(res *manifest.ResourceManifest) (map[string]string, error) {
-	values := map[string]string{
-		"team": res.Metadata.Owner,
-		"name": res.Metadata.Name,
+// ResolveResource builds a resource's container environment from spec.env and
+// its exported interface from spec.output. Env values may reference other
+// manifests' exports via deps; Exports contains only the keys listed in
+// spec.output (the strict allowlist).
+func (r *LiveResolver) ResolveResource(res *manifest.ResourceManifest, deps ResolvedDependencies) (ResolvedResource, error) {
+	env, err := r.resolveResourceEnv(res, deps)
+	if err != nil {
+		return ResolvedResource{}, err
 	}
-	var templates []manifest.Output
 
-	// 1. Resolve outputs that don't depend on siblings.
-	for _, output := range res.Spec.Outputs {
+	port := ""
+	if res.Spec.Port != 0 {
+		port = strconv.Itoa(res.Spec.Port)
+	}
+	exports, err := computeExports(res, env, port)
+	if err != nil {
+		return ResolvedResource{}, err
+	}
+	return ResolvedResource{Env: env, Exports: exports}, nil
+}
+
+// resolveResourceEnv materializes spec.env into its final values: static
+// values, auto-minted secrets, vault/cross-manifest valueFrom, and templates
+// (which reference sibling env vars plus the team/name/host/port built-ins;
+// port is available only when spec.port is set).
+func (r *LiveResolver) resolveResourceEnv(
+	res *manifest.ResourceManifest,
+	deps ResolvedDependencies,
+) (map[string]string, error) {
+	env := make(map[string]string, len(res.Spec.Env))
+	tmplSrcs := make(map[string]string)
+
+	for _, e := range res.Spec.Env {
 		switch {
-		case output.Value != "":
-			values[output.Name] = output.Value
-
-		case output.Generated:
-			key := res.Metadata.Name + "." + output.Name
+		case e.Value != "":
+			env[e.Name] = e.Value
+		case e.Generated:
+			key := res.Metadata.Name + "." + e.Name
 			secret, _, err := r.Secrets.GetOrGenerate(res.Metadata.Owner, key, generatedSecretLength)
 			if err != nil {
-				return nil, fmt.Errorf("resource %q: resolving generated output %q: %w",
-					res.Metadata.Name, output.Name, err)
+				return nil, fmt.Errorf("resource %q: resolving generated env %q: %w",
+					res.Metadata.Name, e.Name, err)
 			}
-			values[output.Name] = secret
-
-		case output.Template != "":
-			templates = append(templates, output)
-
-		case isVaultRef(output.ValueFrom):
-			if r.Vault == nil || !r.Vault.IsActive() {
-				return nil, fmt.Errorf("resource %q: output %q uses vault: ref but no secrets plugin is configured",
-					res.Metadata.Name, output.Name)
-			}
-			val, err := r.Vault.GetSecret(parseVaultPath(output.ValueFrom))
+			env[e.Name] = secret
+		case e.ValueFrom != "":
+			val, err := r.lookupValueFrom(e.ValueFrom, deps)
 			if err != nil {
-				return nil, fmt.Errorf("resource %q: output %q: %w", res.Metadata.Name, output.Name, err)
+				return nil, fmt.Errorf("resource %q: env %q: %w", res.Metadata.Name, e.Name, err)
 			}
-			values[output.Name] = val
-
+			env[e.Name] = val
+		case e.Template != "":
+			tmplSrcs[e.Name] = e.Template
 		default:
-			switch output.Name {
-			case "host":
-				values[output.Name] = res.Metadata.Owner + "." + res.Metadata.Name
-			case "port":
-				if res.Spec.Port == 0 {
-					return nil, fmt.Errorf("resource %q: bare output \"port\" requires spec.port to be set",
-						res.Metadata.Name)
-				}
-				values[output.Name] = strconv.Itoa(res.Spec.Port)
-			default:
-				return nil, fmt.Errorf("resource %q: bare output %q is not a recognized CLI built-in (only \"host\" and \"port\" are supported)",
-					res.Metadata.Name, output.Name)
-			}
+			return nil, fmt.Errorf("resource %q: env %q has neither value, valueFrom, template nor generated",
+				res.Metadata.Name, e.Name)
 		}
 	}
 
-	// Pass 2: topologically sort templates by their sibling references and
-	// render them in order.
-	tmplSrcs := make(map[string]string, len(templates))
-	for _, t := range templates {
-		tmplSrcs[t.Name] = t.Template
+	if len(tmplSrcs) == 0 {
+		return env, nil
 	}
-	rendered, err := renderTemplates(fmt.Sprintf("resource %q", res.Metadata.Name), tmplSrcs, values)
+
+	ctx := map[string]string{
+		"team": res.Metadata.Owner,
+		"name": res.Metadata.Name,
+		"host": res.Metadata.Owner + "." + res.Metadata.Name,
+	}
+	if res.Spec.Port != 0 {
+		ctx["port"] = strconv.Itoa(res.Spec.Port)
+	}
+	maps.Copy(ctx, env)
+	rendered, err := renderTemplates(fmt.Sprintf("resource %q", res.Metadata.Name), tmplSrcs, ctx)
 	if err != nil {
 		return nil, err
 	}
-	maps.Copy(values, rendered)
+	maps.Copy(env, rendered)
+	return env, nil
+}
 
-	return values, nil
+// computeExports derives a resource's published interface from spec.output over
+// its already-resolved env. Non-template entries re-export an env var or the
+// host/port built-in; template entries render against env plus the
+// host/port/team/name built-ins. The returned map contains only listed keys.
+func computeExports(res *manifest.ResourceManifest, env map[string]string, port string) (map[string]string, error) {
+	host := res.Metadata.Owner + "." + res.Metadata.Name
+	exports := make(map[string]string, len(res.Spec.Outputs))
+	tmplSrcs := make(map[string]string)
+
+	for _, o := range res.Spec.Outputs {
+		if o.Template != "" {
+			tmplSrcs[o.Name] = o.Template
+			continue
+		}
+		if v, ok := env[o.Name]; ok {
+			exports[o.Name] = v
+			continue
+		}
+		switch o.Name {
+		case "host":
+			exports["host"] = host
+		case "port":
+			if port == "" {
+				return nil, fmt.Errorf("resource %q: output \"port\" requires spec.port to be set", res.Metadata.Name)
+			}
+			exports["port"] = port
+		default:
+			return nil, fmt.Errorf("resource %q: output %q has no template and matches no env var or built-in (host, port)",
+				res.Metadata.Name, o.Name)
+		}
+	}
+
+	if len(tmplSrcs) > 0 {
+		ctx := map[string]string{
+			"team": res.Metadata.Owner,
+			"name": res.Metadata.Name,
+			"host": host,
+		}
+		if port != "" {
+			ctx["port"] = port
+		}
+		maps.Copy(ctx, env)
+		rendered, err := renderTemplates(fmt.Sprintf("resource %q output", res.Metadata.Name), tmplSrcs, ctx)
+		if err != nil {
+			return nil, err
+		}
+		maps.Copy(exports, rendered)
+	}
+
+	return exports, nil
 }
 
 // ResolveApplication returns the materialized env map for an application.

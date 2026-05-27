@@ -1,0 +1,12 @@
+apiVersion: shrine/v1
+kind: Resource
+metadata:
+  name: pg
+  owner: shrine-reo
+spec:
+  type: postgres
+  version: "16"
+  image: traefik/whoami
+  outputs:
+    - name: POSTGRES_PASSWORD
+      generated: true

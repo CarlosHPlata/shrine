@@ -16,36 +16,52 @@ func NewDryRunResolver() *DryRunResolver {
 	return &DryRunResolver{}
 }
 
-func (r *DryRunResolver) ResolveResource(res *manifest.ResourceManifest) (map[string]string, error) {
-	values := map[string]string{
-		"team": res.Metadata.Owner,
-		"name": res.Metadata.Name,
-	}
+func (r *DryRunResolver) ResolveResource(res *manifest.ResourceManifest, deps ResolvedDependencies) (ResolvedResource, error) {
+	env := make(map[string]string, len(res.Spec.Env))
+	tmplSrcs := make(map[string]string)
 
-	for _, o := range res.Spec.Outputs {
+	for _, e := range res.Spec.Env {
 		switch {
-		case o.Value != "":
-			values[o.Name] = o.Value
-		case o.Generated:
-			values[o.Name] = "[GENERATED]"
-		case o.Template != "":
-			values[o.Name] = o.Template
-		case isVaultRef(o.ValueFrom):
-			values[o.Name] = "[VAULT:" + parseVaultPath(o.ValueFrom) + "]"
-		default:
-			switch o.Name {
-			case "host":
-				values[o.Name] = res.Metadata.Owner + "." + res.Metadata.Name
-			case "port":
-				values[o.Name] = "[PORT]"
-			default:
-				return nil, fmt.Errorf("dry-run: resource %q: bare output %q is not a recognized CLI built-in",
-					res.Metadata.Name, o.Name)
+		case e.Value != "":
+			env[e.Name] = e.Value
+		case e.Generated:
+			env[e.Name] = "[GENERATED]"
+		case isVaultRef(e.ValueFrom):
+			env[e.Name] = "[VAULT:" + parseVaultPath(e.ValueFrom) + "]"
+		case e.ValueFrom != "":
+			val, err := lookupValueFrom(e.ValueFrom, deps)
+			if err != nil {
+				return ResolvedResource{}, fmt.Errorf("dry-run: resource %q: env %q: %w", res.Metadata.Name, e.Name, err)
 			}
+			env[e.Name] = val
+		case e.Template != "":
+			tmplSrcs[e.Name] = e.Template
+		default:
+			return ResolvedResource{}, fmt.Errorf("dry-run: resource %q: env %q has neither value, valueFrom, template nor generated",
+				res.Metadata.Name, e.Name)
 		}
 	}
 
-	return values, nil
+	if len(tmplSrcs) > 0 {
+		ctx := map[string]string{
+			"team": res.Metadata.Owner,
+			"name": res.Metadata.Name,
+			"host": res.Metadata.Owner + "." + res.Metadata.Name,
+			"port": "[PORT]",
+		}
+		maps.Copy(ctx, env)
+		rendered, err := renderTemplates(fmt.Sprintf("resource %q", res.Metadata.Name), tmplSrcs, ctx)
+		if err != nil {
+			return ResolvedResource{}, err
+		}
+		maps.Copy(env, rendered)
+	}
+
+	exports, err := computeExports(res, env, "[PORT]")
+	if err != nil {
+		return ResolvedResource{}, err
+	}
+	return ResolvedResource{Env: env, Exports: exports}, nil
 }
 
 func (r *DryRunResolver) ResolveApplication(

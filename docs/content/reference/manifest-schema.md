@@ -45,7 +45,9 @@ spec:
 
 ## Resource
 
-A Resource is a managed dependency container (Postgres, Redis, etc.) with named outputs that Applications consume via `valueFrom`.
+A Resource is a managed dependency container (Postgres, Redis, etc.). It declares two distinct blocks: **`env`** is the container's runtime configuration (the same shape as an Application's `env`, plus `generated` secrets); **`outputs`** is a pure export allowlist of what other manifests may consume via `valueFrom`.
+
+The two blocks flow to different places and never overlap: `env` is injected into the resource's own container; `outputs` is published only to consumers. **An output is never set as an environment variable on the resource's own container** — even a template output like `url` exists solely for consumers. If the resource container itself needs a value, declare it under `env`; to also expose it, list its name under `outputs`.
 
 ```yaml
 apiVersion: shrine/v1
@@ -60,11 +62,15 @@ spec:
   version: <string> # required — e.g. "16"
   port: <int>
   image: <string>
-  outputs:
+  env:                         # runtime configuration → the container's environment
     - name: <string>
-      value: <string>        # static value (mutually exclusive with generated/template)
-      generated: <bool>      # generate a random secret at deploy time
-      template: <string>     # Go text/template referencing other output names
+      value: <string>         # static value
+      valueFrom: <string>     # vault:<project>/<env>/<key>, or another manifest's exported output
+      template: <string>      # Go text/template over sibling env + {{.team}}/{{.name}}/{{.host}}/{{.port}}
+      generated: <bool>       # generate a random secret at deploy time
+  outputs:                     # export allowlist → what consumers may read
+    - name: <string>          # re-export an env var by name, or the built-in host/port
+      template: <string>      # OR a derived value over env vars + {{.host}}/{{.port}}/{{.team}}/{{.name}}
   networking:
     exposeToPlatform: <bool>
   volumes:
@@ -80,19 +86,24 @@ spec:
 | `metadata.access[]` | no | — | Additional teams that may reference this resource's outputs. |
 | `spec.type` | yes | — | Resource type string (e.g. `postgres`, `redis`). |
 | `spec.version` | yes | — | Version tag passed to the resource image. |
-| `spec.port` | no | — | Override the default port for this resource type. |
+| `spec.port` | no | — | Override the default port for this resource type. Required when `port` is exported. |
 | `spec.image` | no | — | Override the default image for this resource type. |
-| `spec.outputs[].name` | yes | — | Output name. `host` and `port` are CLI built-ins filled automatically. |
-| `spec.outputs[].value` | no* | — | Static string value. Mutually exclusive with `generated` and `template`. |
-| `spec.outputs[].generated` | no* | — | Generate a random value at deploy time. |
-| `spec.outputs[].template` | no* | — | Go `text/template` expression referencing sibling output names, e.g. `postgres://postgres:{{.password}}@{{.host}}:{{.port}}/app`. |
-| `spec.outputs[].valueFrom` | no* | — | Fetch value from the active secrets vault at deploy time: `vault:<project>/<environment>/<secret-name>`. The project component may be the project's display name, slug, or UUID (see [Secrets vault guide](/guides/secrets-vault/#how-the-project-component-is-resolved)). Mutually exclusive with `value`, `generated`, and `template`. |
+| `spec.env[].name` | yes | — | Env var name. Must not be a reserved built-in (`host`, `port`, `team`, `name`); unique within the resource. |
+| `spec.env[].value` | no† | — | Static string value. |
+| `spec.env[].valueFrom` | no† | — | `vault:<project>/<environment>/<secret-name>` (see [Secrets vault guide](/guides/secrets-vault/#how-the-project-component-is-resolved)), or another manifest's exported output (`resource.<name>.<exportedKey>` / `application.<name>.<host\|port>`). |
+| `spec.env[].template` | no† | — | Go `text/template` referencing sibling env names plus the built-ins `{{.team}}`/`{{.name}}`/`{{.host}}`/`{{.port}}` (`{{.port}}` requires `spec.port`). e.g. `redis://{{.host}}:{{.port}}` to give the container its own connection string. |
+| `spec.env[].generated` | no† | — | Generate a random secret at deploy time, persisted across redeploys. |
+| `spec.outputs[].name` | yes | — | Exported key. A bare name re-exports a declared env var, or the built-in `host`/`port`. |
+| `spec.outputs[].template` | no | — | Go `text/template` for a derived export, referencing any declared env var (exported or not) plus `{{.host}}`/`{{.port}}`/`{{.team}}`/`{{.name}}`, e.g. `postgres://postgres:{{.POSTGRES_PASSWORD}}@{{.host}}:{{.port}}/{{.POSTGRES_DB}}`. |
+| `spec.dependencies[]` | no | — | Explicit deploy-order dependencies (same shape as an Application's). Same-team `valueFrom` references are inferred automatically. |
 | `spec.networking.exposeToPlatform` | no | `false` | Attach the resource to the shared platform network so gateway plugins can reach it. |
 | `spec.volumes[].name` | yes (per entry) | — | Logical volume name; must be unique within the manifest. |
 | `spec.volumes[].mountPath` | yes (per entry) | — | Absolute path inside the container. |
 | `spec.imagePullPolicy` | no | `Always` for `:latest`, `IfNotPresent` otherwise | Docker image pull policy. |
 
-\* Each output (except the built-ins `host` and `port`) must set exactly one of `value`, `generated`, `template`, or `valueFrom`.
+† Each `env` entry must set exactly one of `value`, `valueFrom`, `template`, or `generated`.
+
+**Strict allowlist.** Other manifests may consume only keys listed in `outputs`. An env var that is not exported is private to the resource — though an operator may deliberately fold a private value into an exported `template`. An `outputs` entry may **not** set `value`/`valueFrom`/`generated` — those fields are deprecated on outputs; declare them under `env` and list the name under `outputs` to export it. (Pre-split manifests that set those on an output are rejected at plan time with a migration error.)
 
 ## Application
 
@@ -208,14 +219,17 @@ metadata:
 spec:
   type: postgres
   version: "16"
+  port: 5432
+  env:
+    - name: POSTGRES_DB
+      value: app
+    - name: password
+      generated: true        # private to the resource container
   outputs:
     - name: host
     - name: port
-      value: "5432"
-    - name: password
-      generated: true
     - name: url
-      template: "postgres://postgres:{{.password}}@{{.host}}:{{.port}}/app"
+      template: "postgres://postgres:{{.password}}@{{.host}}:{{.port}}/{{.POSTGRES_DB}}"
 ```
 
 ### Application
