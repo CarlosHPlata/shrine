@@ -80,7 +80,7 @@ On the first non-UUID lookup, the plugin issues a single `GET /api/v1/workspace`
 
 ## Reference a vault secret in a Resource output
 
-A Resource output can also carry a `vault:` reference so that downstream Applications receive the resolved value via the normal `resource.<name>.<output>` mechanism:
+A Resource `env` var can carry a `vault:` reference, and exporting its name lets downstream Applications receive the resolved value via the normal `resource.<name>.<output>` mechanism:
 
 ```yaml
 apiVersion: shrine/v1
@@ -91,12 +91,14 @@ metadata:
 spec:
   type: postgres
   version: "16"
+  port: 5432
+  env:
+    - name: password
+      valueFrom: vault:shrine-test/prod/DB_PASSWORD
   outputs:
     - name: host
     - name: port
-      value: "5432"
-    - name: password
-      valueFrom: vault:shrine-test/prod/DB_PASSWORD
+    - name: password   # export so dependents can read it
 ```
 
 A dependent Application consumes the output with the standard `resource.` reference — no vault path appears in the Application manifest at all:
@@ -119,9 +121,9 @@ spec:
       valueFrom: resource.app-db.password
 ```
 
-At deploy time Shrine resolves the Resource output from the vault, stores it in the deployment state, and then resolves the Application's `resource.app-db.password` reference from that state — the Application never contacts the vault directly.
+At deploy time Shrine resolves the Resource's `password` env var from the vault, stores it in the deployment state, and then resolves the Application's `resource.app-db.password` reference from that state — the Application never contacts the vault directly.
 
-`valueFrom` on a Resource output is mutually exclusive with `value`, `generated`, and `template`.
+`valueFrom` lives on a Resource `env` entry (mutually exclusive with `value`, `generated`, and `template`), not on an `output`. Outputs only declare a name and an optional template; export the env var by listing its name under `outputs`.
 
 ## Dry-run behaviour
 
@@ -145,7 +147,8 @@ This lets you validate manifest structure and dependency wiring in CI lint jobs 
 | Wrong `client-id` or `client-secret` | Authentication error at deploy startup, before any container is started |
 | Project name/slug not visible to this machine identity | Deploy-time error listing the projects this identity *can* see (typical fix: attach the identity to the project under Project → Access Control → Identities) |
 | Environment slug does not exist in the project | Deploy-time error from Infisical with the full `vault:<path>` printed; default env slugs are `dev`, `staging`, `prod` |
-| `value:` and `valueFrom: vault:` on the same output or env entry | Mutual-exclusion validation error at plan time |
+| `value:` and `valueFrom: vault:` on the same env entry | Mutual-exclusion validation error at plan time |
+| `value`/`valueFrom`/`generated` on a Resource `output` | Rejected at plan time — those fields are deprecated on outputs; declare it under `spec.env` and list the name under `spec.outputs` to export it |
 
 ## See also
 

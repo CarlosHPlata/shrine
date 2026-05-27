@@ -28,12 +28,14 @@ type Dependency struct {
 	Owner string `yaml:"owner"`
 }
 
-// Used in Application spec
+// Used in Application and Resource specs. Generated is valid only on Resource
+// env (auto-minted secret); Application env must not set it.
 type EnvVar struct {
 	Name      string `yaml:"name"`
 	Value     string `yaml:"value,omitempty"`
 	ValueFrom string `yaml:"valueFrom,omitempty"`
 	Template  string `yaml:"template,omitempty" json:"template,omitempty"`
+	Generated bool   `yaml:"generated,omitempty" json:"generated,omitempty"`
 }
 
 type RoutingAlias struct {
@@ -72,16 +74,16 @@ type ApplicationSpec struct {
 	ImagePullPolicy string        `yaml:"imagePullPolicy,omitempty"`
 }
 
-// Output declares a named value that a Resource exposes to consumers.
-// If Generated is true, the value is created at deploy time (e.g. passwords).
-// If Value is set, it's a static default (e.g. a port number).
-// If ValueFrom is set, the value is fetched from the active secrets vault.
+// Output declares one item in a Resource's export allowlist. Its only valid
+// fields are Name and an optional Template. Value, Generated, and ValueFrom are
+// retained solely so pre-split manifests still unmarshal and can be rejected
+// with an actionable migration error (see validateResourceSpec).
 type Output struct {
 	Name      string `yaml:"name" json:"name"`
-	Value     string `yaml:"value,omitempty" json:"value,omitempty"`
-	Generated bool   `yaml:"generated,omitempty" json:"generated,omitempty"`
 	Template  string `yaml:"template,omitempty" json:"template,omitempty"`
-	ValueFrom string `yaml:"valueFrom,omitempty" json:"valueFrom,omitempty"`
+	Value     string `yaml:"value,omitempty" json:"value,omitempty"`         // deprecated — rejected if set
+	Generated bool   `yaml:"generated,omitempty" json:"generated,omitempty"` // deprecated — rejected if set
+	ValueFrom string `yaml:"valueFrom,omitempty" json:"valueFrom,omitempty"` // deprecated — rejected if set
 }
 
 type ResourceSpec struct {
@@ -89,6 +91,8 @@ type ResourceSpec struct {
 	Version         string        `yaml:"version"`
 	Port            int           `yaml:"port,omitempty"`
 	Image           string        `yaml:"image,omitempty"`
+	Dependencies    []Dependency  `yaml:"dependencies,omitempty"`
+	Env             []EnvVar      `yaml:"env,omitempty"`
 	Outputs         []Output      `yaml:"outputs,omitempty"`
 	Networking      Networking    `yaml:"networking,omitempty"`
 	Volumes         []VolumeMount `yaml:"volumes,omitempty"`

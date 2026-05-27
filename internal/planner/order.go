@@ -19,10 +19,14 @@ type PlannedStep struct {
 func Order(set *ManifestSet) ([]PlannedStep, error) {
 	deps := make(map[string]map[string]struct{})
 
-	// Pass 1: Resources (leaf nodes - no outgoing deps)
-	for name := range set.Resources {
+	// Pass 1: Resources (may depend on other manifests — FR-014)
+	for name, res := range set.Resources {
 		key := manifest.ResourceKind + ":" + name
-		deps[key] = make(map[string]struct{})
+		d := make(map[string]struct{})
+		for _, dep := range res.Spec.Dependencies {
+			d[dep.Kind+":"+dep.Name] = struct{}{}
+		}
+		deps[key] = d
 	}
 
 	// Pass 2: Applications (may have deps)

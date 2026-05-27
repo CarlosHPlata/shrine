@@ -25,6 +25,22 @@ spec:
   version: "%s"
   networking:
     exposeToPlatform: %v
+  # env declares the container's runtime configuration (same shape as an
+  # Application's env, plus generated secrets).
+  # env:
+  #   - name: POSTGRES_DB
+  #     value: app
+  #   - name: POSTGRES_PASSWORD
+  #     generated: true          # auto-minted secret
+  # outputs declares the export allowlist consumers may read: a name (re-exporting
+  # an env var or the built-in host/port) plus an optional template. No values.
+  # Outputs are export-only — they are NEVER set as this container's own env vars.
+  # If the container itself needs a value, declare it under env (above).
+  # outputs:
+  #   - name: POSTGRES_DB        # re-export an env var
+  #   - name: host               # built-in
+  #   - name: DB_URL
+  #     template: "postgres://app:{{.POSTGRES_PASSWORD}}@{{.host}}:{{.port}}/{{.POSTGRES_DB}}"
 `
 
 // GenerateResource creates a skeleton resource manifest YAML file in the given directory.

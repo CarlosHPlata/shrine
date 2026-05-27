@@ -242,9 +242,19 @@ func TestParse_ResourceManifest(t *testing.T) {
 	if res.Spec.Image != "postgres:16" {
 		t.Errorf("Spec.Image = %q, want %q (defaulted from type:version)", res.Spec.Image, "postgres:16")
 	}
-	// Outputs
-	if len(res.Spec.Outputs) != 5 {
-		t.Fatalf("Outputs count = %d, want 5", len(res.Spec.Outputs))
+	// Env: runtime configuration (database value + generated password).
+	if len(res.Spec.Env) != 2 {
+		t.Fatalf("Env count = %d, want 2", len(res.Spec.Env))
+	}
+	if res.Spec.Env[0].Name != "database" || res.Spec.Env[0].Value != "hello" {
+		t.Errorf("Env[0] = %+v, want database=hello", res.Spec.Env[0])
+	}
+	if res.Spec.Env[1].Name != "password" || !res.Spec.Env[1].Generated {
+		t.Errorf("Env[1] = %+v, want generated password", res.Spec.Env[1])
+	}
+	// Outputs: the export allowlist (name + optional template only).
+	if len(res.Spec.Outputs) != 4 {
+		t.Fatalf("Outputs count = %d, want 4", len(res.Spec.Outputs))
 	}
 	if res.Spec.Outputs[0].Name != "host" {
 		t.Errorf("Outputs[0].Name = %q, want %q", res.Spec.Outputs[0].Name, "host")
@@ -252,15 +262,15 @@ func TestParse_ResourceManifest(t *testing.T) {
 	if res.Spec.Outputs[1].Name != "port" {
 		t.Errorf("Outputs[1].Name = %q, want %q", res.Spec.Outputs[1].Name, "port")
 	}
+	if res.Spec.Outputs[2].Name != "database" {
+		t.Errorf("Outputs[2].Name = %q, want %q", res.Spec.Outputs[2].Name, "database")
+	}
 	if res.Spec.Port != 5432 {
 		t.Errorf("Spec.Port = %d, want %d", res.Spec.Port, 5432)
 	}
-	if !res.Spec.Outputs[3].Generated {
-		t.Error("Outputs[3].Generated = false, want true (password)")
-	}
 	wantTemplate := "postgres://postgres:{{.password}}@{{.host}}:{{.port}}/{{.database}}"
-	if res.Spec.Outputs[4].Template != wantTemplate {
-		t.Errorf("Outputs[4].Template = %q, want %q", res.Spec.Outputs[4].Template, wantTemplate)
+	if res.Spec.Outputs[3].Template != wantTemplate {
+		t.Errorf("Outputs[3].Template = %q, want %q", res.Spec.Outputs[3].Template, wantTemplate)
 	}
 }
 

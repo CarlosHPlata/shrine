@@ -86,6 +86,9 @@ func validateApplicationSpec(spec ApplicationSpec) []string {
 			errs = append(errs, fmt.Sprintf("spec.env[%d].name is required", i))
 			continue
 		}
+		if e.Generated {
+			errs = append(errs, fmt.Sprintf("spec.env[%d] %q: generated is only valid on Resource env", i, e.Name))
+		}
 		kinds := countSet(e.Value != "", e.ValueFrom != "", e.Template != "")
 		errs = append(errs, validateExclusiveFields("spec.env", i, e.Name, "value/valueFrom/template", kinds)...)
 	}
@@ -99,6 +102,11 @@ func validateApplicationSpec(spec ApplicationSpec) []string {
 	return errs
 }
 
+// reservedBuiltinNames are resolved from CLI built-ins or metadata; a resource
+// env var must not shadow them so that output names and templates stay
+// unambiguous.
+var reservedBuiltinNames = map[string]bool{"host": true, "port": true, "team": true, "name": true}
+
 func validateResourceSpec(spec ResourceSpec) []string {
 	var errs []string
 	if spec.Type == "" {
@@ -108,11 +116,50 @@ func validateResourceSpec(spec ResourceSpec) []string {
 		errs = append(errs, "spec.version is required")
 	}
 
-	// Validate outputs: each must have a name, names must be unique. Every
-	// output must declare exactly one of value/generated/template, except the
-	// built-ins `host` and `port` which must declare none (the CLI fills them in).
+	envNames := make(map[string]bool, len(spec.Env))
+	errs = append(errs, validateResourceEnv(spec.Env, envNames)...)
+	errs = append(errs, validateResourceOutputs(spec.Outputs, envNames)...)
+
+	// validate volumes
+	if spec.Volumes != nil {
+		errs = append(errs, validateVolumeMounts(spec.Volumes)...)
+	}
+
+	return errs
+}
+
+// validateResourceEnv enforces the runtime-config block: a name (not a reserved
+// built-in, unique) plus exactly one of value/valueFrom/template/generated. It
+// records every valid name in names for output cross-referencing.
+func validateResourceEnv(env []EnvVar, names map[string]bool) []string {
+	var errs []string
+	for i, e := range env {
+		if e.Name == "" {
+			errs = append(errs, fmt.Sprintf("spec.env[%d].name is required", i))
+			continue
+		}
+		if reservedBuiltinNames[e.Name] {
+			errs = append(errs, fmt.Sprintf("spec.env[%d] %q uses a reserved built-in name (host, port, team, name)", i, e.Name))
+		}
+		if names[e.Name] {
+			errs = append(errs, fmt.Sprintf("spec.env has duplicate name %q", e.Name))
+		}
+		names[e.Name] = true
+
+		kinds := countSet(e.Value != "", e.ValueFrom != "", e.Template != "", e.Generated)
+		errs = append(errs, validateExclusiveFields("spec.env", i, e.Name, "value/valueFrom/template/generated", kinds)...)
+	}
+	return errs
+}
+
+// validateResourceOutputs enforces the export allowlist: a name (unique) plus an
+// optional template only. A pre-split output that still sets value/valueFrom/
+// generated is rejected with migration guidance; a non-template name must match
+// a declared env var or the host/port built-in.
+func validateResourceOutputs(outputs []Output, envNames map[string]bool) []string {
+	var errs []string
 	seen := make(map[string]bool)
-	for i, o := range spec.Outputs {
+	for i, o := range outputs {
 		if o.Name == "" {
 			errs = append(errs, fmt.Sprintf("spec.outputs[%d].name is required", i))
 			continue
@@ -122,22 +169,20 @@ func validateResourceSpec(spec ResourceSpec) []string {
 		}
 		seen[o.Name] = true
 
-		kinds := countSet(o.Value != "", o.Generated, o.Template != "", o.ValueFrom != "")
-		if o.Name == "host" || o.Name == "port" {
-			if kinds > 0 {
-				errs = append(errs, fmt.Sprintf("spec.outputs[%d]: %q is a CLI built-in and must not set value/generated/template/valueFrom", i, o.Name))
-			}
+		if o.Value != "" || o.Generated || o.ValueFrom != "" {
+			errs = append(errs, fmt.Sprintf("spec.outputs[%d] %q must not set value/valueFrom/generated — those fields are deprecated on outputs; declare it under spec.env and list its name under spec.outputs to export it", i, o.Name))
 			continue
 		}
 
-		errs = append(errs, validateExclusiveFields("spec.outputs", i, o.Name, "value/generated/template/valueFrom", kinds)...)
-	}
+		if o.Template != "" {
+			continue
+		}
 
-	// validate volumes
-	if spec.Volumes != nil {
-		errs = append(errs, validateVolumeMounts(spec.Volumes)...)
+		if envNames[o.Name] || o.Name == "host" || o.Name == "port" {
+			continue
+		}
+		errs = append(errs, fmt.Sprintf("spec.outputs[%d] %q has no template and matches no env var or built-in (host, port)", i, o.Name))
 	}
-
 	return errs
 }
 

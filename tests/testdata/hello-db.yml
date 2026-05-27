@@ -9,13 +9,15 @@ spec:
   type: postgres
   version: "16"
   port: 5432
-  outputs:
-    - name: host
-    - name: port
+  env:
     - name: database
       value: "hello"
     - name: password
       generated: true
+  outputs:
+    - name: host
+    - name: port
+    - name: database
     - name: url
       template: "postgres://postgres:{{.password}}@{{.host}}:{{.port}}/{{.database}}"
   networking:

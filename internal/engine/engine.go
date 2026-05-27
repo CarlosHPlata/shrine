@@ -9,6 +9,7 @@ import (
 	"github.com/CarlosHPlata/shrine/internal/manifest"
 	"github.com/CarlosHPlata/shrine/internal/planner"
 	"github.com/CarlosHPlata/shrine/internal/resolver"
+	"github.com/CarlosHPlata/shrine/internal/topo"
 )
 
 type Engine struct {
@@ -34,7 +35,7 @@ func (engine *Engine) ExecuteDeploy(steps []planner.PlannedStep, set *planner.Ma
 	}
 
 	// 1. Pre-resolve every resource up-front so applications can reference their
-	// outputs via valueFrom regardless of deploy order.
+	// exports via valueFrom regardless of deploy order.
 	deps := resolver.ResolvedDependencies{
 		Resources:    make(map[string]map[string]string, len(set.Resources)),
 		Applications: make(map[string]map[string]string, len(set.Applications)),
@@ -45,16 +46,8 @@ func (engine *Engine) ExecuteDeploy(steps []planner.PlannedStep, set *planner.Ma
 			fmt.Errorf("creating platform network: %w", err))
 	}
 
-	for name, res := range set.Resources {
-		values, err := engine.Resolver.ResolveResource(res)
-		if err != nil {
-			return engine.emitErr("resource.resolve", map[string]string{"name": name},
-				fmt.Errorf("resolving resource %q: %w", name, err))
-		}
-		deps.Resources[name] = values
-	}
-
-	// Synthesize app built-ins up-front so apps can reference each other.
+	// Synthesize app built-ins up-front so resources and apps alike can
+	// reference them via valueFrom.
 	for name, app := range set.Applications {
 		deps.Applications[name] = map[string]string{
 			"host": app.Metadata.Owner + "." + app.Metadata.Name,
@@ -62,9 +55,17 @@ func (engine *Engine) ExecuteDeploy(steps []planner.PlannedStep, set *planner.Ma
 		}
 	}
 
+	// Resolve resources in dependency order so a resource may read another
+	// resource's exports. deps.Resources holds each resource's exported
+	// interface; resourceEnv holds the container environment.
+	resourceEnv, err := engine.resolveResources(set, deps)
+	if err != nil {
+		return err
+	}
+
 	for _, step := range steps {
 		if step.Kind == manifest.ResourceKind {
-			err := engine.deployResource(set, step, deps.Resources[step.Name])
+			err := engine.deployResource(set, step, resourceEnv[step.Name])
 			if err != nil {
 				return err
 			}
@@ -260,7 +261,53 @@ func (engine *Engine) teardownKind(kind string, team string, step planner.Planne
 	return nil
 }
 
-func (engine *Engine) deployResource(set *planner.ManifestSet, step planner.PlannedStep, resolvedValues map[string]string) error {
+// resolveResources resolves every resource in dependency order, populating
+// deps.Resources with each resource's exported interface and returning the
+// per-resource container environment keyed by name.
+func (engine *Engine) resolveResources(set *planner.ManifestSet, deps resolver.ResolvedDependencies) (map[string]map[string]string, error) {
+	order, err := resourceResolutionOrder(set)
+	if err != nil {
+		return nil, engine.emitErr("resource.resolve", nil,
+			fmt.Errorf("ordering resources for resolution: %w", err))
+	}
+
+	envByName := make(map[string]map[string]string, len(set.Resources))
+	for _, name := range order {
+		res := set.Resources[name]
+		resolved, err := engine.Resolver.ResolveResource(res, deps)
+		if err != nil {
+			return nil, engine.emitErr("resource.resolve", map[string]string{"name": name},
+				fmt.Errorf("resolving resource %q: %w", name, err))
+		}
+		// Invariant: Exports are published to consumers only; Env is the
+		// container's own environment. They are kept on separate maps and must
+		// never be merged — an output is not a resource env var.
+		deps.Resources[name] = resolved.Exports
+		envByName[name] = resolved.Env
+	}
+	return envByName, nil
+}
+
+// resourceResolutionOrder topologically orders resources by their
+// resource-kind dependencies so a consuming resource resolves after its target.
+func resourceResolutionOrder(set *planner.ManifestSet) ([]string, error) {
+	graph := make(map[string]map[string]struct{}, len(set.Resources))
+	for name, res := range set.Resources {
+		d := make(map[string]struct{})
+		for _, dep := range res.Spec.Dependencies {
+			if dep.Kind != manifest.ResourceKind {
+				continue
+			}
+			if _, ok := set.Resources[dep.Name]; ok {
+				d[dep.Name] = struct{}{}
+			}
+		}
+		graph[name] = d
+	}
+	return topo.Sort(graph)
+}
+
+func (engine *Engine) deployResource(set *planner.ManifestSet, step planner.PlannedStep, envMap map[string]string) error {
 	resource := set.Resources[step.Name]
 
 	engine.Observer.OnEvent(Event{
@@ -269,9 +316,8 @@ func (engine *Engine) deployResource(set *planner.ManifestSet, step planner.Plan
 		Fields: map[string]string{"name": step.Name, "type": resource.Spec.Type},
 	})
 
-	// 1. Flatten the pre-resolved outputs into env. Built-ins (team/name) are
-	// dropped since they aren't meaningful as container env vars.
-	env := flattenOutputs(resolvedValues)
+	// 1. Flatten the resolved env into KEY=VALUE entries for the container.
+	env := flattenEnv(envMap)
 
 	// 2. Orchestrate network creation
 	engine.Observer.OnEvent(Event{
@@ -369,15 +415,3 @@ func formatAliasesForLog(routes []AliasRoute) string {
 	return strings.Join(entries, ",")
 }
 
-// flattenOutputs is like flattenEnv but skips built-in keys that aren't part
-// of the resource's declared outputs.
-func flattenOutputs(values map[string]string) []string {
-	filtered := make(map[string]string, len(values))
-	for k, v := range values {
-		if k == "team" || k == "name" {
-			continue
-		}
-		filtered[k] = v
-	}
-	return flattenEnv(filtered)
-}

@@ -47,12 +47,15 @@ func edgeKey(consumer, kind, name string) string {
 }
 
 func stepDependencies(set *planner.ManifestSet, step planner.PlannedStep) []manifest.Dependency {
-	if step.Kind != manifest.ApplicationKind {
-		return nil
+	switch step.Kind {
+	case manifest.ApplicationKind:
+		if app, ok := set.Applications[step.Name]; ok {
+			return app.Spec.Dependencies
+		}
+	case manifest.ResourceKind:
+		if res, ok := set.Resources[step.Name]; ok {
+			return res.Spec.Dependencies
+		}
 	}
-	app, ok := set.Applications[step.Name]
-	if !ok {
-		return nil
-	}
-	return app.Spec.Dependencies
+	return nil
 }

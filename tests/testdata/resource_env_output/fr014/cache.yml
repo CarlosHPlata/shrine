@@ -1,0 +1,14 @@
+apiVersion: shrine/v1
+kind: Resource
+metadata:
+  name: cache
+  owner: shrine-reo
+spec:
+  type: redis
+  version: "7"
+  image: traefik/whoami
+  env:
+    - name: UPSTREAM_DB_HOST
+      valueFrom: resource.pg.host
+  outputs:
+    - name: host

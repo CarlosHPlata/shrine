@@ -107,41 +107,36 @@ func TestValidate_InvalidKind(t *testing.T) {
 	}
 }
 
-func TestValidate_ResourceOutputRules(t *testing.T) {
+func TestValidate_ResourceEnvRules(t *testing.T) {
 	cases := []struct {
 		name    string
-		outputs []Output
+		env     []EnvVar
 		wantErr string
 	}{
 		{
-			name:    "host with value is rejected",
-			outputs: []Output{{Name: "host", Value: "x"}},
-			wantErr: "is a CLI built-in and must not set value/generated/template/valueFrom",
+			name:    "reserved built-in name is rejected",
+			env:     []EnvVar{{Name: "host", Value: "x"}},
+			wantErr: "uses a reserved built-in name",
 		},
 		{
-			name:    "host with template is rejected",
-			outputs: []Output{{Name: "host", Template: "{{.name}}"}},
-			wantErr: "is a CLI built-in and must not set value/generated/template/valueFrom",
+			name:    "missing source is rejected",
+			env:     []EnvVar{{Name: "X"}},
+			wantErr: "must set one of value/valueFrom/template/generated",
 		},
 		{
-			name:    "non-host bare output is rejected",
-			outputs: []Output{{Name: "mystery"}},
-			wantErr: "must set one of value/generated/template/valueFrom",
+			name:    "multiple sources are rejected",
+			env:     []EnvVar{{Name: "X", Value: "a", Generated: true}},
+			wantErr: "value/valueFrom/template/generated are mutually exclusive",
 		},
 		{
-			name:    "conflicting kinds are rejected",
-			outputs: []Output{{Name: "url", Value: "x", Template: "{{.name}}"}},
-			wantErr: "value/generated/template/valueFrom are mutually exclusive",
+			name:    "duplicate env name is rejected",
+			env:     []EnvVar{{Name: "X", Value: "a"}, {Name: "X", Value: "b"}},
+			wantErr: "duplicate name \"X\"",
 		},
 		{
-			name:    "vault valueFrom is accepted",
-			outputs: []Output{{Name: "password", ValueFrom: "vault:proj/prod/PASS"}},
+			name:    "generated secret is valid",
+			env:     []EnvVar{{Name: "PASSWORD", Generated: true}},
 			wantErr: "",
-		},
-		{
-			name:    "vault valueFrom conflicts with value",
-			outputs: []Output{{Name: "password", Value: "x", ValueFrom: "vault:proj/prod/PASS"}},
-			wantErr: "value/generated/template/valueFrom are mutually exclusive",
 		},
 	}
 
@@ -151,7 +146,80 @@ func TestValidate_ResourceOutputRules(t *testing.T) {
 				TypeMeta: TypeMeta{Kind: ResourceKind, APIVersion: "shrine/v1"},
 				Resource: &ResourceManifest{
 					Metadata: Metadata{Name: "r", Owner: "team-a"},
-					Spec:     ResourceSpec{Type: "postgres", Version: "16", Outputs: tc.outputs},
+					Spec:     ResourceSpec{Type: "postgres", Version: "16", Env: tc.env},
+				},
+			}
+			err := Validate(m)
+			if tc.wantErr == "" {
+				if err != nil {
+					t.Errorf("expected no error, got: %v", err)
+				}
+			} else if err == nil || !strings.Contains(err.Error(), tc.wantErr) {
+				t.Errorf("expected error containing %q, got: %v", tc.wantErr, err)
+			}
+		})
+	}
+}
+
+func TestValidate_ResourceOutputRules(t *testing.T) {
+	cases := []struct {
+		name    string
+		env     []EnvVar
+		outputs []Output
+		wantErr string
+	}{
+		{
+			name:    "generated on output is rejected (migration)",
+			outputs: []Output{{Name: "PW", Generated: true}},
+			wantErr: "must not set value/valueFrom/generated",
+		},
+		{
+			name:    "value on output is rejected (migration)",
+			outputs: []Output{{Name: "DB", Value: "x"}},
+			wantErr: "must not set value/valueFrom/generated",
+		},
+		{
+			name:    "valueFrom on output is rejected (migration)",
+			outputs: []Output{{Name: "PW", ValueFrom: "vault:proj/prod/PASS"}},
+			wantErr: "must not set value/valueFrom/generated",
+		},
+		{
+			name:    "non-template name matching no env or built-in is rejected",
+			outputs: []Output{{Name: "mystery"}},
+			wantErr: "has no template and matches no env var or built-in",
+		},
+		{
+			name:    "duplicate output name is rejected",
+			env:     []EnvVar{{Name: "DB", Value: "x"}},
+			outputs: []Output{{Name: "DB"}, {Name: "DB"}},
+			wantErr: "duplicate name \"DB\"",
+		},
+		{
+			name:    "re-export of env var is valid",
+			env:     []EnvVar{{Name: "DB", Value: "x"}},
+			outputs: []Output{{Name: "DB"}},
+			wantErr: "",
+		},
+		{
+			name:    "host and port built-ins are valid",
+			outputs: []Output{{Name: "host"}, {Name: "port"}},
+			wantErr: "",
+		},
+		{
+			name:    "template output is valid",
+			env:     []EnvVar{{Name: "DB", Value: "x"}},
+			outputs: []Output{{Name: "url", Template: "{{.host}}/{{.DB}}"}},
+			wantErr: "",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			m := &Manifest{
+				TypeMeta: TypeMeta{Kind: ResourceKind, APIVersion: "shrine/v1"},
+				Resource: &ResourceManifest{
+					Metadata: Metadata{Name: "r", Owner: "team-a"},
+					Spec:     ResourceSpec{Type: "postgres", Version: "16", Env: tc.env, Outputs: tc.outputs},
 				},
 			}
 			err := Validate(m)

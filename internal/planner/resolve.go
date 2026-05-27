@@ -25,16 +25,18 @@ func Resolve(set *ManifestSet, store state.TeamStore, registries []config.Regist
 	// 1. Resolve dependencies and check access
 	for _, app := range set.Applications {
 		appCounts[app.Metadata.Owner]++
-		errs = append(errs, resolveDependencies(set, app)...)
-		errs = append(errs, validateValueFrom(set, app)...)
+		errs = append(errs, resolveDependencies(set, appConsumer(app), app.Spec.Dependencies)...)
+		errs = append(errs, validateEnvValueFrom(set, "app", app.Metadata.Name, app.Spec.Env)...)
 		errs = append(errs, validateEnvTemplates(app)...)
 	}
 
-	// 2. Resource-specific checks (counts, template refs, vault output refs)
+	// 2. Resource checks (counts, deps as a consumer, env valueFrom, templates)
 	for _, res := range set.Resources {
 		resCounts[res.Metadata.Owner]++
+		errs = append(errs, resolveDependencies(set, resourceConsumer(res), res.Spec.Dependencies)...)
+		errs = append(errs, validateEnvValueFrom(set, "resource", res.Metadata.Name, res.Spec.Env)...)
 		errs = append(errs, validateTemplates(res)...)
-		errs = append(errs, validateResourceVaultOutputs(res)...)
+		errs = append(errs, validateResourceEnvTemplates(res)...)
 	}
 
 	// 3. Quota enforcement
@@ -103,77 +105,95 @@ func buildRegistryAliasMap(registries []config.RegistryConfig) map[string]string
 	return m
 }
 
-// resolveDependencies resolves dependencies and performs access checks for a single Application.
-func resolveDependencies(set *ManifestSet, app *manifest.ApplicationManifest) []error {
+// consumer identifies a manifest that declares dependencies / valueFrom refs.
+// kindLabel is the operator-facing prefix used in error messages ("app" or
+// "resource").
+type consumer struct {
+	kindLabel string
+	name      string
+	owner     string
+}
+
+func appConsumer(a *manifest.ApplicationManifest) consumer {
+	return consumer{kindLabel: "app", name: a.Metadata.Name, owner: a.Metadata.Owner}
+}
+
+func resourceConsumer(r *manifest.ResourceManifest) consumer {
+	return consumer{kindLabel: "resource", name: r.Metadata.Name, owner: r.Metadata.Owner}
+}
+
+// resolveDependencies resolves declared dependencies and performs access /
+// reachability checks for a single consumer (Application or Resource).
+func resolveDependencies(set *ManifestSet, c consumer, deps []manifest.Dependency) []error {
 	var errs []error
-	for _, dep := range app.Spec.Dependencies {
+	for _, dep := range deps {
 		switch dep.Kind {
 		case manifest.ResourceKind:
-			errs = append(errs, validateResourceDep(set, app, dep)...)
+			errs = append(errs, validateResourceDep(set, c, dep)...)
 		case manifest.ApplicationKind:
-			errs = append(errs, validateApplicationDep(set, app, dep)...)
+			errs = append(errs, validateApplicationDep(set, c, dep)...)
 		default:
-			errs = append(errs, fmt.Errorf("app %q: unsupported dependency kind %q", app.Metadata.Name, dep.Kind))
+			errs = append(errs, fmt.Errorf("%s %q: unsupported dependency kind %q", c.kindLabel, c.name, dep.Kind))
 		}
 	}
 	return errs
 }
 
-func validateResourceDep(set *ManifestSet, app *manifest.ApplicationManifest, dep manifest.Dependency) []error {
+func validateResourceDep(set *ManifestSet, c consumer, dep manifest.Dependency) []error {
 	var errs []error
 	res, exists := set.Resources[dep.Name]
 	if !exists {
-		errs = append(errs, fmt.Errorf("app %q: depends on missing resource %q", app.Metadata.Name, dep.Name))
+		errs = append(errs, fmt.Errorf("%s %q: depends on missing resource %q", c.kindLabel, c.name, dep.Name))
 		return errs
 	}
 
 	// Verify owner matches
 	if res.Metadata.Owner != dep.Owner {
-		errs = append(errs, fmt.Errorf("app %q: depends on resource %q owned by %q, but manifest specifies owner %q",
-			app.Metadata.Name, dep.Name, res.Metadata.Owner, dep.Owner))
+		errs = append(errs, fmt.Errorf("%s %q: depends on resource %q owned by %q, but manifest specifies owner %q",
+			c.kindLabel, c.name, dep.Name, res.Metadata.Owner, dep.Owner))
 		return errs
 	}
 
 	// Access check
-	if !hasAccess(app.Metadata.Owner, res.Metadata.Owner, res.Metadata.Access) {
-		errs = append(errs, fmt.Errorf("app %q (team %q) does not have access to resource %q (owned by %q)",
-			app.Metadata.Name, app.Metadata.Owner, res.Metadata.Name, res.Metadata.Owner))
+	if !hasAccess(c.owner, res.Metadata.Owner, res.Metadata.Access) {
+		errs = append(errs, fmt.Errorf("%s %q (team %q) does not have access to resource %q (owned by %q)",
+			c.kindLabel, c.name, c.owner, res.Metadata.Name, res.Metadata.Owner))
 	}
 
 	// Reachability check
-	if app.Metadata.Owner != res.Metadata.Owner && !res.Spec.Networking.ExposeToPlatform {
-		errs = append(errs, fmt.Errorf("app %q (team %q): resource %q (team %q) is not reachable cross-team — set networking.exposeToPlatform: true on the resource",
-			app.Metadata.Name, app.Metadata.Owner, res.Metadata.Name, res.Metadata.Owner))
+	if c.owner != res.Metadata.Owner && !res.Spec.Networking.ExposeToPlatform {
+		errs = append(errs, fmt.Errorf("%s %q (team %q): resource %q (team %q) is not reachable cross-team — set networking.exposeToPlatform: true on the resource",
+			c.kindLabel, c.name, c.owner, res.Metadata.Name, res.Metadata.Owner))
 	}
 
 	return errs
 }
 
-func validateApplicationDep(set *ManifestSet, app *manifest.ApplicationManifest, dep manifest.Dependency) []error {
+func validateApplicationDep(set *ManifestSet, c consumer, dep manifest.Dependency) []error {
 	var errs []error
 	depApp, exists := set.Applications[dep.Name]
 	if !exists {
-		errs = append(errs, fmt.Errorf("app %q: depends on missing application %q", app.Metadata.Name, dep.Name))
+		errs = append(errs, fmt.Errorf("%s %q: depends on missing application %q", c.kindLabel, c.name, dep.Name))
 		return errs
 	}
 
 	// Verify owner matches
 	if depApp.Metadata.Owner != dep.Owner {
-		errs = append(errs, fmt.Errorf("app %q: depends on application %q owned by %q, but manifest specifies owner %q",
-			app.Metadata.Name, dep.Name, depApp.Metadata.Owner, dep.Owner))
+		errs = append(errs, fmt.Errorf("%s %q: depends on application %q owned by %q, but manifest specifies owner %q",
+			c.kindLabel, c.name, dep.Name, depApp.Metadata.Owner, dep.Owner))
 		return errs
 	}
 
 	// Access check
-	if !hasAccess(app.Metadata.Owner, depApp.Metadata.Owner, depApp.Metadata.Access) {
-		errs = append(errs, fmt.Errorf("app %q (team %q) does not have access to application %q (owned by %q)",
-			app.Metadata.Name, app.Metadata.Owner, depApp.Metadata.Name, depApp.Metadata.Owner))
+	if !hasAccess(c.owner, depApp.Metadata.Owner, depApp.Metadata.Access) {
+		errs = append(errs, fmt.Errorf("%s %q (team %q) does not have access to application %q (owned by %q)",
+			c.kindLabel, c.name, c.owner, depApp.Metadata.Name, depApp.Metadata.Owner))
 	}
 
 	// Reachability check
-	if app.Metadata.Owner != depApp.Metadata.Owner && !depApp.Spec.Networking.ExposeToPlatform {
-		errs = append(errs, fmt.Errorf("app %q (team %q): application %q (team %q) is not reachable cross-team — set networking.exposeToPlatform: true on the application",
-			app.Metadata.Name, app.Metadata.Owner, depApp.Metadata.Name, depApp.Metadata.Owner))
+	if c.owner != depApp.Metadata.Owner && !depApp.Spec.Networking.ExposeToPlatform {
+		errs = append(errs, fmt.Errorf("%s %q (team %q): application %q (team %q) is not reachable cross-team — set networking.exposeToPlatform: true on the application",
+			c.kindLabel, c.name, c.owner, depApp.Metadata.Name, depApp.Metadata.Owner))
 	}
 
 	return errs
@@ -244,25 +264,28 @@ func hasAccess(consumer string, owner string, accessList []string) bool {
 	return slices.Contains(accessList, consumer)
 }
 
-// validateValueFrom ensures all environment variables using valueFrom reference valid
-// resource outputs or well-formed vault paths. Presence and mutual exclusivity of
-// value/valueFrom are enforced earlier by manifest.Validate.
-func validateValueFrom(set *ManifestSet, app *manifest.ApplicationManifest) []error {
+// validateEnvValueFrom ensures every env var using valueFrom references a valid
+// exported resource output, an application built-in, or a well-formed vault
+// path. A resource reference resolves only against the target's exported
+// outputs (strict allowlist). It serves both Application and Resource consumers;
+// kindLabel and consumerName scope the error messages. Presence and mutual
+// exclusivity of value/valueFrom are enforced earlier by manifest.Validate.
+func validateEnvValueFrom(set *ManifestSet, kindLabel, consumerName string, env []manifest.EnvVar) []error {
 	var errs []error
-	for _, env := range app.Spec.Env {
-		if env.ValueFrom == "" {
+	for _, e := range env {
+		if e.ValueFrom == "" {
 			continue
 		}
 
-		if strings.HasPrefix(env.ValueFrom, "vault:") {
-			errs = append(errs, validateVaultPath("app", app.Metadata.Name, "env", env.Name, env.ValueFrom)...)
+		if strings.HasPrefix(e.ValueFrom, "vault:") {
+			errs = append(errs, validateVaultPath(kindLabel, consumerName, "env", e.Name, e.ValueFrom)...)
 			continue
 		}
 
-		parts := strings.Split(env.ValueFrom, ".")
+		parts := strings.Split(e.ValueFrom, ".")
 		if len(parts) != 3 {
-			errs = append(errs, fmt.Errorf("app %q: env %q has invalid valueFrom format %q (expected <kind>.<name>.<output> or vault:<project>/<env>/<key>)",
-				app.Metadata.Name, env.Name, env.ValueFrom))
+			errs = append(errs, fmt.Errorf("%s %q: env %q has invalid valueFrom format %q (expected <kind>.<name>.<output> or vault:<project>/<env>/<key>)",
+				kindLabel, consumerName, e.Name, e.ValueFrom))
 			continue
 		}
 
@@ -279,17 +302,9 @@ func validateValueFrom(set *ManifestSet, app *manifest.ApplicationManifest) []er
 				// spec.dependencies entry covers the reference. Skip here.
 				continue
 			}
-
-			found := false
-			for _, out := range res.Spec.Outputs {
-				if out.Name == output {
-					found = true
-					break
-				}
-			}
-			if !found {
-				errs = append(errs, fmt.Errorf("app %q: env %q references non-existent output %q on resource %q",
-					app.Metadata.Name, env.Name, output, name))
+			if !isExportedOutput(res, output) {
+				errs = append(errs, fmt.Errorf("%s %q: env %q references non-existent output %q on resource %q",
+					kindLabel, consumerName, e.Name, output, name))
 			}
 
 		case "application":
@@ -299,28 +314,27 @@ func validateValueFrom(set *ManifestSet, app *manifest.ApplicationManifest) []er
 				continue
 			}
 			if output != "host" && output != "port" {
-				errs = append(errs, fmt.Errorf("app %q: env %q: application %q has no built-in output %q (only host and port are supported)",
-					app.Metadata.Name, env.Name, name, output))
+				errs = append(errs, fmt.Errorf("%s %q: env %q: application %q has no built-in output %q (only host and port are supported)",
+					kindLabel, consumerName, e.Name, name, output))
 			}
 
 		default:
-			errs = append(errs, fmt.Errorf("app %q: env %q has invalid valueFrom format %q (expected resource.<name>.<output>, application.<name>.<built-in>, or vault:<project>/<env>/<key>)",
-				app.Metadata.Name, env.Name, env.ValueFrom))
+			errs = append(errs, fmt.Errorf("%s %q: env %q has invalid valueFrom format %q (expected resource.<name>.<output>, application.<name>.<built-in>, or vault:<project>/<env>/<key>)",
+				kindLabel, consumerName, e.Name, e.ValueFrom))
 		}
 	}
 	return errs
 }
 
-// validateResourceVaultOutputs validates vault: valueFrom references on resource outputs.
-func validateResourceVaultOutputs(res *manifest.ResourceManifest) []error {
-	var errs []error
+// isExportedOutput reports whether name is present in a resource's export
+// allowlist (spec.outputs).
+func isExportedOutput(res *manifest.ResourceManifest, name string) bool {
 	for _, out := range res.Spec.Outputs {
-		if out.ValueFrom == "" {
-			continue
+		if out.Name == name {
+			return true
 		}
-		errs = append(errs, validateVaultPath("resource", res.Metadata.Name, "output", out.Name, out.ValueFrom)...)
 	}
-	return errs
+	return false
 }
 
 // validateVaultPath checks that a vault: ref has exactly 3 non-empty path components.

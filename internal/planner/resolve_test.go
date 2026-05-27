@@ -681,6 +681,55 @@ func TestResolve(t *testing.T) {
 	})
 }
 
+func TestResolve_ExportAllowlist(t *testing.T) {
+	store := &MockStore{Teams: map[string]*manifest.TeamManifest{
+		"team-a": {Metadata: manifest.Metadata{Name: "team-a"}},
+	}}
+
+	newSet := func(consumerEnv []manifest.EnvVar) *ManifestSet {
+		return &ManifestSet{
+			Applications: map[string]*manifest.ApplicationManifest{
+				"api": {
+					Metadata: manifest.Metadata{Name: "api", Owner: "team-a"},
+					Spec: manifest.ApplicationSpec{
+						Image: "img", Port: 80,
+						Dependencies: []manifest.Dependency{{Kind: manifest.ResourceKind, Name: "pg", Owner: "team-a"}},
+						Env:          consumerEnv,
+					},
+				},
+			},
+			Resources: map[string]*manifest.ResourceManifest{
+				"pg": {
+					Metadata: manifest.Metadata{Name: "pg", Owner: "team-a"},
+					Spec: manifest.ResourceSpec{
+						Type: "postgres", Version: "16",
+						Env: []manifest.EnvVar{
+							{Name: "POSTGRES_PASSWORD", Generated: true},
+							{Name: "POSTGRES_DB", Value: "app"},
+						},
+						Outputs: []manifest.Output{{Name: "POSTGRES_DB"}}, // only DB is exported
+					},
+				},
+			},
+		}
+	}
+
+	t.Run("exported key resolves", func(t *testing.T) {
+		set := newSet([]manifest.EnvVar{{Name: "DB", ValueFrom: "resource.pg.POSTGRES_DB"}})
+		if errs := Resolve(set, store, nil); len(errs) > 0 {
+			t.Errorf("expected no errors for exported key, got: %v", errs)
+		}
+	})
+
+	t.Run("un-exported env var is rejected", func(t *testing.T) {
+		set := newSet([]manifest.EnvVar{{Name: "PW", ValueFrom: "resource.pg.POSTGRES_PASSWORD"}})
+		errs := Resolve(set, store, nil)
+		if !errorsContain(errs, `references non-existent output "POSTGRES_PASSWORD" on resource "pg"`) {
+			t.Errorf("expected allowlist rejection, got: %v", errs)
+		}
+	})
+}
+
 func TestValidateRegistryImages(t *testing.T) {
 	registries := []config.RegistryConfig{
 		{Host: "192.168.1.1:3000", Alias: "myregistry"},

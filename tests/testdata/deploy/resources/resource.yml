@@ -7,8 +7,10 @@ spec:
   type: cache
   version: "1"
   image: traefik/whoami
-  outputs:
+  env:
     - name: endpoint
       value: "http://test-cache:80"
+  outputs:
+    - name: endpoint
   networking:
     exposeToPlatform: false

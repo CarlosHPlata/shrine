@@ -144,6 +144,21 @@ func cloneApplicationWithDeps(app *manifest.ApplicationManifest, extra []manifes
 	return &clone
 }
 
+// cloneResourceWithDeps returns a new ResourceManifest whose Spec.Dependencies
+// is the original slice plus extra appended. If extra is empty, returns res
+// unchanged.
+func cloneResourceWithDeps(res *manifest.ResourceManifest, extra []manifest.Dependency) *manifest.ResourceManifest {
+	if len(extra) == 0 {
+		return res
+	}
+	clone := *res
+	deps := make([]manifest.Dependency, 0, len(res.Spec.Dependencies)+len(extra))
+	deps = append(deps, res.Spec.Dependencies...)
+	deps = append(deps, extra...)
+	clone.Spec.Dependencies = deps
+	return &clone
+}
+
 // hasExplicitDependency returns true if any entry in deps matches (kind, name).
 // Owner is intentionally ignored.
 func hasExplicitDependency(deps []manifest.Dependency, kind, name string) bool {

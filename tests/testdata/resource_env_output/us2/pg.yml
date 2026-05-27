@@ -1,0 +1,17 @@
+apiVersion: shrine/v1
+kind: Resource
+metadata:
+  name: pg
+  owner: shrine-reo
+spec:
+  type: postgres
+  version: "16"
+  port: 5432
+  image: traefik/whoami
+  env:
+    - name: POSTGRES_DB
+      value: app
+    - name: POSTGRES_PASSWORD
+      generated: true
+  outputs:
+    - name: POSTGRES_DB

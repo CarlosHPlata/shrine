@@ -70,103 +70,137 @@ type nilVault struct{}
 func (nilVault) IsActive() bool              { return false }
 func (nilVault) GetSecret(_ string) (string, error) { return "", errors.New("inactive") }
 
-func TestResolveResource_MixedOutputs(t *testing.T) {
+func TestResolveResource_EnvAndExports(t *testing.T) {
 	res := &manifest.ResourceManifest{
-		Metadata: manifest.Metadata{Name: "hello-db", Owner: "team-a"},
+		Metadata: manifest.Metadata{Name: "pg", Owner: "team-a"},
 		Spec: manifest.ResourceSpec{
+			Port: 5432,
+			Env: []manifest.EnvVar{
+				{Name: "POSTGRES_DB", Value: "app"},
+				{Name: "POSTGRES_PASSWORD", Generated: true},
+			},
 			Outputs: []manifest.Output{
+				{Name: "POSTGRES_DB"},
 				{Name: "host"},
-				{Name: "port", Value: "5432"},
-				{Name: "database", Value: "hello"},
-				{Name: "password", Generated: true},
-				{Name: "url", Template: "postgres://postgres:{{.password}}@{{.host}}:{{.port}}/{{.database}}"},
+				{Name: "port"},
+				{Name: "DB_URL", Template: "postgres://app:{{.POSTGRES_PASSWORD}}@{{.host}}:{{.port}}/{{.POSTGRES_DB}}"},
 			},
 		},
 	}
 
 	r := NewLiveResolver(newFakeSecrets(), nil)
-	values, err := r.ResolveResource(res)
+	got, err := r.ResolveResource(res, ResolvedDependencies{})
 	if err != nil {
 		t.Fatalf("ResolveResource returned error: %v", err)
 	}
 
-	if values["host"] != "team-a.hello-db" {
-		t.Errorf("host = %q, want %q", values["host"], "team-a.hello-db")
+	// Env feeds the container and holds every declared env var.
+	if got.Env["POSTGRES_DB"] != "app" {
+		t.Errorf("Env[POSTGRES_DB] = %q, want app", got.Env["POSTGRES_DB"])
 	}
-	if values["port"] != "5432" {
-		t.Errorf("port = %q, want %q", values["port"], "5432")
+	if got.Env["POSTGRES_PASSWORD"] == "" {
+		t.Error("Env[POSTGRES_PASSWORD] is empty, want generated value")
 	}
-	if values["password"] == "" {
-		t.Errorf("password is empty, want generated value")
+	if _, ok := got.Env["DB_URL"]; ok {
+		t.Error("DB_URL is an export, must not appear in container Env")
 	}
-	wantURL := "postgres://postgres:" + values["password"] + "@team-a.hello-db:5432/hello"
-	if values["url"] != wantURL {
-		t.Errorf("url = %q, want %q", values["url"], wantURL)
+
+	// Exports is the strict allowlist.
+	if _, ok := got.Exports["POSTGRES_PASSWORD"]; ok {
+		t.Error("POSTGRES_PASSWORD is not listed in output and must not be exported")
+	}
+	if got.Exports["host"] != "team-a.pg" {
+		t.Errorf("Exports[host] = %q, want team-a.pg", got.Exports["host"])
+	}
+	if got.Exports["port"] != "5432" {
+		t.Errorf("Exports[port] = %q, want 5432", got.Exports["port"])
+	}
+	wantURL := "postgres://app:" + got.Env["POSTGRES_PASSWORD"] + "@team-a.pg:5432/app"
+	if got.Exports["DB_URL"] != wantURL {
+		t.Errorf("Exports[DB_URL] = %q, want %q", got.Exports["DB_URL"], wantURL)
 	}
 }
 
-func TestResolveResource_VaultOutput(t *testing.T) {
+func TestResolveResource_GeneratedKeyReuse(t *testing.T) {
+	secrets := newFakeSecrets()
+	res := &manifest.ResourceManifest{
+		Metadata: manifest.Metadata{Name: "pg", Owner: "team-a"},
+		Spec: manifest.ResourceSpec{
+			Env: []manifest.EnvVar{{Name: "PW", Generated: true}},
+		},
+	}
+	r := NewLiveResolver(secrets, nil)
+	first, err := r.ResolveResource(res, ResolvedDependencies{})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	second, err := r.ResolveResource(res, ResolvedDependencies{})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if first.Env["PW"] != second.Env["PW"] {
+		t.Error("generated secret must be stable for the same key across resolves")
+	}
+	if _, ok := secrets.data["team-a"]["pg.PW"]; !ok {
+		t.Errorf("expected secret key %q, got store %v", "pg.PW", secrets.data)
+	}
+}
+
+func TestResolveResource_VaultEnv(t *testing.T) {
 	vault := newFakeVault("myproject/prod/DB_PASS", "s3cr3t")
 	res := &manifest.ResourceManifest{
 		Metadata: manifest.Metadata{Name: "db", Owner: "team-a"},
 		Spec: manifest.ResourceSpec{
-			Outputs: []manifest.Output{
-				{Name: "host"},
-				{Name: "password", ValueFrom: "vault:myproject/prod/DB_PASS"},
-			},
+			Env:     []manifest.EnvVar{{Name: "PASSWORD", ValueFrom: "vault:myproject/prod/DB_PASS"}},
+			Outputs: []manifest.Output{{Name: "PASSWORD"}},
 		},
 	}
 
 	r := NewLiveResolver(newFakeSecrets(), vault)
-	values, err := r.ResolveResource(res)
+	got, err := r.ResolveResource(res, ResolvedDependencies{})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if values["password"] != "s3cr3t" {
-		t.Errorf("password = %q, want %q", values["password"], "s3cr3t")
+	if got.Env["PASSWORD"] != "s3cr3t" {
+		t.Errorf("Env[PASSWORD] = %q, want s3cr3t", got.Env["PASSWORD"])
+	}
+	if got.Exports["PASSWORD"] != "s3cr3t" {
+		t.Errorf("Exports[PASSWORD] = %q, want s3cr3t", got.Exports["PASSWORD"])
 	}
 }
 
-func TestResolveResource_VaultOutput_NoPlugin(t *testing.T) {
+func TestResolveResource_VaultEnv_NoPlugin(t *testing.T) {
 	res := &manifest.ResourceManifest{
 		Metadata: manifest.Metadata{Name: "db", Owner: "team-a"},
 		Spec: manifest.ResourceSpec{
-			Outputs: []manifest.Output{
-				{Name: "password", ValueFrom: "vault:proj/prod/PASS"},
-			},
+			Env: []manifest.EnvVar{{Name: "PASSWORD", ValueFrom: "vault:proj/prod/PASS"}},
 		},
 	}
 
 	t.Run("nil vault", func(t *testing.T) {
-		r := NewLiveResolver(newFakeSecrets(), nil)
-		_, err := r.ResolveResource(res)
+		_, err := NewLiveResolver(newFakeSecrets(), nil).ResolveResource(res, ResolvedDependencies{})
 		if err == nil || !strings.Contains(err.Error(), "no secrets plugin") {
 			t.Errorf("expected no-plugin error, got: %v", err)
 		}
 	})
 
 	t.Run("inactive vault", func(t *testing.T) {
-		r := NewLiveResolver(newFakeSecrets(), nilVault{})
-		_, err := r.ResolveResource(res)
+		_, err := NewLiveResolver(newFakeSecrets(), nilVault{}).ResolveResource(res, ResolvedDependencies{})
 		if err == nil || !strings.Contains(err.Error(), "no secrets plugin") {
 			t.Errorf("expected no-plugin error, got: %v", err)
 		}
 	})
 }
 
-func TestResolveResource_VaultOutput_MissingSecret(t *testing.T) {
-	vault := newFakeVault() // empty vault
+func TestResolveResource_VaultEnv_MissingSecret(t *testing.T) {
 	res := &manifest.ResourceManifest{
 		Metadata: manifest.Metadata{Name: "db", Owner: "team-a"},
 		Spec: manifest.ResourceSpec{
-			Outputs: []manifest.Output{
-				{Name: "password", ValueFrom: "vault:proj/prod/MISSING"},
-			},
+			Env: []manifest.EnvVar{{Name: "PASSWORD", ValueFrom: "vault:proj/prod/MISSING"}},
 		},
 	}
 
-	r := NewLiveResolver(newFakeSecrets(), vault)
-	_, err := r.ResolveResource(res)
+	_, err := NewLiveResolver(newFakeSecrets(), newFakeVault()).ResolveResource(res, ResolvedDependencies{})
 	if err == nil {
 		t.Fatal("expected error for missing secret, got nil")
 	}
@@ -175,61 +209,106 @@ func TestResolveResource_VaultOutput_MissingSecret(t *testing.T) {
 	}
 }
 
-func TestResolveResource_TemplateChain(t *testing.T) {
+func TestResolveResource_EnvTemplateChain(t *testing.T) {
 	res := &manifest.ResourceManifest{
 		Metadata: manifest.Metadata{Name: "chain", Owner: "team-a"},
 		Spec: manifest.ResourceSpec{
-			Outputs: []manifest.Output{
-				{Name: "c", Value: "C"},
-				{Name: "b", Template: "{{.c}}+B"},
-				{Name: "a", Template: "{{.b}}+A"},
+			Env: []manifest.EnvVar{
+				{Name: "C", Value: "C"},
+				{Name: "B", Template: "{{.C}}+B"},
+				{Name: "A", Template: "{{.B}}+A"},
 			},
 		},
 	}
 
-	r := NewLiveResolver(newFakeSecrets(), nil)
-	values, err := r.ResolveResource(res)
+	got, err := NewLiveResolver(newFakeSecrets(), nil).ResolveResource(res, ResolvedDependencies{})
 	if err != nil {
 		t.Fatalf("ResolveResource returned error: %v", err)
 	}
-	if values["a"] != "C+B+A" {
-		t.Errorf("a = %q, want %q", values["a"], "C+B+A")
+	if got.Env["A"] != "C+B+A" {
+		t.Errorf("Env[A] = %q, want C+B+A", got.Env["A"])
 	}
 }
 
-func TestResolveResource_TemplateCycle(t *testing.T) {
+func TestResolveResource_EnvTemplateHostPort(t *testing.T) {
 	res := &manifest.ResourceManifest{
-		Metadata: manifest.Metadata{Name: "cycle", Owner: "team-a"},
+		Metadata: manifest.Metadata{Name: "cache", Owner: "team-a"},
 		Spec: manifest.ResourceSpec{
-			Outputs: []manifest.Output{
-				{Name: "a", Template: "{{.b}}"},
-				{Name: "b", Template: "{{.a}}"},
+			Port: 6379,
+			Env: []manifest.EnvVar{
+				{Name: "SELF_CONN", Template: "redis://{{.host}}:{{.port}}"},
 			},
 		},
 	}
 
-	r := NewLiveResolver(newFakeSecrets(), nil)
-	_, err := r.ResolveResource(res)
-	if err == nil {
-		t.Fatal("expected cycle error, got nil")
+	got, err := NewLiveResolver(newFakeSecrets(), nil).ResolveResource(res, ResolvedDependencies{})
+	if err != nil {
+		t.Fatalf("ResolveResource returned error: %v", err)
 	}
-	if !strings.Contains(err.Error(), "template cycle") {
+	if got.Env["SELF_CONN"] != "redis://team-a.cache:6379" {
+		t.Errorf("Env[SELF_CONN] = %q, want redis://team-a.cache:6379", got.Env["SELF_CONN"])
+	}
+}
+
+func TestResolveResource_EnvTemplateCycle(t *testing.T) {
+	res := &manifest.ResourceManifest{
+		Metadata: manifest.Metadata{Name: "cycle", Owner: "team-a"},
+		Spec: manifest.ResourceSpec{
+			Env: []manifest.EnvVar{
+				{Name: "A", Template: "{{.B}}"},
+				{Name: "B", Template: "{{.A}}"},
+			},
+		},
+	}
+
+	_, err := NewLiveResolver(newFakeSecrets(), nil).ResolveResource(res, ResolvedDependencies{})
+	if err == nil || !strings.Contains(err.Error(), "template cycle") {
 		t.Errorf("expected cycle error, got: %v", err)
 	}
 }
 
-func TestResolveResource_BareNonHostFails(t *testing.T) {
+func TestResolveResource_EnvValueFromResource(t *testing.T) {
+	res := &manifest.ResourceManifest{
+		Metadata: manifest.Metadata{Name: "cache", Owner: "team-a"},
+		Spec: manifest.ResourceSpec{
+			Env:     []manifest.EnvVar{{Name: "UPSTREAM_DB_HOST", ValueFrom: "resource.pg.host"}},
+			Outputs: []manifest.Output{{Name: "UPSTREAM_DB_HOST"}},
+		},
+	}
+	deps := ResolvedDependencies{Resources: map[string]map[string]string{"pg": {"host": "team-a.pg"}}}
+
+	got, err := NewLiveResolver(newFakeSecrets(), nil).ResolveResource(res, deps)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got.Env["UPSTREAM_DB_HOST"] != "team-a.pg" {
+		t.Errorf("Env[UPSTREAM_DB_HOST] = %q, want team-a.pg", got.Env["UPSTREAM_DB_HOST"])
+	}
+}
+
+func TestResolveResource_OutputBareUnknownFails(t *testing.T) {
 	res := &manifest.ResourceManifest{
 		Metadata: manifest.Metadata{Name: "db", Owner: "team-a"},
 		Spec: manifest.ResourceSpec{
-			Outputs: []manifest.Output{
-				{Name: "mystery"},
-			},
+			Outputs: []manifest.Output{{Name: "mystery"}},
 		},
 	}
-	_, err := NewLiveResolver(newFakeSecrets(), nil).ResolveResource(res)
-	if err == nil || !strings.Contains(err.Error(), "bare output") {
-		t.Errorf("expected bare-output error, got: %v", err)
+	_, err := NewLiveResolver(newFakeSecrets(), nil).ResolveResource(res, ResolvedDependencies{})
+	if err == nil || !strings.Contains(err.Error(), "matches no env var or built-in") {
+		t.Errorf("expected no-match error, got: %v", err)
+	}
+}
+
+func TestResolveResource_PortExportRequiresSpecPort(t *testing.T) {
+	res := &manifest.ResourceManifest{
+		Metadata: manifest.Metadata{Name: "db", Owner: "team-a"},
+		Spec: manifest.ResourceSpec{
+			Outputs: []manifest.Output{{Name: "port"}},
+		},
+	}
+	_, err := NewLiveResolver(newFakeSecrets(), nil).ResolveResource(res, ResolvedDependencies{})
+	if err == nil || !strings.Contains(err.Error(), "requires spec.port") {
+		t.Errorf("expected port-requires-spec.port error, got: %v", err)
 	}
 }
 
@@ -524,24 +603,44 @@ func TestDryRunResolver_VaultPlaceholder_AppEnv(t *testing.T) {
 	}
 }
 
-func TestDryRunResolver_VaultPlaceholder_ResourceOutput(t *testing.T) {
+func TestDryRunResolver_ResourceEnvAndExports(t *testing.T) {
 	res := &manifest.ResourceManifest{
 		Metadata: manifest.Metadata{Name: "db", Owner: "team-a"},
 		Spec: manifest.ResourceSpec{
+			Port: 5432,
+			Env: []manifest.EnvVar{
+				{Name: "PW", Generated: true},
+				{Name: "SECRET", ValueFrom: "vault:a/b/c"},
+				{Name: "DB", Value: "app"},
+			},
 			Outputs: []manifest.Output{
+				{Name: "DB"},
 				{Name: "host"},
-				{Name: "password", ValueFrom: "vault:proj/prod/DB_PASS"},
+				{Name: "port"},
+				{Name: "URL", Template: "{{.DB}}:{{.PW}}"},
 			},
 		},
 	}
 
 	r := NewDryRunResolver()
-	values, err := r.ResolveResource(res)
+	got, err := r.ResolveResource(res, ResolvedDependencies{})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if values["password"] != "[VAULT:proj/prod/DB_PASS]" {
-		t.Errorf("password = %q, want [VAULT:proj/prod/DB_PASS]", values["password"])
+	if got.Env["PW"] != "[GENERATED]" {
+		t.Errorf("Env[PW] = %q, want [GENERATED]", got.Env["PW"])
+	}
+	if got.Env["SECRET"] != "[VAULT:a/b/c]" {
+		t.Errorf("Env[SECRET] = %q, want [VAULT:a/b/c]", got.Env["SECRET"])
+	}
+	if got.Exports["port"] != "[PORT]" {
+		t.Errorf("Exports[port] = %q, want [PORT]", got.Exports["port"])
+	}
+	if got.Exports["URL"] != "app:[GENERATED]" {
+		t.Errorf("Exports[URL] = %q, want app:[GENERATED]", got.Exports["URL"])
+	}
+	if _, ok := got.Exports["PW"]; ok {
+		t.Error("PW is not listed in output and must not be exported")
 	}
 }
 
