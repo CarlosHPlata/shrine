@@ -10,7 +10,7 @@ import (
 )
 
 type DockerBackend struct {
-	client     *client.Client
+	client     dockerAPI
 	state      *state.Store
 	registries []config.RegistryConfig
 	observer   engine.Observer
