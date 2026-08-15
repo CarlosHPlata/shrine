@@ -18,6 +18,15 @@ func (backend *DockerBackend) CreateContainer(op engine.CreateContainerOp) error
 	cName := containerName(op.Team, op.Name)
 	netName := networkName(op.Team)
 
+	// Expand the reg:<alias> form exactly once, before anything reads
+	// op.Image — the pull, the credential lookup, the config hash, and the
+	// container spec must all see the same fully-qualified reference (#33).
+	expanded, err := expandRegistryAlias(op.Image, backend.registries)
+	if err != nil {
+		return backend.emitErr("registry.alias", map[string]string{"ref": op.Image}, err)
+	}
+	op.Image = expanded
+
 	digest, err := backend.resolveImage(ctx, op.Image, op.ImagePullPolicy)
 	if err != nil {
 		return err
@@ -103,8 +112,8 @@ func (backend *DockerBackend) createFreshContainer(ctx context.Context, op engin
 		cName,
 	)
 	if err != nil {
-		return backend.emitErr("container.create", map[string]string{"name": cName},
-			fmt.Errorf("creating container %q: %w", cName, err))
+		return backend.emitErr("container.create", map[string]string{"name": cName, "image": op.Image},
+			fmt.Errorf("creating container %q (image %q): %w", cName, op.Image, err))
 	}
 
 	if err := backend.client.ContainerStart(ctx, created.ID, container.StartOptions{}); err != nil {

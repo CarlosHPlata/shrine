@@ -9,12 +9,9 @@ import (
 	"github.com/docker/docker/api/types/image"
 )
 
+// resolveImage resolves ref to an image digest, pulling per policy. The
+// caller owns registry-alias expansion: ref must already be fully qualified.
 func (backend *DockerBackend) resolveImage(ctx context.Context, ref string, policy string) (string, error) {
-	var err error
-	if ref, err = expandRegistryAlias(ref, backend.registries); err != nil {
-		return "", backend.emitErr("registry.alias", map[string]string{"ref": ref}, err)
-	}
-
 	if policy != "Always" {
 		args := filters.NewArgs()
 		args.Add("reference", ref)

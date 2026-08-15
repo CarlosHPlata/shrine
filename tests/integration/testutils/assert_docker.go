@@ -86,6 +86,22 @@ func (tc *TestCase) AssertContainerInNetwork(containerName, networkName string) 
 	return tc
 }
 
+// AssertContainerImage checks the image reference the container was created
+// with — Config.Image is the exact string handed to Docker at create time.
+func (tc *TestCase) AssertContainerImage(containerName, expectedImage string) *TestCase {
+	tc.t.Helper()
+	ctx := context.Background()
+	info, err := tc.DockerClient.ContainerInspect(ctx, containerName)
+	if err != nil {
+		tc.t.Errorf("container %q not found: %v", containerName, err)
+		return tc
+	}
+	if info.Config.Image != expectedImage {
+		tc.t.Errorf("container %q image = %q, want %q", containerName, info.Config.Image, expectedImage)
+	}
+	return tc
+}
+
 func (tc *TestCase) AssertContainerEnvVar(containerName, key, expectedValue string) *TestCase {
 	tc.t.Helper()
 	ctx := context.Background()

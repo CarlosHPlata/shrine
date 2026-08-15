@@ -1,0 +1,16 @@
+apiVersion: shrine/v1
+kind: Resource
+metadata:
+  name: alias-mixed-cache
+  owner: shrine-deploy-test
+spec:
+  type: cache
+  version: "1"
+  image: reg:myregistry/traefik/whoami:latest
+  env:
+    - name: endpoint
+      value: "http://alias-mixed-cache:80"
+  outputs:
+    - name: endpoint
+  networking:
+    exposeToPlatform: false
