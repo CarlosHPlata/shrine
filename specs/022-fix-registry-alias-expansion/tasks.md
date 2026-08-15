@@ -27,7 +27,7 @@ Execution Order.
 
 **Purpose**: Establish a provably green baseline so every later red run (VR-003) is attributable to the defect, not to pre-existing breakage.
 
-- [ ] T001 Record the pre-change baseline on branch `022-fix-registry-alias-expansion`: run `go build ./...` and `go test ./...` from the repo root and confirm both pass with zero changes. Do not run the integration suite here (it is slow; it runs once as the final gate in T024).
+- [x] T001 Record the pre-change baseline on branch `022-fix-registry-alias-expansion`: run `go build ./...` and `go test ./...` from the repo root and confirm both pass with zero changes. Do not run the integration suite here (it is slow; it runs once as the final gate in T024).
 
 ---
 
@@ -37,10 +37,10 @@ Execution Order.
 
 **⚠️ CRITICAL**: No user story work can begin until this phase is complete.
 
-- [ ] T002 Create the package-internal `dockerAPI` interface in `internal/engine/local/dockercontainer/docker_api.go` with exactly the 12 methods the backend calls today, signatures matching `*client.Client` so it satisfies the interface structurally: `ContainerCreate`, `ContainerInspect`, `ContainerRemove`, `ContainerStart`, `ImageInspect`, `ImageList`, `ImagePull`, `NetworkCreate`, `NetworkInspect`, `NetworkRemove`, `VolumeCreate`, `VolumeInspect` (research D2). Unexported; add the one-line WHY comment that this is the test seam demanded by spec VR-001/VR-002.
-- [ ] T003 Retype the `client` field of `DockerBackend` from `*client.Client` to `dockerAPI` in `internal/engine/local/dockercontainer/docker_backend.go`. No other edits — `NewDockerBackend` and every call site must compile unchanged (depends on T002).
-- [ ] T004 Prove seam neutrality: `go build ./...` and `go test ./...` pass with zero test edits and zero behavioural diffs (depends on T003). This is the plan's Implementation Flow step 1 exit criterion.
-- [ ] T005 [P] Add `AssertContainerImage(containerName, expectedImage string) *TestCase` to `tests/integration/testutils/assert_docker.go`, modeled on the existing `AssertContainerEnvVar` method: `ContainerInspect` the named container and require `Config.Image == expectedImage`. This reads back the exact string Docker was handed at create time (research D4).
+- [x] T002 Create the package-internal `dockerAPI` interface in `internal/engine/local/dockercontainer/docker_api.go` with exactly the 12 methods the backend calls today, signatures matching `*client.Client` so it satisfies the interface structurally: `ContainerCreate`, `ContainerInspect`, `ContainerRemove`, `ContainerStart`, `ImageInspect`, `ImageList`, `ImagePull`, `NetworkCreate`, `NetworkInspect`, `NetworkRemove`, `VolumeCreate`, `VolumeInspect` (research D2). Unexported; add the one-line WHY comment that this is the test seam demanded by spec VR-001/VR-002.
+- [x] T003 Retype the `client` field of `DockerBackend` from `*client.Client` to `dockerAPI` in `internal/engine/local/dockercontainer/docker_backend.go`. No other edits — `NewDockerBackend` and every call site must compile unchanged (depends on T002).
+- [x] T004 Prove seam neutrality: `go build ./...` and `go test ./...` pass with zero test edits and zero behavioural diffs (depends on T003). This is the plan's Implementation Flow step 1 exit criterion.
+- [x] T005 [P] Add `AssertContainerImage(containerName, expectedImage string) *TestCase` to `tests/integration/testutils/assert_docker.go`, modeled on the existing `AssertContainerEnvVar` method: `ContainerInspect` the named container and require `Config.Image == expectedImage`. This reads back the exact string Docker was handed at create time (research D4).
 
 **Checkpoint**: Seam in place, behaviour provably unchanged, assertion helper available. Red-test writing can begin in parallel across all four stories.
 
@@ -54,24 +54,24 @@ Execution Order.
 
 ### Red tests for User Story 1 (write, run, and record the red output BEFORE T011)
 
-- [ ] T006 [P] [US1] Create `internal/engine/local/dockercontainer/docker_container_test.go` (package `dockercontainer`) with a fake `dockerAPI` and three test functions (research D3 — no filesystem, no daemon, `nil` state store, no-op observer):
+- [x] T006 [P] [US1] Create `internal/engine/local/dockercontainer/docker_container_test.go` (package `dockercontainer`) with a fake `dockerAPI` and three test functions (research D3 — no filesystem, no daemon, `nil` state store, no-op observer):
   - Fake behaviour: `ImageInspect` returns a fixed digest ID (so the pull path is skipped), `ContainerInspect` returns `errdefs.ErrNotFound` (forcing the fresh-create path), `ContainerCreate` **captures the `*container.Config` and returns an error** (stopping the flow before `recordDeployment`, so no state file is ever written). The 9 unused methods may panic to prove they are unreached.
   - `TestCreateContainer_ExpandsAliasIntoContainerSpec`: registries `[{host: docker.io, alias: myregistry}]`, `op.Image = "reg:myregistry/traefik/whoami:latest"` → captured `Config.Image` MUST equal `"docker.io/traefik/whoami:latest"` and MUST NOT have the `reg:` prefix (FR-001, SC-003). **Expected RED**: capture shows the raw `reg:` string.
   - `TestCreateContainer_BareAliasExpandsToHost`: `op.Image = "reg:myregistry"` → captured `Config.Image` equals `"docker.io"` (edge case: alias with no path segment, consistent with plan-time validation).
   - `TestCreateContainer_PlainReferencePassesThroughUnchanged`: `op.Image = "nginx:latest"` → captured `Config.Image` equals `"nginx:latest"` (FR-005). Expected green today — a pin, not a red-first test.
   - Record the red run output (VR-003 evidence for T025).
-- [ ] T007 [P] [US1] Add `TestRegistryAliasRealDeploy_Application` to `tests/integration/registry_alias_test.go` (depends on T005): using `NewDockerSuite(t, "shrine-deploy-test")` and `testutils.Execute`, run a **real** `shrine deploy` (no `--dry-run`) of the existing fixture `tests/testdata/deploy/registry-alias/` (app `alias-app`, image `reg:myregistry/traefik/whoami:latest`). Assert: exit success, `AssertContainerRunning("shrine-deploy-test.alias-app")`, `AssertContainerImage("shrine-deploy-test.alias-app", "docker.io/traefik/whoami:latest")` (FR-001, SC-001, SC-003). Then run the same deploy a second time unchanged and assert the container ID is identical — the existing up-to-date container takes the early-return path (FR-011, the masking edge case, covered explicitly rather than assumed). Run with `go test -tags integration -run TestRegistryAliasRealDeploy_Application ./tests/integration/...`. **Expected RED**: the first deploy fails with `invalid reference format`. Record the red output. Leave the three existing dry-run tests (`TestRegistryAliasConfig`, `TestRegistryAliasAppImage`, `TestRegistryAliasResourceImage`) byte-for-byte unmodified (FR-007/SC-005).
-- [ ] T008 [P] [US1] Create the form-equivalence fixtures (research D4): `tests/testdata/deploy/registry-alias-eq-alias/` and `tests/testdata/deploy/registry-alias-eq-full/` — identical `config.yml` (`host: docker.io, alias: myregistry`) and identical `Application` manifests (same name, e.g. `alias-eq`, owner `shrine-deploy-test`, port 80, `exposeToPlatform: false`) differing ONLY in the image line: `reg:myregistry/traefik/whoami:latest` vs `docker.io/traefik/whoami:latest`.
-- [ ] T009 [US1] Add `TestRegistryAliasFormEquivalence_NoRecreate` to `tests/integration/registry_alias_test.go` (depends on T005, T008): real-deploy `registry-alias-eq-alias/` first and assert the container's image is `docker.io/traefik/whoami:latest`, capturing the container ID; then real-deploy `registry-alias-eq-full/` and assert the container ID is **unchanged** — the form swap alone never recreates (FR-004, FR-010, SC-004, SC-008; pins the digest-based hash contract, research D6). **Expected RED on the alias leg** against unfixed code (`invalid reference format`); the no-recreate property itself needs no red run (FR-010 is not in VR-003's list — D6: verification-only).
-- [ ] T010 [P] [US1] Add `TestRegistryAliasUnknown_RealDeployFailsBeforeCreate` to `tests/integration/registry_alias_test.go`: real (non-dry-run) deploy of the existing fixture `tests/testdata/deploy/registry-alias-unknown/`; assert exit failure, the error names the unknown alias, and no container was created for the workload (FR-006 under VR-001 — the existing unknown-alias coverage is dry-run/plan-level only). Expected green today (plan-time validation already works); this is a pin required by VR-001, not a red-first test — note this in the test's comment is NOT needed, note it only in the PR evidence.
+- [x] T007 [P] [US1] Add `TestRegistryAliasRealDeploy_Application` to `tests/integration/registry_alias_test.go` (depends on T005): using `NewDockerSuite(t, "shrine-deploy-test")` and `testutils.Execute`, run a **real** `shrine deploy` (no `--dry-run`) of the existing fixture `tests/testdata/deploy/registry-alias/` (app `alias-app`, image `reg:myregistry/traefik/whoami:latest`). Assert: exit success, `AssertContainerRunning("shrine-deploy-test.alias-app")`, `AssertContainerImage("shrine-deploy-test.alias-app", "docker.io/traefik/whoami:latest")` (FR-001, SC-001, SC-003). Then run the same deploy a second time unchanged and assert the container ID is identical — the existing up-to-date container takes the early-return path (FR-011, the masking edge case, covered explicitly rather than assumed). Run with `go test -tags integration -run TestRegistryAliasRealDeploy_Application ./tests/integration/...`. **Expected RED**: the first deploy fails with `invalid reference format`. Record the red output. Leave the three existing dry-run tests (`TestRegistryAliasConfig`, `TestRegistryAliasAppImage`, `TestRegistryAliasResourceImage`) byte-for-byte unmodified (FR-007/SC-005).
+- [x] T008 [P] [US1] Create the form-equivalence fixtures (research D4): `tests/testdata/deploy/registry-alias-eq-alias/` and `tests/testdata/deploy/registry-alias-eq-full/` — identical `config.yml` (`host: docker.io, alias: myregistry`) and identical `Application` manifests (same name, e.g. `alias-eq`, owner `shrine-deploy-test`, port 80, `exposeToPlatform: false`) differing ONLY in the image line: `reg:myregistry/traefik/whoami:latest` vs `docker.io/traefik/whoami:latest`.
+- [x] T009 [US1] Add `TestRegistryAliasFormEquivalence_NoRecreate` to `tests/integration/registry_alias_test.go` (depends on T005, T008): real-deploy `registry-alias-eq-alias/` first and assert the container's image is `docker.io/traefik/whoami:latest`, capturing the container ID; then real-deploy `registry-alias-eq-full/` and assert the container ID is **unchanged** — the form swap alone never recreates (FR-004, FR-010, SC-004, SC-008; pins the digest-based hash contract, research D6). **Expected RED on the alias leg** against unfixed code (`invalid reference format`); the no-recreate property itself needs no red run (FR-010 is not in VR-003's list — D6: verification-only).
+- [x] T010 [P] [US1] Add `TestRegistryAliasUnknown_RealDeployFailsBeforeCreate` to `tests/integration/registry_alias_test.go`: real (non-dry-run) deploy of the existing fixture `tests/testdata/deploy/registry-alias-unknown/`; assert exit failure, the error names the unknown alias, and no container was created for the workload (FR-006 under VR-001 — the existing unknown-alias coverage is dry-run/plan-level only). Expected green today (plan-time validation already works); this is a pin required by VR-001, not a red-first test — note this in the test's comment is NOT needed, note it only in the PR evidence.
 
 > **⚠️ VR-003 GATE — do not start T011 yet.** The fix below also resolves User Story 2 (same code path, research D1). T014 (US2's red integration test) and T015 (mixed-manifest red test) MUST be written and **seen red first**, or US2's regression tests will never have a recorded red run. Execution order: T006, T007, T009, T010, T014, T015 all red/recorded → then T011.
 
 ### Implementation for User Story 1 (and, by shared code path, User Story 2)
 
-- [ ] T011 [US1] In `internal/engine/local/dockercontainer/docker_container.go`, expand the alias exactly once at the top of `DockerBackend.CreateContainer`, before anything reads `op.Image`: `op.Image = expandRegistryAlias(op.Image, backend.registries)` result assigned into the by-value `op`; on expansion error, fail the creation through the existing error pathway (wrapped error + `container.create` error event) before any Docker call (research D1; FR-001, FR-002, FR-003, FR-006). Blocked by: T004 and recorded red runs of T006, T007, T009, T014, T015.
-- [ ] T012 [US1] In `internal/engine/local/dockercontainer/docker_image.go`, remove the now-redundant expansion inside `resolveImage` and add the one-line WHY comment stating the caller owns alias expansion (the hidden invariant — Constitution VII's permitted comment kind). Signature unchanged (research D1; enforces the single-expansion-point invariant, data-model.md). Depends on T011 — land as one change unit.
-- [ ] T013 [US1] Green verification for US1: `go test ./...` passes (T006's red tests now green, plain-ref pin still green); targeted `go test -tags integration -run 'TestRegistryAliasRealDeploy_Application|TestRegistryAliasFormEquivalence_NoRecreate|TestRegistryAliasUnknown_RealDeployFailsBeforeCreate' ./tests/integration/...` passes. Do not run the full integration suite here (final gate is T024).
+- [x] T011 [US1] In `internal/engine/local/dockercontainer/docker_container.go`, expand the alias exactly once at the top of `DockerBackend.CreateContainer`, before anything reads `op.Image`: `op.Image = expandRegistryAlias(op.Image, backend.registries)` result assigned into the by-value `op`; on expansion error, fail the creation through the existing error pathway (wrapped error + `container.create` error event) before any Docker call (research D1; FR-001, FR-002, FR-003, FR-006). Blocked by: T004 and recorded red runs of T006, T007, T009, T014, T015.
+- [x] T012 [US1] In `internal/engine/local/dockercontainer/docker_image.go`, remove the now-redundant expansion inside `resolveImage` and add the one-line WHY comment stating the caller owns alias expansion (the hidden invariant — Constitution VII's permitted comment kind). Signature unchanged (research D1; enforces the single-expansion-point invariant, data-model.md). Depends on T011 — land as one change unit.
+- [x] T013 [US1] Green verification for US1: `go test ./...` passes (T006's red tests now green, plain-ref pin still green); targeted `go test -tags integration -run 'TestRegistryAliasRealDeploy_Application|TestRegistryAliasFormEquivalence_NoRecreate|TestRegistryAliasUnknown_RealDeployFailsBeforeCreate' ./tests/integration/...` passes. Do not run the full integration suite here (final gate is T024).
 
 **Checkpoint (VR-005 — full restatement, no narrowing)**: Given a config declaring an alias for a registry host and an `Application` manifest using `image: reg:<alias>/<path>:<tag>` for a workload with no existing container, running **`shrine deploy`** (not `--dry-run`) creates the container successfully and its image reference is the alias expanded to the configured registry host; deploying the equivalent fully-qualified manifest produces the same observable result, and swapping a running workload's manifest between the two forms recreates nothing.
 
@@ -85,8 +85,8 @@ Execution Order.
 
 ### Red tests for User Story 2 (⚠️ executed BEFORE T011 — see the VR-003 GATE in Phase 3)
 
-- [ ] T014 [P] [US2] Add `TestRegistryAliasRealDeploy_Resource` to `tests/integration/registry_alias_test.go` (depends on T005): real (non-dry-run) deploy of the existing fixture `tests/testdata/deploy/registry-alias-resource/` (resource `alias-db`, image `reg:myregistry/postgres:15`). Assert: exit success, `AssertContainerRunning("shrine-deploy-test.alias-db")`, `AssertContainerImage("shrine-deploy-test.alias-db", "docker.io/postgres:15")` (FR-002, SC-002). **Expected RED**: `invalid reference format`. Record the red output.
-- [ ] T015 [P] [US2] Create fixture `tests/testdata/deploy/registry-alias-mixed/` — the same `config.yml` (`docker.io` / `myregistry`) plus BOTH an alias-form `Application` (reuse the `alias-app` manifest shape, distinct name e.g. `alias-mixed-app`) and an alias-form `Resource` (reuse the `alias-db` shape, distinct name e.g. `alias-mixed-db`), owner `shrine-deploy-test` — and add `TestRegistryAliasRealDeploy_Mixed` to `tests/integration/registry_alias_test.go`: one real deploy of the whole set; assert both containers are created and neither `Config.Image` begins with `reg:` (US2 acceptance scenario 2). Existing shared fixtures are NOT modified — the dry-run tests that grep them must pass unmodified. **Expected RED**. Record the red output.
+- [x] T014 [P] [US2] Add `TestRegistryAliasRealDeploy_Resource` to `tests/integration/registry_alias_test.go` (depends on T005): real (non-dry-run) deploy of the existing fixture `tests/testdata/deploy/registry-alias-resource/` (resource `alias-db`, image `reg:myregistry/postgres:15`). Assert: exit success, `AssertContainerRunning("shrine-deploy-test.alias-db")`, `AssertContainerImage("shrine-deploy-test.alias-db", "docker.io/postgres:15")` (FR-002, SC-002). **Expected RED**: `invalid reference format`. Record the red output.
+- [x] T015 [P] [US2] Create fixture `tests/testdata/deploy/registry-alias-mixed/` — the same `config.yml` (`docker.io` / `myregistry`) plus BOTH an alias-form `Application` (reuse the `alias-app` manifest shape, distinct name e.g. `alias-mixed-app`) and an alias-form `Resource` (reuse the `alias-db` shape, distinct name e.g. `alias-mixed-db`), owner `shrine-deploy-test` — and add `TestRegistryAliasRealDeploy_Mixed` to `tests/integration/registry_alias_test.go`: one real deploy of the whole set; assert both containers are created and neither `Config.Image` begins with `reg:` (US2 acceptance scenario 2). Existing shared fixtures are NOT modified — the dry-run tests that grep them must pass unmodified. **Expected RED**. Record the red output.
 - [ ] T016 [US2] Green verification for US2 (after T011/T012): targeted `go test -tags integration -run 'TestRegistryAliasRealDeploy_Resource|TestRegistryAliasRealDeploy_Mixed' ./tests/integration/...` passes.
 
 **Checkpoint (VR-005)**: Given a config declaring an alias and a `Resource` manifest using the alias image form for a resource with no existing container, running **`shrine deploy`** creates the container successfully with the expanded image reference; a manifest set containing both an alias-form `Application` and an alias-form `Resource` deploys with neither carrying an unexpanded `reg:` reference into the container runtime.
@@ -101,12 +101,12 @@ Execution Order.
 
 ### Red test for User Story 3
 
-- [ ] T017 [P] [US3] Add `TestCreateContainer_CreateFailureNamesImage` to `internal/engine/local/dockercontainer/docker_container_test.go`: same fake as T006 (`ContainerCreate` returns an error) but with a **capturing observer** recording emitted events. Deploy an alias-form op and assert on the `container.create` error event per contracts/deploy-diagnostics.md §2: `Fields["image"]` equals the **expanded** reference, `Fields["name"]` keeps the `<team>.<resource>` shape, and `Fields["error"]` matches `creating container "<name>" (image "<expanded ref>"): <cause>` — the string the ❌ terminal line prints verbatim, hence operator-observable (FR-008, SC-006, VR-002). **Expected RED**: today's message and fields carry no image. Record the red output. (VR-001 does not bind FR-008 — unit-level evidence is admissible.)
+- [x] T017 [P] [US3] Add `TestCreateContainer_CreateFailureNamesImage` to `internal/engine/local/dockercontainer/docker_container_test.go`: same fake as T006 (`ContainerCreate` returns an error) but with a **capturing observer** recording emitted events. Deploy an alias-form op and assert on the `container.create` error event per contracts/deploy-diagnostics.md §2: `Fields["image"]` equals the **expanded** reference, `Fields["name"]` keeps the `<team>.<resource>` shape, and `Fields["error"]` matches `creating container "<name>" (image "<expanded ref>"): <cause>` — the string the ❌ terminal line prints verbatim, hence operator-observable (FR-008, SC-006, VR-002). **Expected RED**: today's message and fields carry no image. Record the red output. (VR-001 does not bind FR-008 — unit-level evidence is admissible.)
 
 ### Implementation for User Story 3
 
-- [ ] T018 [US3] In `createFreshContainer` in `internal/engine/local/dockercontainer/docker_container.go`, enrich the creation failure per research D5: wrapped error becomes `creating container %q (image %q): %w` and the error event's fields gain `"image": op.Image` (already the expanded form at that point). Blocked by T017's red run; T011 must have landed (the "expanded form" claim depends on it).
-- [ ] T019 [US3] Green verification for US3: `go test ./...` passes, T017 green.
+- [x] T018 [US3] In `createFreshContainer` in `internal/engine/local/dockercontainer/docker_container.go`, enrich the creation failure per research D5: wrapped error becomes `creating container %q (image %q): %w` and the error event's fields gain `"image": op.Image` (already the expanded form at that point). Blocked by T017's red run; T011 must have landed (the "expanded form" claim depends on it).
+- [x] T019 [US3] Green verification for US3: `go test ./...` passes, T017 green.
 
 **Checkpoint (VR-005)**: Given a manifest whose image reference the container runtime rejects for any reason, when the deploy fails at container creation, the error output names the rejected image reference alongside the container name — an operator can identify the offending manifest field from the deploy output alone.
 
@@ -120,12 +120,12 @@ Execution Order.
 
 ### Red test for User Story 4
 
-- [ ] T020 [P] [US4] Create `internal/ui/terminal_logger_test.go` with `TestTerminalObserver_ContainerCreate`: construct `NewTerminalObserver(&bytes.Buffer{})` and feed it the real event sequence one failed creation produces (derive the exact statuses/fields from what `internal/engine/engine.go` and `docker_container.go`'s error emit actually send — the engine's informational progress event with `team`+`name` fields, the backend's error event whose only identity field is the full container `name`, and the engine's error re-emit). Assert: exactly one line containing `Creating container:` and it renders `<team>.<name>` with both segments; no output line contains the leading-dot artifact (`: .`); the `❌ Error [container.create]` line(s) are preserved (FR-009, SC-007). Add a success-sequence case asserting the output is exactly today's single progress line (US4 acceptance scenario 2). **Expected RED**: three `Creating container` lines, one malformed. Record the red output.
+- [x] T020 [P] [US4] Create `internal/ui/terminal_logger_test.go` with `TestTerminalObserver_ContainerCreate`: construct `NewTerminalObserver(&bytes.Buffer{})` and feed it the real event sequence one failed creation produces (derive the exact statuses/fields from what `internal/engine/engine.go` and `docker_container.go`'s error emit actually send — the engine's informational progress event with `team`+`name` fields, the backend's error event whose only identity field is the full container `name`, and the engine's error re-emit). Assert: exactly one line containing `Creating container:` and it renders `<team>.<name>` with both segments; no output line contains the leading-dot artifact (`: .`); the `❌ Error [container.create]` line(s) are preserved (FR-009, SC-007). Add a success-sequence case asserting the output is exactly today's single progress line (US4 acceptance scenario 2). **Expected RED**: three `Creating container` lines, one malformed. Record the red output.
 
 ### Implementation for User Story 4
 
-- [ ] T021 [US4] In `internal/ui/terminal_logger.go`, guard the `container.create` case so the `🏗️  Creating container` progress line renders only for the engine's informational status (per research D5 / contract §3 — never as a side effect of rendering an error event). Blocked by T020's red run.
-- [ ] T022 [US4] Green verification for US4: `go test ./...` passes, T020 green.
+- [x] T021 [US4] In `internal/ui/terminal_logger.go`, guard the `container.create` case so the `🏗️  Creating container` progress line renders only for the engine's informational status (per research D5 / contract §3 — never as a side effect of rendering an error event). Blocked by T020's red run.
+- [x] T022 [US4] Green verification for US4: `go test ./...` passes, T020 green.
 
 **Checkpoint (VR-005)**: Given a deploy in which container creation fails, the output shows the "creating container" line exactly once for that container with both name segments present; given a deploy in which creation succeeds, the progress lines are unchanged from today's successful-deploy output.
 
@@ -135,11 +135,11 @@ Execution Order.
 
 **Purpose**: The full-suite gates (run once — the integration suite is slow, ~10 min, project rule), the VR-003/SC-011 evidence ledger, and project hygiene.
 
-- [ ] T023 Full unit gate: `go test ./...` green across the repo.
+- [x] T023 Full unit gate: `go test ./...` green across the repo.
 - [ ] T024 Full integration gate — the Constitution Principle V gate, run ONCE as the final check: `make test-integration`. Confirms all new real-deploy tests green AND the pre-existing dry-run assertions (`TestRegistryAliasConfig`, `TestRegistryAliasAppImage`, `TestRegistryAliasResourceImage`) pass **unmodified** (FR-007, SC-005), plus zero regressions across the rest of the suite (SC-009).
-- [ ] T025 [P] Compile the SC-011 red-run ledger: collect the recorded red outputs from T006, T007, T009 (alias leg), T014, T015, T017, T020 into the PR description (or commit messages), one entry per test with the failing output excerpt. The count of never-seen-red regression tests introduced by this feature MUST be zero.
+- [x] T025 [P] Compile the SC-011 red-run ledger: collect the recorded red outputs from T006, T007, T009 (alias leg), T014, T015, T017, T020 into the PR description (or commit messages), one entry per test with the failing output excerpt. The count of never-seen-red regression tests introduced by this feature MUST be zero.
 - [ ] T026 [P] Execute the manual verification in `specs/022-fix-registry-alias-expansion/quickstart.md`: real deploy of an alias manifest, `docker inspect --format '{{.Config.Image}}'` shows the expanded reference; dry-run still shows the alias form.
-- [ ] T027 Run `graphify update .` to refresh the knowledge graph after the code changes (project rule in CLAUDE.md).
+- [x] T027 Run `graphify update .` to refresh the knowledge graph after the code changes (project rule in CLAUDE.md).
 
 ---
 
@@ -230,6 +230,34 @@ Task: "T020 renderer red test in internal/ui/terminal_logger_test.go"
 - **Suite discipline** (project rule): iterate with `go test ./...` and *targeted* `-run` integration invocations; the full `make test-integration` runs exactly once, as T024.
 
 ---
+
+## Execution Record (2026-08-15)
+
+**Directive applied**: per the operator's instruction at implementation time,
+integration tests were NOT executed locally — the branch is pushed and the
+remote pipeline runs them. Consequences, recorded honestly:
+
+- **Open tasks**: T016 and T024 (integration green runs) are delegated to the
+  remote pipeline and stay unchecked until it reports. T026 (quickstart manual
+  verification) needs a live host and is deferred to the same window.
+- **VR-003 evidence, unit level (executed locally, then seen green)**:
+  `TestCreateContainer_ExpandsAliasIntoContainerSpec` (captured spec image was
+  `reg:myregistry/traefik/whoami:latest`), `TestCreateContainer_BareAliasExpandsToHost`,
+  `TestCreateContainer_CreateFailureNamesImage` (no image field, message
+  omitted the reference), `TestTerminalObserver_ContainerCreate` (three
+  creating-lines, one `.shrine-deploy-test.alias-app`). Full red output is in
+  commit `b684ed2`'s message.
+- **VR-003 evidence, integration level**: the five real-deploy tests were
+  committed (compiling under `-tags integration`) in `b684ed2`, one commit
+  BEFORE the fix — checking out that commit reproduces the red run
+  (`invalid reference format`). Red-first is preserved by commit ordering
+  rather than a locally executed run.
+- **T014 deviation**: the real resource deploy uses a new
+  `registry-alias-resource-live/` fixture (whoami-backed `cache` resource)
+  instead of the existing postgres fixture — `postgres:15` exits immediately
+  without env (nothing provisions it), so `AssertContainerRunning` would flake
+  and CI would pull a ~100MB image for nothing. The postgres fixture remains
+  untouched as the dry-run contract (FR-007/SC-005).
 
 ## Notes
 
