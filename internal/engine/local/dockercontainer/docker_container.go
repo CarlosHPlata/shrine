@@ -112,8 +112,8 @@ func (backend *DockerBackend) createFreshContainer(ctx context.Context, op engin
 		cName,
 	)
 	if err != nil {
-		return backend.emitErr("container.create", map[string]string{"name": cName},
-			fmt.Errorf("creating container %q: %w", cName, err))
+		return backend.emitErr("container.create", map[string]string{"name": cName, "image": op.Image},
+			fmt.Errorf("creating container %q (image %q): %w", cName, op.Image, err))
 	}
 
 	if err := backend.client.ContainerStart(ctx, created.ID, container.StartOptions{}); err != nil {

@@ -48,7 +48,12 @@ func (t *TerminalObserver) OnEvent(e engine.Event) {
 		fmt.Fprintf(t.out, "  🌐 Ensuring network: shrine.%s.private\n", e.Fields["owner"])
 
 	case "container.create":
-		fmt.Fprintf(t.out, "  🏗️  Creating container: %s.%s\n", e.Fields["team"], e.Fields["name"])
+		// Rendered only for the engine's progress event — error events for
+		// this name are re-emitted by backend and engine and already produce
+		// their own ❌ lines above.
+		if e.Status == engine.StatusInfo {
+			fmt.Fprintf(t.out, "  🏗️  Creating container: %s.%s\n", e.Fields["team"], e.Fields["name"])
+		}
 
 	case "routing.configure":
 		fmt.Fprintf(t.out, "  🔗 Configuring routing: %s -> port %s\n", e.Fields["domain"], e.Fields["port"])
