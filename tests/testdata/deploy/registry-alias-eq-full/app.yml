@@ -1,0 +1,10 @@
+apiVersion: shrine/v1
+kind: Application
+metadata:
+  name: alias-eq
+  owner: shrine-deploy-test
+spec:
+  image: docker.io/traefik/whoami:latest
+  port: 80
+  networking:
+    exposeToPlatform: false
