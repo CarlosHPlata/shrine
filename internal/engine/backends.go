@@ -11,9 +11,18 @@ type BindMount struct {
 }
 
 type PortBinding struct {
+	HostIP        string // "" binds all interfaces; "127.0.0.1" binds loopback only
 	HostPort      string
 	ContainerPort string
 	Protocol      string
+}
+
+// PublishPort is the publish *request* projected from the manifest; the
+// container backend resolves it into a concrete PortBinding (allocating a
+// host port when HostPort is 0).
+type PublishPort struct {
+	HostPort      int // 0 = automatic allocation
+	ContainerPort int
 }
 
 type CreateContainerOp struct {
@@ -29,6 +38,7 @@ type CreateContainerOp struct {
 	RestartPolicy    string
 	BindMounts       []BindMount
 	PortBindings     []PortBinding
+	Publish          *PublishPort
 }
 
 type RemoveContainerOp struct {

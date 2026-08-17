@@ -6,4 +6,5 @@ type Store struct {
 	Subnets     SubnetStore
 	Secrets     SecretStore
 	Deployments DeploymentStore
+	HostPorts   HostPortStore
 }

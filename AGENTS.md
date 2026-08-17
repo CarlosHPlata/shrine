@@ -38,6 +38,9 @@ Team is now an optional --team/-t flag, not a required positional argument. Shri
 ### shrine describe app/resource <name>
 Same as status: team is now an optional --team flag, not required. Examples: shrine describe app my-api, shrine describe app my-api --team team-a
 
+### shrine delete application <name>
+Forgets an application from state: releases its published host-port allocation (see `networking.publish`) and drops the stale deployment record. Docker-authoritative — refuses while the container exists (run teardown first). --team/-t is optional (all teams searched, ambiguity errors); supports --dry-run. `shrine delete team <name>` also releases every host port the team held.
+
 ## Manifest Kinds
 
 ### Application
@@ -214,7 +217,8 @@ shrine/
 - `networking.exposeToPlatform: true` attaches a container to **both** its team network and `shrine.platform`
 - Cross-team dependencies require the producer to set `exposeToPlatform: true` (reachability) **and** list the consuming team in `access:` (authorization) — two separate checks at plan time
 - `shrine.platform` is never torn down by `shrine teardown` — it is global, not team-owned
-- External access is via Traefik only (no host-port publishing). Traefik reaches containers by DNS name over the Docker bridge network
+- External access is via Traefik by default. Traefik reaches containers by DNS name over the Docker bridge network
+- `networking.publish` additionally binds an Application's `spec.port` to the host loopback (`127.0.0.1:<port>`) — `publish: true` auto-allocates from 30000–32767 (stable across redeploys, persisted in `hostports.txt`), `publish: {hostPort: N}` claims an explicit port (1024–65535 excluding the auto range; conflicts fail dry-run and deploy). Publish implies platform-network attachment but grants no cross-team access and no Traefik routing
 
 ## Deploy Pipeline
 

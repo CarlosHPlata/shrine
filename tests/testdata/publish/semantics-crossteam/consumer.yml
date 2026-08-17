@@ -1,0 +1,12 @@
+apiVersion: shrine/v1
+kind: Application
+metadata:
+  name: whoami-consumer
+  owner: shrine-publish-b
+spec:
+  image: traefik/whoami
+  port: 80
+  dependencies:
+    - kind: Application
+      name: whoami-target
+      owner: shrine-publish-test

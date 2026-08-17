@@ -2,8 +2,10 @@ package handler
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 
+	"github.com/CarlosHPlata/shrine/internal/engine"
 	"github.com/CarlosHPlata/shrine/internal/manifest"
 	"github.com/CarlosHPlata/shrine/internal/state"
 )
@@ -172,6 +174,132 @@ func describeDeployment(team, name, kind string, store *state.Store) error {
 		return fmt.Errorf("ambiguous: %s %q found in teams [%s], use --team to disambiguate",
 			kind, name, strings.Join(teamNames, ", "))
 	}
+}
+
+// DeleteApplicationOptions parameterizes DeleteApplication. Team is optional
+// (kubectl-style: all teams are searched, ambiguity is an error). DryRun
+// prints what would be released without writing.
+type DeleteApplicationOptions struct {
+	Name   string
+	Team   string
+	DryRun bool
+}
+
+// DeleteApplication forgets an application: it releases the published
+// host-port allocation and drops the stale deployment record. Docker is
+// authoritative — while the container still exists the delete refuses and
+// points at teardown.
+func DeleteApplication(store *state.Store, container engine.ContainerBackend, opts DeleteApplicationOptions) error {
+	team, err := resolveDeleteTeam(store, opts.Name, opts.Team)
+	if err != nil {
+		return err
+	}
+	if team == "" {
+		fmt.Printf("Nothing to delete for application %q.\n", opts.Name)
+		return nil
+	}
+	ref := team + "/" + opts.Name
+
+	if container != nil {
+		if _, err := container.InspectContainer(team + "." + opts.Name); err == nil {
+			return fmt.Errorf("application %q still has a container; run \"shrine teardown %s\" first", ref, team)
+		}
+	}
+
+	port, portErr := store.HostPorts.GetHostPort(team, opts.Name)
+	hasPort := portErr == nil
+	record := findApplicationRecord(store, team, opts.Name)
+
+	if opts.DryRun {
+		if hasPort {
+			fmt.Printf("[dry-run] would release host port %d for %s\n", port, ref)
+		}
+		if record {
+			fmt.Printf("[dry-run] would remove deployment record for %s\n", ref)
+		}
+		if !hasPort && !record {
+			fmt.Printf("[dry-run] nothing to delete for application %q in team %q\n", opts.Name, team)
+		}
+		return nil
+	}
+
+	if hasPort {
+		if err := store.HostPorts.ReleaseHostPort(team, opts.Name); err != nil {
+			return fmt.Errorf("releasing host port for %s: %w", ref, err)
+		}
+		fmt.Printf("Released host port %d for %s.\n", port, ref)
+	}
+	if record {
+		if err := store.Deployments.Remove(team, opts.Name); err != nil {
+			return fmt.Errorf("removing deployment record for %s: %w", ref, err)
+		}
+		fmt.Printf("Removed deployment record for %s.\n", ref)
+	}
+	if !hasPort && !record {
+		fmt.Printf("Nothing to delete for application %q in team %q.\n", opts.Name, team)
+	}
+	return nil
+}
+
+// resolveDeleteTeam returns the team owning the application, searching every
+// team's allocations and deployment records when none was given. An empty
+// result with a nil error means the application is unknown everywhere.
+func resolveDeleteTeam(store *state.Store, name, team string) (string, error) {
+	if team != "" {
+		return team, nil
+	}
+
+	candidates := map[string]bool{}
+	if store.HostPorts != nil {
+		ports, err := store.HostPorts.ListHostPorts()
+		if err != nil {
+			return "", fmt.Errorf("listing host port allocations: %w", err)
+		}
+		for key := range ports {
+			owner, app, found := strings.Cut(key, "/")
+			if found && app == name {
+				candidates[owner] = true
+			}
+		}
+	}
+	all, err := collectAllDeployments(store)
+	if err != nil {
+		return "", err
+	}
+	for _, td := range all {
+		if td.Deployment.Name == name && td.Deployment.Kind == manifest.ApplicationKind {
+			candidates[td.Team] = true
+		}
+	}
+
+	switch len(candidates) {
+	case 0:
+		return "", nil
+	case 1:
+		for team := range candidates {
+			return team, nil
+		}
+	}
+	names := make([]string, 0, len(candidates))
+	for team := range candidates {
+		names = append(names, team)
+	}
+	sort.Strings(names)
+	return "", fmt.Errorf("ambiguous: application %q found in teams [%s], use --team to disambiguate",
+		name, strings.Join(names, ", "))
+}
+
+func findApplicationRecord(store *state.Store, team, name string) bool {
+	deployments, err := store.Deployments.List(team)
+	if err != nil {
+		return false
+	}
+	for _, d := range deployments {
+		if d.Name == name && d.Kind == manifest.ApplicationKind {
+			return true
+		}
+	}
+	return false
 }
 
 func printDeploymentDetail(team string, d state.Deployment) {

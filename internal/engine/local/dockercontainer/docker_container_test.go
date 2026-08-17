@@ -25,11 +25,13 @@ import (
 // and the test needs no state store and touches no filesystem.
 type fakeDockerAPI struct {
 	createdConfig *container.Config
+	createdHost   *container.HostConfig
 	createErr     error
 }
 
-func (f *fakeDockerAPI) ContainerCreate(_ context.Context, cfg *container.Config, _ *container.HostConfig, _ *network.NetworkingConfig, _ *ocispec.Platform, _ string) (container.CreateResponse, error) {
+func (f *fakeDockerAPI) ContainerCreate(_ context.Context, cfg *container.Config, host *container.HostConfig, _ *network.NetworkingConfig, _ *ocispec.Platform, _ string) (container.CreateResponse, error) {
 	f.createdConfig = cfg
+	f.createdHost = host
 	return container.CreateResponse{}, f.createErr
 }
 

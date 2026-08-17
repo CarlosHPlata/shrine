@@ -30,7 +30,7 @@ func TestStatusAutoTeam(t *testing.T) {
 	}
 	defer os.RemoveAll(tmpDir)
 
-	store, err := local.NewLocalStore(tmpDir)
+	store, err := local.NewLocalStore(tmpDir, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

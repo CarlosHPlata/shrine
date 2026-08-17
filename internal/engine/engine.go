@@ -175,8 +175,11 @@ func (engine *Engine) deployApplication(
 		Network:          application.Metadata.Owner,
 		Env:              env,
 		Volumes:          volumes,
-		ExposeToPlatform: application.Spec.Networking.ExposeToPlatform,
+		ExposeToPlatform: application.Spec.Networking.ShouldAttachToPlatform(),
 		ImagePullPolicy:  manifest.EffectivePullPolicy(application.Spec.Image, application.Spec.ImagePullPolicy),
+	}
+	if publish := application.Spec.Networking.Publish; publish != nil {
+		op.Publish = &PublishPort{HostPort: publish.HostPort, ContainerPort: application.Spec.Port}
 	}
 	if err := engine.Container.CreateContainer(op); err != nil {
 		return engine.emitErr("container.create", map[string]string{"team": application.Metadata.Owner, "name": application.Metadata.Name},

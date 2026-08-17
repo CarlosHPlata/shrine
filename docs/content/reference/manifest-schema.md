@@ -138,6 +138,7 @@ spec:
       template: <string>
   networking:
     exposeToPlatform: <bool>
+    publish: <bool> | {hostPort: <int>}
   volumes:
     - name: <string>
       mountPath: <string>
@@ -154,6 +155,7 @@ spec:
 | `spec.port` | yes | — | Port the container listens on. |
 | `spec.replicas` | no | 1 | Number of container instances to run. |
 | `spec.networking.exposeToPlatform` | no | `false` | Attach the container to the platform network and include it in Traefik routing generation. |
+| `spec.networking.publish` | no | not published | Publish the container's `spec.port` on the host's loopback interface (`localhost:<port>`). See [`spec.networking.publish`](#specnetworkingpublish). |
 | `spec.imagePullPolicy` | no | `Always` for `:latest`, `IfNotPresent` otherwise | Docker image pull policy. |
 
 ### `spec.routing`
@@ -172,6 +174,45 @@ spec:
 | `pathPrefix` | no | — | URL path prefix; router matches paths at or below it. |
 | `stripPrefix` | no | `true` (when `pathPrefix` is set) | Remove the prefix before forwarding. Set `false` for backends that own their basePath (e.g. Next.js). No-op when `pathPrefix` is absent. |
 | `tls` | no | `false` | Attach this alias router to the `websecure` entrypoint and emit `tls: {}`. Only valid inside alias entries. |
+
+### `spec.networking.publish`
+
+Publishes the application's `spec.port` on the host at `localhost:<port>`, bound strictly to the loopback interface (`127.0.0.1`) — other machines cannot reach it. Two forms:
+
+```yaml
+networking:
+  publish: true          # automatic — shrine assigns a free port from 30000–32767
+```
+
+```yaml
+networking:
+  publish:
+    hostPort: 8080       # explicit host port
+```
+
+`publish: false` and omitting the field are equivalent: nothing is published.
+
+| Form | Valid values | Behavior |
+|------|--------------|----------|
+| `publish: true` | — | A free port from the automatic range **30000–32767** is assigned on first deploy and reported in the deploy output. |
+| `publish: {hostPort: N}` | `1024–65535`, excluding `30000–32767` | The exact port `N` is claimed. The privileged range (< 1024) is rejected, and the automatic range is reserved exclusively for automatic assignment. |
+
+**Port stability.** An automatically assigned port is persisted and stays identical across redeploys, container recreation, and `shrine teardown` — scripts pointing at `localhost:<port>` keep working. The allocation is released only by `shrine delete application <name>` or `shrine delete team <name>`.
+
+**Conflicts fail fast.** At both `shrine deploy --dry-run` and `shrine deploy`, before anything changes, the deploy is rejected when an explicit `hostPort`: duplicates another explicit claim in the manifest set, matches a port the Traefik gateway occupies (its entrypoints and dashboard), or matches a port already allocated to a *different* application. Every conflict is reported in a single invocation. An application re-claiming its own persisted port is not a conflict. Ports held by processes outside shrine's knowledge cannot be detected up front; those surface as a container start error.
+
+**Interplay with `exposeToPlatform`.** Publishing alone is a complete declaration — it implies attachment to the platform network, with no second option required. The reverse implication never holds, and publishing grants no cross-team rights:
+
+| `exposeToPlatform` | `publish` | On platform network | Host port published | Other teams may depend on it |
+|---|---|---|---|---|
+| off | off | no | no | no |
+| on | off | yes | no | yes |
+| off | on | yes (implied) | yes | no |
+| on | on | yes | yes | yes |
+
+Routing (`spec.routing`) still requires `exposeToPlatform: true` — publishing a port on localhost does not put an application behind the gateway.
+
+See the [Publish on localhost guide](/guides/publish-localhost/) for a walkthrough.
 
 ### `spec.env[]`
 

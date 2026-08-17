@@ -29,7 +29,7 @@ type PlanTeardownResult struct {
 //
 // Loading is the caller's job: use LoadDir for a full directory, or
 // NewManifestSet + MergeManifest to assemble a set from individual files.
-func Plan(set *ManifestSet, store state.TeamStore, registries []config.RegistryConfig, filter Filter) PlanResult {
+func Plan(set *ManifestSet, store state.TeamStore, registries []config.RegistryConfig, ports PortContext, filter Filter) PlanResult {
 	if err := filter.Validate(set); err != nil {
 		return PlanResult{Error: err}
 	}
@@ -43,6 +43,13 @@ func Plan(set *ManifestSet, store state.TeamStore, registries []config.RegistryC
 		return PlanResult{Error: err}
 	}
 	set = enriched
+
+	// Unlike routing collisions below, port conflicts are checked for every
+	// filter: reserved and persisted ports exist outside the manifest set, so
+	// even a single-app apply can claim a port someone else holds.
+	if err := DetectHostPortCollisions(set, ports); err != nil {
+		return PlanResult{Error: err}
+	}
 
 	switch filter.Kind {
 	case FilterNone, FilterTeam:

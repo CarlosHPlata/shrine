@@ -52,7 +52,7 @@ func twoTeamSet() *ManifestSet {
 
 func TestPlan_NoFilter_EmitsAllSteps(t *testing.T) {
 	set := twoTeamSet()
-	result := Plan(set, stubTeamStore{}, nil, NoFilter())
+	result := Plan(set, stubTeamStore{}, nil, PortContext{}, NoFilter())
 
 	if result.Error != nil {
 		t.Fatalf("unexpected Error: %v", result.Error)
@@ -73,7 +73,7 @@ func TestPlan_NoFilter_EmitsAllSteps(t *testing.T) {
 
 func TestPlan_ByTeam_EmitsOnlyOwnerSteps(t *testing.T) {
 	set := twoTeamSet()
-	result := Plan(set, stubTeamStore{}, nil, ByTeam("team-a"))
+	result := Plan(set, stubTeamStore{}, nil, PortContext{}, ByTeam("team-a"))
 
 	if result.Error != nil {
 		t.Fatalf("unexpected Error: %v", result.Error)
@@ -91,7 +91,7 @@ func TestPlan_ByTeam_EmitsOnlyOwnerSteps(t *testing.T) {
 
 func TestPlan_ByTeam_UnknownTeam_ReturnsError(t *testing.T) {
 	set := twoTeamSet()
-	result := Plan(set, stubTeamStore{}, nil, ByTeam("team-ghost"))
+	result := Plan(set, stubTeamStore{}, nil, PortContext{}, ByTeam("team-ghost"))
 
 	if result.Error == nil {
 		t.Fatal("expected Error for unknown team")
@@ -107,7 +107,7 @@ func TestPlan_ByTeam_UnknownTeam_ReturnsError(t *testing.T) {
 
 func TestPlan_ByApp_SingleStep(t *testing.T) {
 	set := twoTeamSet()
-	result := Plan(set, stubTeamStore{}, nil, ByApp("alpha"))
+	result := Plan(set, stubTeamStore{}, nil, PortContext{}, ByApp("alpha"))
 
 	if result.Error != nil {
 		t.Fatalf("unexpected Error: %v", result.Error)
@@ -123,7 +123,7 @@ func TestPlan_ByApp_SingleStep(t *testing.T) {
 
 func TestPlan_ByResource_SingleStep(t *testing.T) {
 	set := twoTeamSet()
-	result := Plan(set, stubTeamStore{}, nil, ByResource("db-b"))
+	result := Plan(set, stubTeamStore{}, nil, PortContext{}, ByResource("db-b"))
 
 	if result.Error != nil {
 		t.Fatalf("unexpected Error: %v", result.Error)
@@ -139,7 +139,7 @@ func TestPlan_ByResource_SingleStep(t *testing.T) {
 
 func TestPlan_ByApp_Missing_ReturnsError(t *testing.T) {
 	set := twoTeamSet()
-	result := Plan(set, stubTeamStore{}, nil, ByApp("nope"))
+	result := Plan(set, stubTeamStore{}, nil, PortContext{}, ByApp("nope"))
 	if result.Error == nil {
 		t.Fatal("expected Error for missing app")
 	}
@@ -191,9 +191,9 @@ func TestPlan_DoesNotWriteToDisk(t *testing.T) {
 	}
 
 	// Success path.
-	_ = Plan(inferenceSet(t), stubTeamStore{}, nil, NoFilter())
+	_ = Plan(inferenceSet(t), stubTeamStore{}, nil, PortContext{}, NoFilter())
 	// Failure path.
-	_ = Plan(crossTeamFailureSet(t), stubTeamStore{}, nil, NoFilter())
+	_ = Plan(crossTeamFailureSet(t), stubTeamStore{}, nil, PortContext{}, NoFilter())
 
 	after, err := os.Stat(cwd)
 	if err != nil {
@@ -229,13 +229,13 @@ func TestPlan_DoesNotMutateInputSet(t *testing.T) {
 	// Success path.
 	successSet := inferenceSet(t)
 	check("success", successSet, func() {
-		_ = Plan(successSet, stubTeamStore{}, nil, NoFilter())
+		_ = Plan(successSet, stubTeamStore{}, nil, PortContext{}, NoFilter())
 	})
 
 	// Failure path.
 	failSet := crossTeamFailureSet(t)
 	check("failure", failSet, func() {
-		_ = Plan(failSet, stubTeamStore{}, nil, NoFilter())
+		_ = Plan(failSet, stubTeamStore{}, nil, PortContext{}, NoFilter())
 	})
 }
 
@@ -273,7 +273,7 @@ func TestPlan_ByTeam_CrossTeamDepResolution(t *testing.T) {
 		},
 	}
 
-	result := Plan(set, stubTeamStore{}, nil, ByTeam("team-a"))
+	result := Plan(set, stubTeamStore{}, nil, PortContext{}, ByTeam("team-a"))
 
 	if result.Error != nil {
 		t.Fatalf("unexpected Error: %v", result.Error)

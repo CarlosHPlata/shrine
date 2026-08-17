@@ -1,0 +1,4 @@
+plugins:
+  gateway:
+    traefik:
+      port: 18085

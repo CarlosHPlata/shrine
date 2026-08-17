@@ -184,11 +184,42 @@ func DeleteTeam(name string, store *state.Store) error {
 		return fmt.Errorf("releasing team subnet: %w", err)
 	}
 
-	// 3. Delete team from registry
+	// 3. Release published host ports
+	released, err := releaseTeamHostPorts(store, name)
+	if err != nil {
+		return fmt.Errorf("releasing team host ports: %w", err)
+	}
+	if released > 0 {
+		fmt.Printf("Released %d host port(s) for team %q.\n", released, name)
+	}
+
+	// 4. Delete team from registry
 	if err := store.Teams.DeleteTeam(name); err != nil {
 		return err
 	}
 
 	fmt.Printf("Deleted team %q from state.\n", name)
 	return nil
+}
+
+// releaseTeamHostPorts frees every published host port the team holds and
+// returns how many were released.
+func releaseTeamHostPorts(store *state.Store, team string) (int, error) {
+	if store.HostPorts == nil {
+		return 0, nil
+	}
+	ports, err := store.HostPorts.ListHostPorts()
+	if err != nil {
+		return 0, err
+	}
+	held := 0
+	for key := range ports {
+		if strings.HasPrefix(key, team+"/") {
+			held++
+		}
+	}
+	if held == 0 {
+		return 0, nil
+	}
+	return held, store.HostPorts.ReleaseTeamHostPorts(team)
 }

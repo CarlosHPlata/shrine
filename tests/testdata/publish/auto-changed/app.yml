@@ -1,0 +1,13 @@
+apiVersion: shrine/v1
+kind: Application
+metadata:
+  name: whoami-auto
+  owner: shrine-publish-test
+spec:
+  image: traefik/whoami
+  port: 80
+  env:
+    - name: FORCE_RECREATE
+      value: "1"
+  networking:
+    publish: true

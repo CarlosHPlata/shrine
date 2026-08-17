@@ -1,0 +1,10 @@
+apiVersion: shrine/v1
+kind: Application
+metadata:
+  name: whoami-auto
+  owner: shrine-publish-test
+spec:
+  image: traefik/whoami
+  port: 80
+  networking:
+    publish: true

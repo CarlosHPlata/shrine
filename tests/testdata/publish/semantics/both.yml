@@ -1,0 +1,12 @@
+apiVersion: shrine/v1
+kind: Application
+metadata:
+  name: whoami-sem-both
+  owner: shrine-publish-test
+spec:
+  image: traefik/whoami
+  port: 80
+  networking:
+    exposeToPlatform: true
+    publish:
+      hostPort: 18083

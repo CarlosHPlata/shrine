@@ -40,6 +40,13 @@ func newContainerBackend(store *state.Store, registries []config.RegistryConfig,
 	return local.NewContainerBackend(store, registries, observer)
 }
 
+// NewQueryContainerBackend builds a container backend for commands that only
+// query Docker state (e.g. delete application's is-it-still-running probe) —
+// no observer output.
+func NewQueryContainerBackend(cfg *config.Config, store *state.Store) (engine.ContainerBackend, error) {
+	return local.NewContainerBackend(store, cfg.Registries, engine.NoopObserver{})
+}
+
 // newTraefikPlugin constructs the Traefik gateway plugin.
 func newTraefikPlugin(cfg *config.Config, container engine.ContainerBackend, specsDir string, observer engine.Observer) (*traefik.Plugin, error) {
 	return traefik.New(cfg.Plugins.Gateway.Traefik, container, specsDir, observer)

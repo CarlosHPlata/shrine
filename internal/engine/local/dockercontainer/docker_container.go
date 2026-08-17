@@ -3,6 +3,7 @@ package dockercontainer
 import (
 	"context"
 	"fmt"
+	"strconv"
 
 	"github.com/CarlosHPlata/shrine/internal/engine"
 	"github.com/CarlosHPlata/shrine/internal/state"
@@ -29,6 +30,10 @@ func (backend *DockerBackend) CreateContainer(op engine.CreateContainerOp) error
 
 	digest, err := backend.resolveImage(ctx, op.Image, op.ImagePullPolicy)
 	if err != nil {
+		return err
+	}
+
+	if err := backend.resolvePublishBinding(&op); err != nil {
 		return err
 	}
 
@@ -67,6 +72,7 @@ func (backend *DockerBackend) ensureRunning(ctx context.Context, cName string, e
 				fmt.Errorf("starting container %q: %w", cName, err))
 		}
 	}
+	backend.emitPublished(op)
 	return backend.recordDeployment(op, existing.ID, wantHash)
 }
 
@@ -122,7 +128,30 @@ func (backend *DockerBackend) createFreshContainer(ctx context.Context, op engin
 	}
 
 	backend.emitFinished("container.created", map[string]string{"name": cName})
+	backend.emitPublished(op)
 	return backend.recordDeployment(op, created.ID, wantHash)
+}
+
+// emitPublished announces the resolved host-port mapping after the container
+// is up — the deploy output is where an operator discovers an automatically
+// assigned port.
+func (backend *DockerBackend) emitPublished(op engine.CreateContainerOp) {
+	if op.Publish == nil {
+		return
+	}
+	for _, b := range op.PortBindings {
+		if b.HostIP != loopbackHostIP {
+			continue
+		}
+		backend.emitFinished("hostport.published", map[string]string{
+			"team":          op.Team,
+			"name":          op.Name,
+			"hostPort":      b.HostPort,
+			"containerPort": b.ContainerPort,
+			"proto":         resolvedProto(b),
+		})
+		return
+	}
 }
 
 func (backend *DockerBackend) buildMounts(ctx context.Context, op engine.CreateContainerOp) ([]mount.Mount, error) {
@@ -154,6 +183,38 @@ func buildRestartPolicy(name string) container.RestartPolicy {
 	return container.RestartPolicy{Name: container.RestartPolicyMode(name)}
 }
 
+const loopbackHostIP = "127.0.0.1"
+
+// resolvePublishBinding turns the publish request on op into a concrete
+// loopback port binding: an explicit port is claimed in the store, an
+// automatic one is looked up or allocated (idempotent, so redeploys keep
+// their port).
+func (backend *DockerBackend) resolvePublishBinding(op *engine.CreateContainerOp) error {
+	if op.Publish == nil {
+		return nil
+	}
+
+	hostPort := op.Publish.HostPort
+	var err error
+	if hostPort > 0 {
+		err = backend.state.HostPorts.ClaimHostPort(op.Team, op.Name, hostPort)
+	} else {
+		hostPort, err = backend.state.HostPorts.AllocateHostPort(op.Team, op.Name)
+	}
+	if err != nil {
+		return backend.emitErr("hostport.resolve", map[string]string{"team": op.Team, "name": op.Name},
+			fmt.Errorf("resolving published host port for %q: %w", containerName(op.Team, op.Name), err))
+	}
+
+	op.PortBindings = append(op.PortBindings, engine.PortBinding{
+		HostIP:        loopbackHostIP,
+		HostPort:      strconv.Itoa(hostPort),
+		ContainerPort: strconv.Itoa(op.Publish.ContainerPort),
+		Protocol:      "tcp",
+	})
+	return nil
+}
+
 func buildPortBindings(bindings []PortBinding) (nat.PortSet, nat.PortMap) {
 	if len(bindings) == 0 {
 		return nil, nil
@@ -163,7 +224,7 @@ func buildPortBindings(bindings []PortBinding) (nat.PortSet, nat.PortMap) {
 	for _, b := range bindings {
 		key := nat.Port(b.ContainerPort + "/" + resolvedProto(b))
 		exposed[key] = struct{}{}
-		pmap[key] = append(pmap[key], nat.PortBinding{HostPort: b.HostPort})
+		pmap[key] = append(pmap[key], nat.PortBinding{HostIP: b.HostIP, HostPort: b.HostPort})
 	}
 	return exposed, pmap
 }
@@ -252,7 +313,13 @@ func configHash(op engine.CreateContainerOp, digest string) string {
 	}
 	portSpecs := make([]string, len(op.PortBindings))
 	for i, b := range op.PortBindings {
-		portSpecs[i] = fmt.Sprintf("%s:%s/%s", b.HostPort, b.ContainerPort, resolvedProto(b))
+		// HostIP joins the spec only when set so pre-existing hashes (all
+		// wildcard binds) survive the upgrade without forced recreates.
+		spec := fmt.Sprintf("%s:%s/%s", b.HostPort, b.ContainerPort, resolvedProto(b))
+		if b.HostIP != "" {
+			spec = b.HostIP + ":" + spec
+		}
+		portSpecs[i] = spec
 	}
 	return state.ConfigHash(digest, op.Env, volSpecs, portSpecs, op.ExposeToPlatform)
 }

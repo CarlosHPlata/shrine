@@ -96,6 +96,27 @@ func (p *Plugin) resolvedPort() int {
 	return p.cfg.Port
 }
 
+// ReservedHostPorts lists the host ports the gateway container occupies; the
+// host-port allocator must never hand them to a published application. Nil
+// config (gateway disabled) reserves nothing.
+func ReservedHostPorts(cfg *config.TraefikPluginConfig) []int {
+	if cfg == nil {
+		return nil
+	}
+	port := cfg.Port
+	if port == 0 {
+		port = defaultPort
+	}
+	reserved := []int{port}
+	if cfg.TLSPort > 0 {
+		reserved = append(reserved, cfg.TLSPort)
+	}
+	if cfg.Dashboard != nil && cfg.Dashboard.Port > 0 {
+		reserved = append(reserved, cfg.Dashboard.Port)
+	}
+	return reserved
+}
+
 func (p *Plugin) resolvedRoutingDir() (string, error) {
 	routingDir, err := p.cfg.ResolveRoutingDir(filepath.Join(p.specsDir, "traefik"))
 	if err != nil {
