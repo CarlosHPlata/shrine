@@ -1,7 +1,7 @@
 <!-- SPECKIT START -->
 For additional context about technologies to be used, project structure,
 shell commands, and other important information, read the current plan
-at specs/022-fix-registry-alias-expansion/plan.md
+at specs/023-publish-host-ports/plan.md
 <!-- SPECKIT END -->
 
 ## graphify

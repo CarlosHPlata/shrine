@@ -28,7 +28,11 @@ func ApplySingle(b *app.ApplyBundle, file, manifestDir string) error {
 		return err
 	}
 
-	result := planner.Plan(set, b.Store.Teams, b.Cfg.Registries, filter)
+	ports, err := buildPortContext(b.Store, b.Cfg)
+	if err != nil {
+		return err
+	}
+	result := planner.Plan(set, b.Store.Teams, b.Cfg.Registries, ports, filter)
 
 	if result.Error != nil {
 		return result.Error

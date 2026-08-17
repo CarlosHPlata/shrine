@@ -1,6 +1,11 @@
 package manifest
 
-import "strings"
+import (
+	"fmt"
+	"strings"
+
+	"gopkg.in/yaml.v3"
+)
 
 const (
 	ApplicationKind = "Application"
@@ -52,9 +57,82 @@ type Routing struct {
 	Aliases    []RoutingAlias `yaml:"aliases,omitempty"`
 }
 
+// The host-port block reserved for automatic publish allocation. Explicit
+// hostPort values are excluded from it at validate time so an explicit claim
+// can never race an automatic allocation made in the same deploy.
+const (
+	FirstAutoHostPort = 30000
+	LastAutoHostPort  = 32767
+)
+
+// Publish declares loopback host publishing of the workload's service port.
+// HostPort 0 means "allocate automatically from the reserved range".
+type Publish struct {
+	HostPort int `yaml:"hostPort,omitempty"`
+}
+
 // Used in App and Res spec
 type Networking struct {
-	ExposeToPlatform bool `yaml:"exposeToPlatform,omitempty"`
+	ExposeToPlatform bool     `yaml:"exposeToPlatform,omitempty"`
+	Publish          *Publish `yaml:"publish,omitempty"`
+}
+
+// UnmarshalYAML accepts both publish forms — `publish: true|false` and
+// `publish: {hostPort: N}` — normalizing false/null to nil so the rest of the
+// codebase has a single "is published" signal: Publish != nil.
+func (n *Networking) UnmarshalYAML(node *yaml.Node) error {
+	var aux struct {
+		ExposeToPlatform bool      `yaml:"exposeToPlatform"`
+		Publish          yaml.Node `yaml:"publish"`
+	}
+	if err := node.Decode(&aux); err != nil {
+		return err
+	}
+	publish, err := parsePublishNode(&aux.Publish)
+	if err != nil {
+		return err
+	}
+	n.ExposeToPlatform = aux.ExposeToPlatform
+	n.Publish = publish
+	return nil
+}
+
+func parsePublishNode(node *yaml.Node) (*Publish, error) {
+	switch node.Kind {
+	case 0:
+		return nil, nil
+	case yaml.ScalarNode:
+		if node.Tag == "!!null" {
+			return nil, nil
+		}
+		var enabled bool
+		if err := node.Decode(&enabled); err != nil {
+			return nil, fmt.Errorf("networking.publish must be a boolean or a mapping with hostPort")
+		}
+		if !enabled {
+			return nil, nil
+		}
+		return &Publish{}, nil
+	case yaml.MappingNode:
+		for i := 0; i+1 < len(node.Content); i += 2 {
+			if key := node.Content[i].Value; key != "hostPort" {
+				return nil, fmt.Errorf("networking.publish: unknown field %q (only hostPort is valid)", key)
+			}
+		}
+		var p Publish
+		if err := node.Decode(&p); err != nil {
+			return nil, fmt.Errorf("networking.publish: %w", err)
+		}
+		return &p, nil
+	default:
+		return nil, fmt.Errorf("networking.publish must be a boolean or a mapping with hostPort")
+	}
+}
+
+// ShouldAttachToPlatform reports whether the workload joins the shared
+// platform network — declared via exposeToPlatform or implied by publishing.
+func (n Networking) ShouldAttachToPlatform() bool {
+	return n.ExposeToPlatform || n.Publish != nil
 }
 
 type VolumeMount struct {

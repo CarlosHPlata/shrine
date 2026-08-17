@@ -94,12 +94,31 @@ func validateApplicationSpec(spec ApplicationSpec) []string {
 	}
 
 	errs = append(errs, validateRoutingAliases(spec.Routing)...)
+	errs = append(errs, validatePublish(spec.Networking.Publish)...)
 
 	// validate volumes
 	if spec.Volumes != nil {
 		errs = append(errs, validateVolumeMounts(spec.Volumes)...)
 	}
 	return errs
+}
+
+const (
+	minExplicitHostPort = 1024
+	maxExplicitHostPort = 65535
+)
+
+func validatePublish(p *Publish) []string {
+	if p == nil || p.HostPort == 0 {
+		return nil
+	}
+	switch {
+	case p.HostPort < minExplicitHostPort || p.HostPort > maxExplicitHostPort:
+		return []string{fmt.Sprintf("spec.networking.publish.hostPort %d must be between %d and %d", p.HostPort, minExplicitHostPort, maxExplicitHostPort)}
+	case p.HostPort >= FirstAutoHostPort && p.HostPort <= LastAutoHostPort:
+		return []string{fmt.Sprintf("spec.networking.publish.hostPort %d falls inside the range reserved for automatic allocation (%d-%d)", p.HostPort, FirstAutoHostPort, LastAutoHostPort)}
+	}
+	return nil
 }
 
 // reservedBuiltinNames are resolved from CLI built-ins or metadata; a resource
@@ -114,6 +133,10 @@ func validateResourceSpec(spec ResourceSpec) []string {
 	}
 	if spec.Version == "" {
 		errs = append(errs, "spec.version is required")
+	}
+
+	if spec.Networking.Publish != nil {
+		errs = append(errs, "spec.networking.publish is only valid on Application manifests")
 	}
 
 	envNames := make(map[string]bool, len(spec.Env))

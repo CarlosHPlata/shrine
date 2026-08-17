@@ -8,8 +8,27 @@ import (
 	"github.com/CarlosHPlata/shrine/internal/config"
 	"github.com/CarlosHPlata/shrine/internal/engine/dryrun"
 	"github.com/CarlosHPlata/shrine/internal/planner"
+	"github.com/CarlosHPlata/shrine/internal/plugins/gateway/traefik"
 	"github.com/CarlosHPlata/shrine/internal/state"
 )
+
+// buildPortContext gathers the host-port knowledge living outside the
+// manifest set: gateway-reserved ports from config and persisted allocations
+// from state.
+func buildPortContext(store *state.Store, cfg *config.Config) (planner.PortContext, error) {
+	ports := planner.PortContext{}
+	if cfg != nil {
+		ports.Reserved = traefik.ReservedHostPorts(cfg.Plugins.Gateway.Traefik)
+	}
+	if store != nil && store.HostPorts != nil {
+		persisted, err := store.HostPorts.ListHostPorts()
+		if err != nil {
+			return planner.PortContext{}, fmt.Errorf("listing host port allocations: %w", err)
+		}
+		ports.Persisted = persisted
+	}
+	return ports, nil
+}
 
 // DryRun runs a dry-run deploy scoped by filter. When cfg is non-nil, registries
 // and the Traefik config are validated; the dry-run engine prints route
@@ -30,7 +49,11 @@ func DryRun(out, errOut io.Writer, manifestDir string, store *state.Store, cfg *
 		return err
 	}
 
-	result := planner.Plan(set, store.Teams, cfg.Registries, filter)
+	ports, err := buildPortContext(store, cfg)
+	if err != nil {
+		return err
+	}
+	result := planner.Plan(set, store.Teams, cfg.Registries, ports, filter)
 
 	if result.Error != nil {
 		return result.Error
@@ -51,7 +74,7 @@ func DryRun(out, errOut io.Writer, manifestDir string, store *state.Store, cfg *
 
 	fmt.Fprint(out, formatDeployPlan(result.Steps, result.ManifestSet, result.InferredEdges))
 
-	engineInst := dryrun.NewDryRunEngine(out)
+	engineInst := dryrun.NewDryRunEngine(out, ports.Persisted)
 	if err := engineInst.ExecuteDeploy(result.Steps, result.ManifestSet); err != nil {
 		return err
 	}
@@ -65,7 +88,11 @@ func Deploy(b *app.DeployBundle, manifestDir string, filter planner.Filter) erro
 		return err
 	}
 
-	result := planner.Plan(set, b.Store.Teams, b.Cfg.Registries, filter)
+	ports, err := buildPortContext(b.Store, b.Cfg)
+	if err != nil {
+		return err
+	}
+	result := planner.Plan(set, b.Store.Teams, b.Cfg.Registries, ports, filter)
 
 	if result.Error != nil {
 		return result.Error

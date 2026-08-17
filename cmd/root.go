@@ -5,6 +5,7 @@ import (
 	"io"
 
 	"github.com/CarlosHPlata/shrine/internal/config"
+	"github.com/CarlosHPlata/shrine/internal/plugins/gateway/traefik"
 	"github.com/CarlosHPlata/shrine/internal/state"
 	"github.com/CarlosHPlata/shrine/internal/state/local"
 	"github.com/spf13/cobra"
@@ -34,7 +35,7 @@ var rootCmd = &cobra.Command{
 			return fmt.Errorf("loading config: %w", err)
 		}
 
-		store, err = local.NewLocalStore(paths.StateDir)
+		store, err = local.NewLocalStore(paths.StateDir, traefik.ReservedHostPorts(cfg.Plugins.Gateway.Traefik))
 		if err != nil {
 			return fmt.Errorf("initializing state store: %w", err)
 		}

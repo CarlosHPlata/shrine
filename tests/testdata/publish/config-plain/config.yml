@@ -1,0 +1,2 @@
+# Intentionally minimal: no registries, no gateway plugin — publish tests run
+# without Traefik so reserved ports and routing stay out of the picture.

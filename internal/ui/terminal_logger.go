@@ -123,6 +123,10 @@ func (t *TerminalObserver) OnEvent(e engine.Event) {
 	case "container.created":
 		fmt.Fprintf(t.out, "    ✅ Container %s is running\n", e.Fields["name"])
 
+	case "hostport.published":
+		fmt.Fprintf(t.out, "    📡 Published %s/%s on 127.0.0.1:%s -> %s/%s\n",
+			e.Fields["team"], e.Fields["name"], e.Fields["hostPort"], e.Fields["containerPort"], e.Fields["proto"])
+
 	case "container.remove":
 		if e.Status == engine.StatusInfo && e.Fields["reason"] == "not found" {
 			fmt.Fprintf(t.out, "    ℹ️  Container %s not found, skipping removal\n", e.Fields["name"])

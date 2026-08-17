@@ -84,6 +84,7 @@
 - [ ] **Phase 11: Teardown** — reverse of deploy, reading from state
 - [ ] **Phase 12: End-to-end dry run** — full `shrine deploy --dry-run --verbose` against real manifests (full stack: Docker + Traefik + DNS)
 - [ ] **Phase 13: Packaging & Distribution** — GoReleaser config; .deb packaging with post-install scripts
+- [ ] **Phase 15: Host-port publishing** — see `specs/023-publish-host-ports/`. `networking.publish` manifest option: explicit (`{hostPort: N}`) or automatic (`true`, 30000–32767 via `HostPortStore`) loopback-only (`127.0.0.1`) publishing of `spec.port`. Acceptance: explicit port reachable at `localhost:<port>`; conflicts (duplicate/reserved/persisted) fail dry-run AND deploy before any change; automatic port stable across redeploy, recreation, and teardown; released only by `delete application`/`delete team`; publish alone implies platform attachment without granting cross-team access; documented in manifest reference + guide. Gate: `tests/integration/publish_test.go` green.
 - [x] **Phase 14: Documentation site** — see `specs/013-docs-site/`. Hugo + Hextra at `docs/`, deployed to GitHub Pages on push to `main`. Per-page "copy as Markdown" button (every page exposes `<page>/index.md` for AI-agent ingestion). CLI reference auto-generated from the Cobra tree by an isolated tool at `docs/tools/docsgen/` (separate Go module, main `go.mod` stays clean). PR-time gates: front-matter lint, CLI drift check, Markdown companion check, Markdown shape check.
 
 ## Current State
@@ -98,7 +99,7 @@
 - **DNS record `Value` is hardcoded as `[IP_ADDRESS]`** in `internal/engine/engine.go` (deployApplication, DNS step). The gateway IP lives in `<config-dir>/config.yml` and needs to be plumbed into the engine. Deferred to Phase 10 (DNS) — that's when the real AdGuard backend replaces the dry-run one and the actual IP matters.
 - **Generated-secret length is hardcoded** (`generatedSecretLength = 32` in `internal/resolver/resolver.go`). If a resource ever needs a specific length, expose a `length:` field on `Output` and thread it through. Low priority.
 - **`ExtractFieldRefs` returns root identifiers only** — `{{.foo.bar}}` yields `"foo"`. Fine while all outputs are flat strings. If dotted cross-resource template refs are ever needed, this walker needs to handle the full `Ident` slice.
-- **Host-port publishing is intentionally unsupported.** External access is via Traefik only. If a protocol that can't go through Traefik is ever needed, add `spec.publish.hostPort` (explicit) or `spec.publish: true` (auto-allocate) with a `HostPortStore` allocator.
+- ~~**Host-port publishing is intentionally unsupported.**~~ Superseded by Phase 15 (`specs/023-publish-host-ports/`): `networking.publish` supports an explicit `hostPort` or `publish: true` auto-allocation (30000–32767) backed by the `HostPortStore` allocator, loopback-only, with planner-time conflict detection — the exact mechanism this note anticipated.
 - **Cross-team direct network attachment deferred.** Phase 8 implements cross-team reachability via `exposeToPlatform: true` → producer joins the shared `shrine.platform` network. A finer-grained model (app declares `networking.joinNetworks: [team-b]`, consent by target team's `access:` list) was discussed and deliberately parked.
 
 ## Decisions Made

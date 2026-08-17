@@ -1,16 +1,23 @@
 <!--
 SYNC IMPACT REPORT
 ==================
-Version change: 1.1.0 → 1.1.1
+Version change: 1.1.1 → 1.2.0
 Added sections: N/A
-Modified principles:
-  - V. Integration-Test Gate: canonical gate updated from test/smock/ to
-    tests/integration/ (the formal integration test suite with NewDockerSuite harness)
+Modified principles: none — Technical Stack & Constraints amended:
+  - Networking model: "External access: Traefik only; host-port publishing is
+    unsupported by design" superseded by feature 023-publish-host-ports.
+    Per-application loopback-only host publishing is now supported via the
+    `networking.publish` manifest field (explicit hostPort or auto-allocation
+    from 30000-32767 by HostPortStore). Rationale: the original constraint's
+    own escape hatch (specs/progress.md known-gap note) anticipated exactly
+    this mechanism; localhost access for debugging and non-gateway protocols
+    is a concrete, current need (spec 023).
 Removed sections: N/A
 Templates requiring updates:
-  ✅ .specify/templates/plan-template.md — Principle V gate question updated
-  ✅ .specify/templates/spec-template.md — no structural changes required
-  ✅ .specify/templates/tasks-template.md — no structural changes required
+  ✅ .specify/templates/plan-template.md — no changes required
+  ✅ .specify/templates/spec-template.md — no changes required
+  ✅ .specify/templates/tasks-template.md — no changes required
+  ✅ AGENTS.md — networking model + delete application synced
 Deferred TODOs: None
 -->
 
@@ -153,7 +160,10 @@ Rules:
 - Per-team bridge: `shrine.<team>.private`, `/24` subnet from `10.100.5.0/24`
   through `10.100.255.0/24` (allocated by `SubnetStore`)
 - Platform bridge: `shrine.platform`, `10.200.0.0/24` (hardcoded, single instance)
-- External access: Traefik only; host-port publishing is unsupported by design
+- External access: Traefik by default; per-application loopback-only host
+  publishing via `networking.publish` (explicit `hostPort` outside 30000–32767,
+  or `true` for auto-allocation from that range via `HostPortStore`; allocations
+  are stable across redeploys and released only on application/team deletion)
 **State directories**: Flag > Env > `.env` (godotenv) > XDG/FHS defaults
 **Template engine**: Go `text/template` with topological sort (Kahn's algorithm)
   and cycle detection for both Resource outputs and Application env vars
@@ -198,4 +208,4 @@ Complexity Tracking table.
 **Guidance file**: `AGENTS.md` is the runtime development reference. It MUST be
 kept consistent with this Constitution.
 
-**Version**: 1.1.1 | **Ratified**: 2026-04-15 | **Last Amended**: 2026-04-29
+**Version**: 1.2.0 | **Ratified**: 2026-04-15 | **Last Amended**: 2026-08-17

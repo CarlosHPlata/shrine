@@ -168,6 +168,61 @@ func (tc *TestCase) AssertNetworkNotExists(name string) *TestCase {
 	return tc
 }
 
+// AssertContainerPublishesOnLoopback asserts the container publishes
+// hostPort→containerPort bound strictly to 127.0.0.1.
+func (tc *TestCase) AssertContainerPublishesOnLoopback(name, hostPort, containerPort, proto string) *TestCase {
+	tc.t.Helper()
+	ctx := context.Background()
+	info, err := tc.DockerClient.ContainerInspect(ctx, name)
+	if err != nil {
+		tc.t.Fatalf("container %q not found: %v", name, err)
+	}
+	key := nat.Port(containerPort + "/" + proto)
+	for _, binding := range info.HostConfig.PortBindings[key] {
+		if binding.HostPort == hostPort {
+			if binding.HostIP != "127.0.0.1" {
+				tc.t.Fatalf("container %q binding %s: HostIp = %q, want \"127.0.0.1\"", name, hostPort, binding.HostIP)
+			}
+			return tc
+		}
+	}
+	tc.t.Fatalf("container %q missing loopback binding %s → %s/%s\nbindings: %+v", name, hostPort, containerPort, proto, info.HostConfig.PortBindings)
+	return tc
+}
+
+// AssertContainerDoesNotPublishPort asserts no binding on the container uses
+// the given host port.
+func (tc *TestCase) AssertContainerDoesNotPublishPort(name, hostPort string) *TestCase {
+	tc.t.Helper()
+	ctx := context.Background()
+	info, err := tc.DockerClient.ContainerInspect(ctx, name)
+	if err != nil {
+		tc.t.Fatalf("container %q not found: %v", name, err)
+	}
+	for key, bindings := range info.HostConfig.PortBindings {
+		for _, binding := range bindings {
+			if binding.HostPort == hostPort {
+				tc.t.Fatalf("container %q still publishes host port %s (on %s)", name, hostPort, key)
+			}
+		}
+	}
+	return tc
+}
+
+// AssertContainerHasNoPortBindings asserts the container publishes nothing.
+func (tc *TestCase) AssertContainerHasNoPortBindings(name string) *TestCase {
+	tc.t.Helper()
+	ctx := context.Background()
+	info, err := tc.DockerClient.ContainerInspect(ctx, name)
+	if err != nil {
+		tc.t.Fatalf("container %q not found: %v", name, err)
+	}
+	if len(info.HostConfig.PortBindings) != 0 {
+		tc.t.Fatalf("container %q should have no port bindings, got: %+v", name, info.HostConfig.PortBindings)
+	}
+	return tc
+}
+
 func (tc *TestCase) AssertContainerPublishesPort(name, hostPort, containerPort, proto string) *TestCase {
 	tc.t.Helper()
 	ctx := context.Background()
