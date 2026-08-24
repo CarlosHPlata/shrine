@@ -1419,4 +1419,59 @@ providers:
 		}
 		tc.AssertOutputContains("Preserving operator-owned dashboard dynamic file")
 	})
+
+	// 024-fix-dashboard-removal (US1/US2): dropping the dashboard block from
+	// config must delete the stale generated dashboard dynamic file on the next
+	// deploy (FR-001), report the removal in deploy output (FR-003), leave
+	// per-app route files untouched (FR-005), and stay silent on subsequent
+	// deploys with nothing left to remove (FR-004/SC-006).
+	s.Test("should remove stale dashboard dynamic file when dashboard config is removed", func(tc *TestCase) {
+		configDir := tc.Path("config")
+		routingDir := tc.Path("traefik")
+		writeConfig(t, configDir, `plugins:
+  gateway:
+    traefik:
+      routing-dir: `+routingDir+`
+      port: 8117
+      dashboard:
+        port: 8118
+        username: admin
+        password: hunter2
+`)
+
+		tc.Run("deploy",
+			"--config-dir", configDir,
+			"--state-dir", tc.StateDir,
+			"--path", traefikFixturePath(),
+		).AssertSuccess()
+
+		dashboardPath := filepath.Join(routingDir, "dynamic", "__shrine-dashboard.yml")
+		tc.AssertFileExists(dashboardPath)
+
+		// Drop the dashboard block and redeploy.
+		writeConfig(t, configDir, `plugins:
+  gateway:
+    traefik:
+      routing-dir: `+routingDir+`
+      port: 8117
+`)
+
+		tc.Run("deploy",
+			"--config-dir", configDir,
+			"--state-dir", tc.StateDir,
+			"--path", traefikFixturePath(),
+		).AssertSuccess()
+
+		tc.AssertFileNotExists(dashboardPath)
+		tc.AssertFileExists(filepath.Join(routingDir, "dynamic", traefikTestTeam+"-hello-eligible.yml"))
+		tc.AssertOutputContains("Removed stale dashboard dynamic file: " + dashboardPath)
+
+		// Third deploy: nothing left to remove — no removal output.
+		tc.Run("deploy",
+			"--config-dir", configDir,
+			"--state-dir", tc.StateDir,
+			"--path", traefikFixturePath(),
+		).AssertSuccess()
+		tc.AssertOutputNotContains("Removed stale dashboard dynamic file")
+	})
 }

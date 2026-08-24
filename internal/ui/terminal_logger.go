@@ -88,6 +88,9 @@ func (t *TerminalObserver) OnEvent(e engine.Event) {
 	case "gateway.dashboard.preserved":
 		fmt.Fprintf(t.out, "  📄 Preserving operator-owned dashboard dynamic file: %s\n", e.Fields["path"])
 
+	case "gateway.dashboard.removed":
+		fmt.Fprintf(t.out, "  🗑️  Removed stale dashboard dynamic file: %s\n", e.Fields["path"])
+
 	case "gateway.route.generated":
 		fmt.Fprintf(t.out, "  📝 Generated route file: %s\n", e.Fields["path"])
 

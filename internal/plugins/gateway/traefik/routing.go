@@ -220,6 +220,13 @@ func (r *RoutingBackend) Finalize() error {
 		if err := generateDashboardDynamicConfig(r.cfg, r.routingDir, r.observer); err != nil {
 			return err
 		}
+	} else {
+		// The dashboard is no longer configured: delete the stale generated
+		// file before container creation so the recreated container also
+		// drops the dashboard port binding.
+		if err := removeStaleDashboardDynamicConfig(r.routingDir, r.observer); err != nil {
+			return err
+		}
 	}
 
 	op := engine.CreateContainerOp{
