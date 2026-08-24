@@ -30,7 +30,7 @@ Concretely:
 |---|---|
 | Manifest scan | Full directory (so cross-team `valueFrom` and dependency references resolve) |
 | Dependency / access / quota resolution | Full directory |
-| Routing-collision detection | Full directory (you cannot accidentally introduce a route that collides with another team's existing route) |
+| Routing-collision detection | Team-owned routes are checked against the **full** directory's routing footprint; a collision fails the deploy only when at least one participant belongs to the requested team |
 | Step emission | **Team-owned manifests only** |
 | Engine execution | Steps emitted in the previous phase |
 
@@ -122,9 +122,12 @@ shrine deploy team marketing --dry-run --path ./specs
 
 If two of `marketing`'s apps declare the same routing domain, the dry-run
 exits non-zero with a collision error before any container changes are
-considered. The same holds across teams: if `marketing/blog.yml` and
-`ops/monitor.yml` both claim `home.lab`, the collision is reported during a
-team-scoped dry-run even though only `marketing` is in the deploy scope.
+considered. The same holds when `marketing/blog.yml` and `ops/monitor.yml`
+both claim `home.lab`: `marketing` owns one side of the collision, so its
+team-scoped deploy fails and names both apps. A collision entirely between
+`ops` apps does **not** block `marketing` — only collisions that involve at
+least one app of the requested team are fatal. The bare `shrine deploy`
+remains the whole-directory check and fails on every collision.
 
 ## Error UX
 

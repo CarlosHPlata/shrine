@@ -121,6 +121,9 @@ Test cases (`tests/integration/apply_test.go`):
 - `apply teams --path <dir>` — generate a team manifest, apply it, assert it appears in state
 - `apply teams --path <dir>` with team in a subdirectory — assert recursive walk picks it up
 - `apply teams --path <dir>` with multiple teams — assert all saved, assert count
+- `apply teams --path <dir>` on `tests/testdata/apply/bad-kind/` (valid team + `kind: Aplication`) — assert non-zero exit, `typo.yaml` and `Aplication` on stderr, and `AssertTeamNotInState` (spec 025: nothing is written when any shrine file is broken)
+- `apply teams --path <dir>` on `tests/testdata/apply/multi-broken/` — assert both broken files appear on stderr in one run and `AssertTeamCount(0)`
+- `apply teams --path <dir>` on `tests/testdata/apply/invalid-team/` (Team without `metadata.name`) — assert `validating manifest` + `metadata.name is required` on stderr and `AssertTeamCount(0)`
 
 ### Phase 4 — Docker-backed deploy tests ✅
 
@@ -196,6 +199,10 @@ Test cases:
 - deploy a resource spec via `apply -f resource.yml` → `AssertContainerRunning(testTeam+".apply-cache")`
 - accept a `.yaml` extension → `AssertContainerRunning(...)`
 - after resource deployed, `apply -f app-with-dep.yml` resolves `valueFrom` env from state → `AssertContainerEnvVar(..., "CACHE_HOST", testTeam+".apply-cache")`
+- `apply -f app-b.yml --path tests/testdata/apply/routing-collision/` (app-a and app-b both claim `collision.apply.local`) → `AssertFailure`, stderr contains `routing collision`, `shrine-apply-test/app-a`, `shrine-apply-test/app-b`; `AssertContainerNotExists(applyTestTeam+".app-b")` (spec 025: single-file apply runs collision detection)
+- `apply -f app-c.yml` in the same directory (no routing) → `AssertSuccess`, `AssertContainerRunning(applyTestTeam+".app-c")` (a collision that does not involve the applied app does not block it)
+
+**`deploy team` — collision scope** (`tests/integration/deploy_team_test.go`, spec 025 / 019 FR-010): Scenario E2 `deploy team shrine-team-a --dry-run` on `tests/testdata/deploy_team/collision-other/` (only team-b apps collide) → success; E3 same directory for `shrine-team-b` → failure naming `beta1` and `beta2`; E4 bare `deploy --dry-run` there → failure; E5 `collision-cross/` (team-a app vs team-b app) → failure naming both apps.
 
 Note: `PlanSingle` uses `specsDir` from config for dependency resolution. In tests with no config, a minimal ManifestSet containing only the target file is used. The last test may require passing `--config-dir` pointing to a config with `specsDir` set to the `apply/` fixture dir. Investigate before writing the fixture.
 

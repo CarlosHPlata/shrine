@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+
+	"github.com/CarlosHPlata/shrine/internal/manifest"
 )
 
 type routeKey struct {
@@ -15,74 +17,51 @@ func normalizePrefix(p string) string {
 	return strings.TrimRight(p, "/")
 }
 
-func DetectRoutingCollisions(set *ManifestSet) error {
-	// Collect all (appRef, routeKey) pairs in deterministic order.
+func appRef(app *manifest.ApplicationManifest) string {
+	return app.Metadata.Owner + "/" + app.Metadata.Name
+}
+
+// DetectRoutingCollisions checks every route claimed in set but fails only on
+// pairs where at least one application is selected by filter (spec 019 FR-010).
+func DetectRoutingCollisions(set *ManifestSet, filter Filter) error {
+	refToApp := make(map[string]*manifest.ApplicationManifest, len(set.Applications))
 	appRefs := make([]string, 0, len(set.Applications))
-	for name := range set.Applications {
-		app := set.Applications[name]
-		appRefs = append(appRefs, app.Metadata.Owner+"/"+app.Metadata.Name)
+	for _, app := range set.Applications {
+		ref := appRef(app)
+		refToApp[ref] = app
+		appRefs = append(appRefs, ref)
 	}
 	sort.Strings(appRefs)
-
-	// Build a map from appRef to the app for sorted iteration.
-	refToApp := make(map[string]*struct {
-		domain     string
-		pathPrefix string
-		aliases    []struct {
-			host       string
-			pathPrefix string
-		}
-	}, len(set.Applications))
-
-	for _, app := range set.Applications {
-		ref := app.Metadata.Owner + "/" + app.Metadata.Name
-		entry := &struct {
-			domain     string
-			pathPrefix string
-			aliases    []struct {
-				host       string
-				pathPrefix string
-			}
-		}{
-			domain:     app.Spec.Routing.Domain,
-			pathPrefix: normalizePrefix(app.Spec.Routing.PathPrefix),
-		}
-		for _, alias := range app.Spec.Routing.Aliases {
-			entry.aliases = append(entry.aliases, struct {
-				host       string
-				pathPrefix string
-			}{host: alias.Host, pathPrefix: normalizePrefix(alias.PathPrefix)})
-		}
-		refToApp[ref] = entry
-	}
 
 	seen := map[routeKey]string{}
 	var errs []string
 
-	addRoute := func(key routeKey, appRef string) {
-		if existing, ok := seen[key]; ok {
-			if existing != appRef {
-				a, b := existing, appRef
-				if a > b {
-					a, b = b, a
-				}
-				errs = append(errs, fmt.Sprintf(
-					"routing collision: host=%q pathPrefix=%q declared by %q and %q",
-					key.host, key.pathPrefix, a, b,
-				))
-			}
-		} else {
-			seen[key] = appRef
+	addRoute := func(key routeKey, ref string) {
+		existing, ok := seen[key]
+		if !ok {
+			seen[key] = ref
+			return
 		}
+		if existing == ref || !isPairInScope(filter, refToApp[existing], refToApp[ref]) {
+			return
+		}
+		a, b := existing, ref
+		if a > b {
+			a, b = b, a
+		}
+		errs = append(errs, fmt.Sprintf(
+			"routing collision: host=%q pathPrefix=%q declared by %q and %q",
+			key.host, key.pathPrefix, a, b,
+		))
 	}
 
 	for _, ref := range appRefs {
-		entry := refToApp[ref]
-		if entry.domain != "" {
-			addRoute(routeKey{host: entry.domain, pathPrefix: entry.pathPrefix}, ref)
+		routing := refToApp[ref].Spec.Routing
+		if routing.Domain != "" {
+			addRoute(routeKey{host: routing.Domain, pathPrefix: normalizePrefix(routing.PathPrefix)}, ref)
 		}
-		for _, alias := range entry.aliases {
-			addRoute(routeKey{host: alias.host, pathPrefix: alias.pathPrefix}, ref)
+		for _, alias := range routing.Aliases {
+			addRoute(routeKey{host: alias.Host, pathPrefix: normalizePrefix(alias.PathPrefix)}, ref)
 		}
 	}
 
@@ -91,4 +70,8 @@ func DetectRoutingCollisions(set *ManifestSet) error {
 	}
 	sort.Strings(errs)
 	return fmt.Errorf("routing validation failed:\n- %s", strings.Join(errs, "\n- "))
+}
+
+func isPairInScope(filter Filter, a, b *manifest.ApplicationManifest) bool {
+	return filter.isAppInScope(a) || filter.isAppInScope(b)
 }

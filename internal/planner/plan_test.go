@@ -21,7 +21,7 @@ func (stubTeamStore) LoadTeam(name string) (*manifest.TeamManifest, error) {
 	}, nil
 }
 func (stubTeamStore) ListTeams() ([]*manifest.TeamManifest, error) { return nil, nil }
-func (stubTeamStore) DeleteTeam(string) error                     { return nil }
+func (stubTeamStore) DeleteTeam(string) error                      { return nil }
 
 // twoTeamSet builds a manifest set spanning team-a and team-b with no
 // cross-team coupling so the routing/order paths run cleanly.
@@ -293,4 +293,112 @@ func TestPlan_ByTeam_CrossTeamDepResolution(t *testing.T) {
 			t.Error("shared-db (team-platform) must not be emitted under ByTeam(team-a)")
 		}
 	}
+}
+
+func routedApp(owner, name, domain string) *manifest.ApplicationManifest {
+	return &manifest.ApplicationManifest{
+		TypeMeta: manifest.TypeMeta{Kind: manifest.ApplicationKind, APIVersion: "shrine/v1"},
+		Metadata: manifest.Metadata{Name: name, Owner: owner},
+		Spec: manifest.ApplicationSpec{
+			Image:   "nginx",
+			Port:    80,
+			Routing: manifest.Routing{Domain: domain},
+		},
+	}
+}
+
+func assertPlanSucceeded(t *testing.T, result PlanResult) {
+	t.Helper()
+	if result.Error != nil {
+		t.Fatalf("unexpected error: %v", result.Error)
+	}
+	if len(result.ValidationErr) > 0 {
+		t.Fatalf("unexpected validation errors: %v", result.ValidationErr)
+	}
+}
+
+func assertCollisionError(t *testing.T, result PlanResult, wantRefs ...string) {
+	t.Helper()
+	if result.Error == nil {
+		t.Fatalf("expected collision error, got nil (validation errs: %v)", result.ValidationErr)
+	}
+	for _, want := range append([]string{"routing collision"}, wantRefs...) {
+		if !strings.Contains(result.Error.Error(), want) {
+			t.Errorf("expected %q in error, got: %v", want, result.Error)
+		}
+	}
+	if len(result.Steps) != 0 {
+		t.Errorf("expected no steps on collision, got %v", result.Steps)
+	}
+}
+
+func TestPlan_ByApp_ReportsCollisionInvolvingApp(t *testing.T) {
+	set := NewManifestSet()
+	set.Applications["alpha"] = routedApp("team-a", "alpha", "clash.example.com")
+	set.Applications["beta"] = routedApp("team-b", "beta", "clash.example.com")
+
+	result := Plan(set, stubTeamStore{}, nil, PortContext{}, ByApp("alpha"))
+	assertCollisionError(t, result, "team-a/alpha", "team-b/beta")
+}
+
+func TestPlan_ByApp_IgnoresCollisionNotInvolvingApp(t *testing.T) {
+	set := NewManifestSet()
+	set.Applications["alpha"] = routedApp("team-a", "alpha", "alpha.example.com")
+	set.Applications["beta"] = routedApp("team-b", "beta", "clash.example.com")
+	set.Applications["gamma"] = routedApp("team-c", "gamma", "clash.example.com")
+
+	result := Plan(set, stubTeamStore{}, nil, PortContext{}, ByApp("alpha"))
+	assertPlanSucceeded(t, result)
+	if len(result.Steps) != 1 || result.Steps[0].Name != "alpha" {
+		t.Errorf("expected single alpha step, got %v", result.Steps)
+	}
+}
+
+func TestPlan_ByResource_IgnoresRoutingCollisions(t *testing.T) {
+	set := NewManifestSet()
+	set.Applications["alpha"] = routedApp("team-a", "alpha", "clash.example.com")
+	set.Applications["beta"] = routedApp("team-b", "beta", "clash.example.com")
+	set.Resources["db-a"] = &manifest.ResourceManifest{
+		TypeMeta: manifest.TypeMeta{Kind: manifest.ResourceKind, APIVersion: "shrine/v1"},
+		Metadata: manifest.Metadata{Name: "db-a", Owner: "team-a"},
+		Spec:     manifest.ResourceSpec{Type: "postgres", Version: "16"},
+	}
+
+	result := Plan(set, stubTeamStore{}, nil, PortContext{}, ByResource("db-a"))
+	assertPlanSucceeded(t, result)
+	if len(result.Steps) != 1 || result.Steps[0].Name != "db-a" {
+		t.Errorf("expected single db-a step, got %v", result.Steps)
+	}
+}
+
+func TestPlan_ByTeam_IgnoresOutOfScopeCollision(t *testing.T) {
+	set := NewManifestSet()
+	set.Applications["alpha"] = routedApp("team-a", "alpha", "alpha.example.com")
+	set.Applications["beta1"] = routedApp("team-b", "beta1", "clash.example.com")
+	set.Applications["beta2"] = routedApp("team-b", "beta2", "clash.example.com")
+
+	result := Plan(set, stubTeamStore{}, nil, PortContext{}, ByTeam("team-a"))
+	assertPlanSucceeded(t, result)
+	if len(result.Steps) != 1 || result.Steps[0].Name != "alpha" {
+		t.Errorf("expected only the alpha step, got %v", result.Steps)
+	}
+}
+
+func TestPlan_ByTeam_ReportsCrossTeamCollision(t *testing.T) {
+	set := NewManifestSet()
+	set.Applications["alpha"] = routedApp("team-a", "alpha", "clash.example.com")
+	set.Applications["beta"] = routedApp("team-b", "beta", "clash.example.com")
+
+	result := Plan(set, stubTeamStore{}, nil, PortContext{}, ByTeam("team-a"))
+	assertCollisionError(t, result, "team-a/alpha", "team-b/beta")
+}
+
+func TestPlan_NoFilter_ReportsEveryCollision(t *testing.T) {
+	set := NewManifestSet()
+	set.Applications["alpha"] = routedApp("team-a", "alpha", "alpha.example.com")
+	set.Applications["beta1"] = routedApp("team-b", "beta1", "clash.example.com")
+	set.Applications["beta2"] = routedApp("team-b", "beta2", "clash.example.com")
+
+	result := Plan(set, stubTeamStore{}, nil, PortContext{}, NoFilter())
+	assertCollisionError(t, result, "team-b/beta1", "team-b/beta2")
 }
