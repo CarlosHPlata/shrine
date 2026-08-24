@@ -148,6 +148,30 @@ func generateDashboardDynamicConfig(cfg *config.TraefikPluginConfig, routingDir 
 	return nil
 }
 
+// removeStaleDashboardDynamicConfig deletes a previously generated dashboard
+// dynamic file once the configuration no longer calls for a dashboard, so the
+// gateway stops serving it with retired credentials. Absence is success: a
+// deploy with nothing to remove stays silent (FR-004).
+func removeStaleDashboardDynamicConfig(routingDir string, observer engine.Observer) error {
+	path := filepath.Join(routingDir, "dynamic", dashboardDynamicFileName())
+	present, err := isPathPresent(path)
+	if err != nil {
+		return fmt.Errorf("traefik plugin: removing stale dashboard dynamic file at %q: %w", path, err)
+	}
+	if !present {
+		return nil
+	}
+	if err := removeFileFn(path); err != nil {
+		return fmt.Errorf("traefik plugin: removing stale dashboard dynamic file at %q: %w", path, err)
+	}
+	observer.OnEvent(engine.Event{
+		Name:   "gateway.dashboard.removed",
+		Status: engine.StatusInfo,
+		Fields: map[string]string{"path": path},
+	})
+	return nil
+}
+
 // hasLegacyDashboardHTTPBlock returns whether path contains a top-level `http:`
 // section. It is meant to flag the artefact left behind by an earlier buggy
 // version of this plugin, which emitted the dashboard router into the static

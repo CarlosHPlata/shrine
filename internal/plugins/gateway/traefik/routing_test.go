@@ -40,6 +40,37 @@ func stubLstatError(t *testing.T, err error) {
 	lstatFn = func(string) (os.FileInfo, error) { return nil, err }
 }
 
+// stubLstatDashboardAbsent makes lstatFn report the dashboard dynamic file as
+// absent while every other path (notably the static traefik.yml) is present,
+// so Finalize's config generators short-circuit on their preserved paths
+// without touching the real filesystem.
+func stubLstatDashboardAbsent(t *testing.T) {
+	t.Helper()
+	orig := lstatFn
+	t.Cleanup(func() { lstatFn = orig })
+	lstatFn = func(path string) (os.FileInfo, error) {
+		if filepath.Base(path) == dashboardDynamicFileName() {
+			return nil, &fs.PathError{Op: "lstat", Path: path, Err: fs.ErrNotExist}
+		}
+		return nil, nil
+	}
+}
+
+// stubLstatDashboardError makes lstatFn fail with err for the dashboard
+// dynamic file only, keeping every other path present so Finalize reaches the
+// removal branch instead of dying in static-config generation.
+func stubLstatDashboardError(t *testing.T, err error) {
+	t.Helper()
+	orig := lstatFn
+	t.Cleanup(func() { lstatFn = orig })
+	lstatFn = func(path string) (os.FileInfo, error) {
+		if filepath.Base(path) == dashboardDynamicFileName() {
+			return nil, err
+		}
+		return nil, nil
+	}
+}
+
 func TestBuildRouterRule(t *testing.T) {
 	if got := buildRouterRule("h", ""); got != "Host(`h`)" {
 		t.Errorf("buildRouterRule(h,''): got %q", got)
@@ -514,6 +545,30 @@ func captureRemoveFileFn(t *testing.T) {
 	}
 }
 
+// recordRemoveFileFn swaps removeFileFn for a recorder that appends each
+// removed path to the returned slice — for the dashboard-removal branch,
+// where deletion IS the expected behavior (unlike RemoveRoute's orphan-warn
+// policy, which keeps using the fail-fast captureRemoveFileFn).
+func recordRemoveFileFn(t *testing.T) *[]string {
+	t.Helper()
+	var removed []string
+	orig := removeFileFn
+	t.Cleanup(func() { removeFileFn = orig })
+	removeFileFn = func(path string) error {
+		removed = append(removed, path)
+		return nil
+	}
+	return &removed
+}
+
+// stubRemoveFileError makes removeFileFn fail with err.
+func stubRemoveFileError(t *testing.T, err error) {
+	t.Helper()
+	orig := removeFileFn
+	t.Cleanup(func() { removeFileFn = orig })
+	removeFileFn = func(string) error { return err }
+}
+
 // T015: when the per-app file is present at teardown, RemoveRoute emits an orphan
 // warning and does NOT delete the file.
 func TestRemoveRoute_FilePresent_EmitsOrphanWarning(t *testing.T) {
@@ -904,6 +959,221 @@ func TestRoutingBackend_Finalize_GeneratesConfigsAndCreatesContainer(t *testing.
 	}
 }
 
+// stubMkdirAll no-ops mkdirAllFn so Finalize never touches the real filesystem.
+func stubMkdirAll(t *testing.T) {
+	t.Helper()
+	orig := mkdirAllFn
+	t.Cleanup(func() { mkdirAllFn = orig })
+	mkdirAllFn = func(string, fs.FileMode) error { return nil }
+}
+
+// noDashboardBackend builds a Finalize-ready RoutingBackend whose config has
+// no dashboard block, wired to cb and observer.
+func noDashboardBackend(cb *recordingContainerBackend, observer engine.Observer) *RoutingBackend {
+	routingDir := "/fake/specs/traefik"
+	return &RoutingBackend{
+		routingDir:       routingDir,
+		staticConfigPath: filepath.Join(routingDir, "traefik.yml"),
+		observer:         observer,
+		cfg:              &config.TraefikPluginConfig{Port: 80},
+		containerBackend: cb,
+	}
+}
+
+const wantDashboardPath = "/fake/specs/traefik/dynamic/__shrine-dashboard.yml"
+
+// US1/T003: with no dashboard configured and a stale dashboard dynamic file on
+// disk, Finalize must delete exactly that file and still create the Traefik
+// container (FR-001/FR-002).
+func TestRoutingBackend_Finalize_NoDashboard_RemovesStaleFile(t *testing.T) {
+	stubLstatPresent(t)
+	stubMkdirAll(t)
+	removed := recordRemoveFileFn(t)
+
+	cb := &recordingContainerBackend{}
+	rb := noDashboardBackend(cb, engine.NoopObserver{})
+
+	if err := rb.Finalize(); err != nil {
+		t.Fatalf("Finalize returned error: %v", err)
+	}
+	if len(*removed) != 1 || (*removed)[0] != wantDashboardPath {
+		t.Errorf("expected exactly one removal of %q, got %v", wantDashboardPath, *removed)
+	}
+	if len(cb.creates) != 1 {
+		t.Errorf("expected 1 CreateContainer call, got %d: %+v", len(cb.creates), cb.creates)
+	}
+}
+
+// US1/T004: with no dashboard configured and no stale file on disk, the
+// removal branch is a silent no-op and the deploy proceeds (FR-004).
+func TestRoutingBackend_Finalize_NoDashboard_AbsentFileIsNoOp(t *testing.T) {
+	stubLstatDashboardAbsent(t)
+	stubMkdirAll(t)
+	removed := recordRemoveFileFn(t)
+
+	cb := &recordingContainerBackend{}
+	rb := noDashboardBackend(cb, engine.NoopObserver{})
+
+	if err := rb.Finalize(); err != nil {
+		t.Fatalf("Finalize returned error: %v", err)
+	}
+	if len(*removed) != 0 {
+		t.Errorf("expected zero removals for absent file, got %v", *removed)
+	}
+	if len(cb.creates) != 1 {
+		t.Errorf("expected 1 CreateContainer call, got %d: %+v", len(cb.creates), cb.creates)
+	}
+}
+
+// US1/T005: companion to TestRoutingBackend_Finalize_GeneratesConfigsAndCreatesContainer —
+// with a credentialed dashboard configured, the generation path runs
+// (dashboard preserved) and no removal is ever attempted.
+func TestRoutingBackend_Finalize_WithDashboard_DoesNotRemove(t *testing.T) {
+	stubLstatPresent(t)
+	stubMkdirAll(t)
+	captureRemoveFileFn(t)
+
+	cb := &recordingContainerBackend{}
+	routingDir := "/fake/specs/traefik"
+	rec := &recordingObserver{}
+	rb := &RoutingBackend{
+		routingDir:       routingDir,
+		staticConfigPath: filepath.Join(routingDir, "traefik.yml"),
+		observer:         rec,
+		cfg: &config.TraefikPluginConfig{
+			Port: 80,
+			Dashboard: &config.TraefikDashboardConfig{
+				Port:     8080,
+				Username: "u",
+				Password: "p",
+			},
+		},
+		containerBackend: cb,
+	}
+
+	if err := rb.Finalize(); err != nil {
+		t.Fatalf("Finalize returned error: %v", err)
+	}
+	var dashboardPreserved bool
+	for _, ev := range rec.events {
+		if ev.Name == "gateway.dashboard.preserved" {
+			dashboardPreserved = true
+		}
+	}
+	if !dashboardPreserved {
+		t.Errorf("expected the generation path to run (gateway.dashboard.preserved); got %+v", rec.events)
+	}
+}
+
+// US2/T011: a successful removal must emit exactly one
+// gateway.dashboard.removed event (StatusInfo, path field), after the file is
+// gone (contracts/observer-events.md).
+func TestRoutingBackend_Finalize_NoDashboard_EmitsRemovedEvent(t *testing.T) {
+	stubLstatPresent(t)
+	stubMkdirAll(t)
+	removed := recordRemoveFileFn(t)
+
+	rec := &recordingObserver{}
+	rb := noDashboardBackend(&recordingContainerBackend{}, rec)
+
+	if err := rb.Finalize(); err != nil {
+		t.Fatalf("Finalize returned error: %v", err)
+	}
+	var removedEvents []engine.Event
+	for _, ev := range rec.events {
+		if ev.Name == "gateway.dashboard.removed" {
+			removedEvents = append(removedEvents, ev)
+		}
+	}
+	if len(removedEvents) != 1 {
+		t.Fatalf("expected exactly 1 gateway.dashboard.removed event, got %d: %+v", len(removedEvents), rec.events)
+	}
+	ev := removedEvents[0]
+	if ev.Status != engine.StatusInfo {
+		t.Errorf("expected StatusInfo, got %q", ev.Status)
+	}
+	if ev.Fields["path"] != wantDashboardPath {
+		t.Errorf("expected path=%q, got %q", wantDashboardPath, ev.Fields["path"])
+	}
+	if len(*removed) != 1 {
+		t.Fatalf("expected the removal to have happened, got %v", *removed)
+	}
+}
+
+// US2/T012: nothing to remove → no gateway.dashboard.* event at all (FR-004/SC-006).
+func TestRoutingBackend_Finalize_NoDashboard_AbsentFileEmitsNoEvent(t *testing.T) {
+	stubLstatDashboardAbsent(t)
+	stubMkdirAll(t)
+	recordRemoveFileFn(t)
+
+	rec := &recordingObserver{}
+	rb := noDashboardBackend(&recordingContainerBackend{}, rec)
+
+	if err := rb.Finalize(); err != nil {
+		t.Fatalf("Finalize returned error: %v", err)
+	}
+	for _, ev := range rec.events {
+		if strings.HasPrefix(ev.Name, "gateway.dashboard.") {
+			t.Errorf("expected no gateway.dashboard.* events for absent file, got %+v", ev)
+		}
+	}
+}
+
+// US2/T013: a non-IsNotExist stat error on the dashboard file must fail the
+// deploy with the path and cause in the message, and emit no event
+// (research Decision 3).
+func TestRoutingBackend_Finalize_NoDashboard_StatErrorFailsDeploy(t *testing.T) {
+	stubLstatDashboardError(t, errors.New("permission denied"))
+	stubMkdirAll(t)
+	recordRemoveFileFn(t)
+
+	rec := &recordingObserver{}
+	rb := noDashboardBackend(&recordingContainerBackend{}, rec)
+
+	err := rb.Finalize()
+	if err == nil {
+		t.Fatal("expected Finalize to fail on stat error, got nil")
+	}
+	if !strings.Contains(err.Error(), wantDashboardPath) {
+		t.Errorf("expected error to name %q, got %q", wantDashboardPath, err)
+	}
+	if !strings.Contains(err.Error(), "permission denied") {
+		t.Errorf("expected error to contain the cause, got %q", err)
+	}
+	for _, ev := range rec.events {
+		if strings.HasPrefix(ev.Name, "gateway.dashboard.") {
+			t.Errorf("expected no gateway.dashboard.* events on stat error, got %+v", ev)
+		}
+	}
+}
+
+// US2/T014: a failed deletion must fail the deploy with the path and cause,
+// and must NOT emit gateway.dashboard.removed (FR-006).
+func TestRoutingBackend_Finalize_NoDashboard_RemoveErrorFailsDeploy(t *testing.T) {
+	stubLstatPresent(t)
+	stubMkdirAll(t)
+	stubRemoveFileError(t, errors.New("device busy"))
+
+	rec := &recordingObserver{}
+	rb := noDashboardBackend(&recordingContainerBackend{}, rec)
+
+	err := rb.Finalize()
+	if err == nil {
+		t.Fatal("expected Finalize to fail on remove error, got nil")
+	}
+	if !strings.Contains(err.Error(), wantDashboardPath) {
+		t.Errorf("expected error to name %q, got %q", wantDashboardPath, err)
+	}
+	if !strings.Contains(err.Error(), "device busy") {
+		t.Errorf("expected error to contain the cause, got %q", err)
+	}
+	for _, ev := range rec.events {
+		if ev.Name == "gateway.dashboard.removed" {
+			t.Errorf("gateway.dashboard.removed must not be emitted when deletion fails, got %+v", ev)
+		}
+	}
+}
+
 // T013 companion: when cfg/containerBackend are nil (narrow test backend),
 // Finalize must be a safe no-op so existing routing_test.go fixtures keep
 // working.
@@ -919,6 +1189,110 @@ func TestRoutingBackend_Finalize_NoCfgIsNoOp(t *testing.T) {
 	}
 	if len(cb.creates) != 0 {
 		t.Errorf("Finalize without cfg must not create containers; got %+v", cb.creates)
+	}
+}
+
+// US3/T019 (repointed from TestPlugin_PortBindings_OmitsTLS_WhenTLSPortUnset):
+// when TLSPort is zero (unset), portBindings() returns exactly one entry — the
+// HTTP binding — and no entry for container port 443 (FR-009).
+func TestRoutingBackend_PortBindings_OmitsTLS_WhenTLSPortUnset(t *testing.T) {
+	cfg := config.TraefikPluginConfig{Port: 80, TLSPort: 0}
+	rb := &RoutingBackend{cfg: &cfg}
+
+	bindings := rb.portBindings()
+
+	if len(bindings) != 1 {
+		t.Fatalf("expected exactly 1 port binding, got %d: %+v", len(bindings), bindings)
+	}
+
+	want := engine.PortBinding{HostPort: "80", ContainerPort: "80", Protocol: "tcp"}
+	if bindings[0] != want {
+		t.Errorf("binding[0] = %+v, want %+v", bindings[0], want)
+	}
+
+	for _, b := range bindings {
+		if b.ContainerPort == "443" {
+			t.Errorf("unexpected 443 binding in result (TLSPort is unset): %+v", b)
+		}
+	}
+}
+
+// US3/T019 (repointed from TestPlugin_PortBindings_IncludesTLS443_WhenTLSPortSet):
+// when TLSPort is set, portBindings() returns exactly two entries: the regular
+// HTTP binding and a TLS binding mapping TLSPort→443 (FR-009).
+func TestRoutingBackend_PortBindings_IncludesTLS443_WhenTLSPortSet(t *testing.T) {
+	cfg := config.TraefikPluginConfig{Port: 80, TLSPort: 8443}
+	rb := &RoutingBackend{cfg: &cfg}
+
+	bindings := rb.portBindings()
+
+	want := map[string]engine.PortBinding{
+		"80:80/tcp":    {HostPort: "80", ContainerPort: "80", Protocol: "tcp"},
+		"8443:443/tcp": {HostPort: "8443", ContainerPort: "443", Protocol: "tcp"},
+	}
+
+	if len(bindings) != len(want) {
+		t.Fatalf("expected %d port bindings, got %d: %+v", len(want), len(bindings), bindings)
+	}
+
+	got := make(map[string]engine.PortBinding, len(bindings))
+	for _, b := range bindings {
+		key := b.HostPort + ":" + b.ContainerPort + "/" + b.Protocol
+		got[key] = b
+	}
+
+	for key, wb := range want {
+		gb, ok := got[key]
+		if !ok {
+			t.Errorf("missing expected binding %s (%+v); got bindings: %+v", key, wb, bindings)
+			continue
+		}
+		if gb != wb {
+			t.Errorf("binding %s: got %+v, want %+v", key, gb, wb)
+		}
+	}
+}
+
+// US3/T020: with a credentialed dashboard configured, portBindings() includes
+// the dashboard host:container binding alongside the HTTP one — the third
+// FR-009 combination, previously only implicit in the Finalize test's len==3.
+func TestRoutingBackend_PortBindings_IncludesDashboardPort_WhenDashboardSet(t *testing.T) {
+	cfg := config.TraefikPluginConfig{
+		Port: 80,
+		Dashboard: &config.TraefikDashboardConfig{
+			Port:     8080,
+			Username: "u",
+			Password: "p",
+		},
+	}
+	rb := &RoutingBackend{cfg: &cfg}
+
+	bindings := rb.portBindings()
+
+	want := map[string]engine.PortBinding{
+		"80:80/tcp":     {HostPort: "80", ContainerPort: "80", Protocol: "tcp"},
+		"8080:8080/tcp": {HostPort: "8080", ContainerPort: "8080", Protocol: "tcp"},
+	}
+
+	if len(bindings) != len(want) {
+		t.Fatalf("expected %d port bindings, got %d: %+v", len(want), len(bindings), bindings)
+	}
+
+	got := make(map[string]engine.PortBinding, len(bindings))
+	for _, b := range bindings {
+		key := b.HostPort + ":" + b.ContainerPort + "/" + b.Protocol
+		got[key] = b
+	}
+
+	for key, wb := range want {
+		gb, ok := got[key]
+		if !ok {
+			t.Errorf("missing expected binding %s (%+v); got bindings: %+v", key, wb, bindings)
+			continue
+		}
+		if gb != wb {
+			t.Errorf("binding %s: got %+v, want %+v", key, gb, wb)
+		}
 	}
 }
 

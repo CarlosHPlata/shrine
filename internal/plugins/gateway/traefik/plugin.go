@@ -3,7 +3,6 @@ package traefik
 import (
 	"fmt"
 	"path/filepath"
-	"strconv"
 
 	"github.com/CarlosHPlata/shrine/internal/config"
 	"github.com/CarlosHPlata/shrine/internal/engine"
@@ -123,22 +122,6 @@ func (p *Plugin) resolvedRoutingDir() (string, error) {
 		return "", fmt.Errorf("traefik plugin: resolving routing directory: %w", err)
 	}
 	return routingDir, nil
-}
-
-func (p *Plugin) portBindings() []engine.PortBinding {
-	port := strconv.Itoa(p.resolvedPort())
-	bindings := []engine.PortBinding{
-		{HostPort: port, ContainerPort: port, Protocol: "tcp"},
-	}
-	if p.cfg != nil && p.cfg.TLSPort > 0 {
-		tp := strconv.Itoa(p.cfg.TLSPort)
-		bindings = append(bindings, engine.PortBinding{HostPort: tp, ContainerPort: "443", Protocol: "tcp"})
-	}
-	if p.hasDashboard() {
-		dp := strconv.Itoa(p.cfg.Dashboard.Port)
-		bindings = append(bindings, engine.PortBinding{HostPort: dp, ContainerPort: dp, Protocol: "tcp"})
-	}
-	return bindings
 }
 
 func (p *Plugin) RoutingBackend() (engine.RoutingBackend, error) {
