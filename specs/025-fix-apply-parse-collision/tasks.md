@@ -114,7 +114,7 @@
 - [X] T029 [P] Add the fix entry to `specs/progress.md` (above the 024 entry, same style): `- [x] **Fix: strict apply teams + scoped routing-collision detection** — see `specs/025-fix-apply-parse-collision/` (issue #36) …` summarising the two-phase `ApplyTeams`, `DetectRoutingCollisions(set, filter)` + `Filter.isAppInScope`, the hoisted check in `Plan`, acceptance SC-001–SC-006, and the gate (`TestApplyTeams`/`TestApplyFile`/`TestDeployTeam` scenarios, CI executes)
 - [X] T030 Run the full local gate at repository root: `gofmt -l .` prints nothing, `go vet ./...` clean, `go test ./...` zero failures, `go vet -tags integration ./tests/integration/...` clean (SC-005)
 - [X] T031 [P] Run `graphify update .` to refresh the knowledge graph after the code changes (project rule, AST-only)
-- [ ] T032 Push the branch and confirm the CI integration pipeline is green — it executes the T008/T011/T017/T024 scenarios that form the Constitution V gate; optionally walk `specs/025-fix-apply-parse-collision/quickstart.md` against a live Docker host
+- [X] T032 Push the branch and confirm the CI integration pipeline is green — it executes the T008/T011/T017/T024 scenarios that form the Constitution V gate; optionally walk `specs/025-fix-apply-parse-collision/quickstart.md` against a live Docker host
 
 ---
 
