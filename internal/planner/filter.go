@@ -3,6 +3,8 @@ package planner
 import (
 	"fmt"
 	"sort"
+
+	"github.com/CarlosHPlata/shrine/internal/manifest"
 )
 
 // FilterKind selects which subset of a ManifestSet yields deploy steps.
@@ -99,4 +101,17 @@ func discoveredOwners(set *ManifestSet) []string {
 	}
 	sort.Strings(out)
 	return out
+}
+
+func (f Filter) isAppInScope(app *manifest.ApplicationManifest) bool {
+	switch f.Kind {
+	case FilterNone:
+		return true
+	case FilterTeam:
+		return app.Metadata.Owner == f.Name
+	case FilterApp:
+		return app.Metadata.Name == f.Name
+	default:
+		return false
+	}
 }

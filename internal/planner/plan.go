@@ -44,18 +44,17 @@ func Plan(set *ManifestSet, store state.TeamStore, registries []config.RegistryC
 	}
 	set = enriched
 
-	// Unlike routing collisions below, port conflicts are checked for every
-	// filter: reserved and persisted ports exist outside the manifest set, so
-	// even a single-app apply can claim a port someone else holds.
 	if err := DetectHostPortCollisions(set, ports); err != nil {
+		return PlanResult{Error: err}
+	}
+
+	// Scoped to filter: only pairs touching an in-scope app fail (spec 019 FR-010).
+	if err := DetectRoutingCollisions(set, filter); err != nil {
 		return PlanResult{Error: err}
 	}
 
 	switch filter.Kind {
 	case FilterNone, FilterTeam:
-		if err := DetectRoutingCollisions(set); err != nil {
-			return PlanResult{Error: err}
-		}
 		steps, err := Order(set)
 		if err != nil {
 			return PlanResult{Error: err}

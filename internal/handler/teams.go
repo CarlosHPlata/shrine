@@ -74,34 +74,53 @@ func ApplyTeams(manifestDir string, store state.TeamStore) error {
 		return nil
 	}
 
-	count := 0
-	for _, candidate := range result.Shrine {
-		file := candidate.Path
-		m, err := manifest.Parse(file)
-		if err != nil {
-			fmt.Printf("Error parsing %s: %v\n", file, err)
-			continue
-		}
-
-		if m.Team == nil {
-			fmt.Printf("Skipping %s: not a Team manifest\n", file)
-			continue
-		}
-
-		if err := store.SaveTeam(m.Team); err != nil {
-			fmt.Printf("Error saving team %s to state: %v\n", m.Team.Metadata.Name, err)
-			continue
-		}
-		fmt.Printf("Synced team: %s\n", m.Team.Metadata.Name)
-		count++
+	teams, failures := collectTeamManifests(result.Shrine)
+	if len(failures) > 0 {
+		return fmt.Errorf("apply teams failed:\n- %s", strings.Join(failures, "\n- "))
 	}
 
-	fmt.Printf("Successfully synced %d teams to state.\n", count)
+	if err := saveTeams(teams, store); err != nil {
+		return err
+	}
+	fmt.Printf("Successfully synced %d teams to state.\n", len(teams))
 
 	if len(result.Foreign) > 0 {
 		manifest.ReportForeignFiles(manifestDir, result.Foreign)
 	}
 
+	return nil
+}
+
+// Every candidate is checked before anything is written so one broken file leaves state untouched.
+func collectTeamManifests(candidates []manifest.ShrineCandidate) ([]*manifest.TeamManifest, []string) {
+	var teams []*manifest.TeamManifest
+	var failures []string
+	for _, candidate := range candidates {
+		m, err := manifest.Parse(candidate.Path)
+		if err != nil {
+			failures = append(failures, fmt.Sprintf("parsing manifest %q: %v", candidate.Path, err))
+			continue
+		}
+		if m.Team == nil {
+			fmt.Printf("Skipping %s: not a Team manifest\n", candidate.Path)
+			continue
+		}
+		if err := manifest.Validate(m); err != nil {
+			failures = append(failures, fmt.Sprintf("validating manifest %q: %v", candidate.Path, err))
+			continue
+		}
+		teams = append(teams, m.Team)
+	}
+	return teams, failures
+}
+
+func saveTeams(teams []*manifest.TeamManifest, store state.TeamStore) error {
+	for _, team := range teams {
+		if err := store.SaveTeam(team); err != nil {
+			return fmt.Errorf("saving team %q to state: %w", team.Metadata.Name, err)
+		}
+		fmt.Printf("Synced team: %s\n", team.Metadata.Name)
+	}
 	return nil
 }
 

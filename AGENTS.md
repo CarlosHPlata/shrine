@@ -27,10 +27,10 @@ No positional path argument. Uses --path/-p flag or specsDir from config.yml. Ex
 Reconciles only the apps and resources whose metadata.owner matches <name>. The full specs directory is loaded as resolution context (so cross-team dependencies still resolve), but deploy steps are emitted only for team-owned manifests. Inherits --dry-run and --path from `shrine deploy`. Unknown-team errors list the team names discovered in the directory.
 
 ### shrine apply -f <file>
-New command. Deploys a single manifest file. Kind is inferred from the YAML kind: field. Uses specsDir (or --path) as resolution context for valueFrom dependencies.
+Deploys a single manifest file. Kind is inferred from the YAML kind: field. Uses specsDir (or --path) as resolution context for valueFrom dependencies. Runs the same routing-collision validation as `deploy`, scoped to the applied app: the manifest is rejected (non-zero, same diagnostic) if its routes collide with any app in the specs directory.
 
 ### shrine apply teams
-Syncs team manifests to state. Uses --path/-p flag or specsDir from config (no longer defaults to .).
+Syncs team manifests to state. Uses --path/-p flag or specsDir from config (no longer defaults to .). Exits non-zero and writes nothing to state if any shrine manifest in the directory fails to parse or any Team manifest fails validation; all failures are reported in one run.
 
 ### shrine status app/resource <name>
 Team is now an optional --team/-t flag, not a required positional argument. Shrine auto-searches all teams; use --team to disambiguate. Examples: shrine status app my-api, shrine status app my-api --team team-a, shrine status resource my-db

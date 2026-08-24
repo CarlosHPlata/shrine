@@ -193,3 +193,31 @@ func resWithOwner(owner string) *manifest.ResourceManifest {
 		Spec:     manifest.ResourceSpec{Type: "postgres", Version: "16"},
 	}
 }
+
+func TestFilter_IsAppInScope(t *testing.T) {
+	alpha := &manifest.ApplicationManifest{Metadata: manifest.Metadata{Name: "alpha", Owner: "team-a"}}
+	beta := &manifest.ApplicationManifest{Metadata: manifest.Metadata{Name: "beta", Owner: "team-b"}}
+
+	cases := []struct {
+		name      string
+		filter    Filter
+		wantAlpha bool
+		wantBeta  bool
+	}{
+		{"NoFilter", NoFilter(), true, true},
+		{"ByTeam", ByTeam("team-a"), true, false},
+		{"ByApp", ByApp("alpha"), true, false},
+		{"ByResource", ByResource("db-a"), false, false},
+		{"UnknownKind", Filter{Kind: FilterKind(99), Name: "alpha"}, false, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := tc.filter.isAppInScope(alpha); got != tc.wantAlpha {
+				t.Errorf("isAppInScope(alpha) = %v, want %v", got, tc.wantAlpha)
+			}
+			if got := tc.filter.isAppInScope(beta); got != tc.wantBeta {
+				t.Errorf("isAppInScope(beta) = %v, want %v", got, tc.wantBeta)
+			}
+		})
+	}
+}

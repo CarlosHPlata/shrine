@@ -1,0 +1,9 @@
+apiVersion: shrine/v1
+kind: Team
+metadata: {}
+spec:
+  displayName: "Invalid Team"
+  contact: "invalid@example.com"
+  quotas:
+    maxApps: 1
+    maxResources: 1

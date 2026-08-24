@@ -102,6 +102,49 @@ func TestDeployTeam(t *testing.T) {
 			AssertStderrContains("collide.test.local")
 	})
 
+	// Scenario E2 — a collision entirely outside the requested team does not block it.
+	s.Test("deploy team ignores collisions entirely outside its scope", func(tc *TestCase) {
+		tc.Run("deploy", "team", teamA,
+			"--dry-run",
+			"--path", deployTeamFixturesPath("collision-other"),
+			"--state-dir", tc.StateDir,
+		).AssertSuccess().
+			AssertOutputNotContains("routing collision")
+	})
+
+	// Scenario E3 — the owning team still sees its own collision.
+	s.Test("deploy team still fails on its own team's collision", func(tc *TestCase) {
+		tc.Run("deploy", "team", teamB,
+			"--dry-run",
+			"--path", deployTeamFixturesPath("collision-other"),
+			"--state-dir", tc.StateDir,
+		).AssertFailure().
+			AssertStderrContains("shrine-team-b/beta1").
+			AssertStderrContains("shrine-team-b/beta2")
+	})
+
+	// Scenario E4 — bare deploy remains the whole-directory check.
+	s.Test("bare deploy still fails on any collision", func(tc *TestCase) {
+		tc.Run("deploy",
+			"--dry-run",
+			"--path", deployTeamFixturesPath("collision-other"),
+			"--state-dir", tc.StateDir,
+		).AssertFailure().
+			AssertStderrContains("routing collision")
+	})
+
+	// Scenario E5 — in-scope vs out-of-scope still fails, naming both apps.
+	s.Test("deploy team fails when its app collides with another team's app", func(tc *TestCase) {
+		tc.Run("deploy", "team", teamA,
+			"--dry-run",
+			"--path", deployTeamFixturesPath("collision-cross"),
+			"--state-dir", tc.StateDir,
+		).AssertFailure().
+			AssertStderrContains("shrine-team-a/alpha").
+			AssertStderrContains("shrine-team-b/beta").
+			AssertStderrContains("collide-cross.test.local")
+	})
+
 	// Scenario F — typo case: error names the typo AND lists known teams.
 	s.Test("deploy team <typo> exits non-zero and lists known teams", func(tc *TestCase) {
 		tc.Run("deploy", "team", "markting",

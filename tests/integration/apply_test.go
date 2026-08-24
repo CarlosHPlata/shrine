@@ -67,15 +67,39 @@ func TestApplyTeams(t *testing.T) {
 	})
 
 	s.Test("should apply teams fail loudly when shrine manifest has bad kind", func(tc *TestCase) {
-		// ApplyTeams continues past parse errors today (logs to stdout, exit 0). The
-		// regression guard asserts the file path + offending kind are visible in the
-		// output, regardless of exit code — pinning the FR-007 promise without altering
-		// the historical UX.
+		// bad-kind/ holds a valid team.yaml beside typo.yaml (kind: Aplication). The
+		// run must exit non-zero, name the file and kind on stderr, and write nothing.
 		tc.Run("apply", "teams",
 			"--path", applyFixturesPath("bad-kind"),
 			"--state-dir", tc.StateDir,
-		).AssertOutputContains("typo.yaml").
-			AssertOutputContains("Aplication")
+		).AssertFailure().
+			AssertStderrContains("typo.yaml").
+			AssertStderrContains("Aplication")
+		tc.AssertTeamNotInState("shrine-apply-test")
+	})
+
+	s.Test("should report every broken manifest and write no team", func(tc *TestCase) {
+		// multi-broken/ holds typo.yaml (bad kind), noname.yaml (Team without
+		// metadata.name) and a valid team.yaml: both defects in one run, zero writes.
+		tc.Run("apply", "teams",
+			"--path", applyFixturesPath("multi-broken"),
+			"--state-dir", tc.StateDir,
+		).AssertFailure().
+			AssertStderrContains("apply teams failed").
+			AssertStderrContains("typo.yaml").
+			AssertStderrContains("noname.yaml")
+		tc.AssertTeamCount(0)
+	})
+
+	s.Test("should reject a Team manifest that fails validation", func(tc *TestCase) {
+		tc.Run("apply", "teams",
+			"--path", applyFixturesPath("invalid-team"),
+			"--state-dir", tc.StateDir,
+		).AssertFailure().
+			AssertStderrContains("validating manifest").
+			AssertStderrContains("noname.yaml").
+			AssertStderrContains("metadata.name is required")
+		tc.AssertTeamCount(0)
 	})
 }
 
@@ -181,5 +205,28 @@ func TestApplyFile(t *testing.T) {
 			"--state-dir", tc.StateDir,
 		).AssertSuccess()
 		tc.AssertContainerRunning(applyTestTeam + ".whoami-apply-foreign")
+	})
+
+	s.Test("should reject apply -f when the manifest collides with an existing route", func(tc *TestCase) {
+		// routing-collision/ holds app-a and app-b both claiming collision.apply.local.
+		// Applying app-b alone must fail with the same diagnostic deploy emits and
+		// leave no container behind.
+		tc.Run("apply", "-f", applyFixturesPath("routing-collision", "app-b.yml"),
+			"--path", applyFixturesPath("routing-collision"),
+			"--state-dir", tc.StateDir,
+		).AssertFailure().
+			AssertStderrContains("routing validation failed").
+			AssertStderrContains("routing collision").
+			AssertStderrContains("shrine-apply-test/app-a").
+			AssertStderrContains("shrine-apply-test/app-b")
+		tc.AssertContainerNotExists(applyTestTeam + ".app-b")
+	})
+
+	s.Test("should apply -f succeed when the only collision does not involve the applied app", func(tc *TestCase) {
+		tc.Run("apply", "-f", applyFixturesPath("routing-collision", "app-c.yml"),
+			"--path", applyFixturesPath("routing-collision"),
+			"--state-dir", tc.StateDir,
+		).AssertSuccess()
+		tc.AssertContainerRunning(applyTestTeam + ".app-c")
 	})
 }
