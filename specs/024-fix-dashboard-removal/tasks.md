@@ -104,7 +104,7 @@
 - [X] T024 Run the full unit suite at repository root: `go test ./...` — zero failures, zero new warnings (SC-006)
 - [X] T025 [P] Update `specs/progress.md`: add the 024 feature entry with its acceptance criteria and gate status per the Development Workflow
 - [X] T026 [P] Run `graphify update .` to refresh the knowledge graph after the code changes (project rule, AST-only)
-- [ ] T027 Push the branch and confirm the CI integration pipeline is green (executes the T006/T015 scenario — the Constitution V gate); optionally walk `quickstart.md` against a live Docker host
+- [X] T027 Push the branch and confirm the CI integration pipeline is green (executes the T006/T015 scenario — the Constitution V gate); optionally walk `quickstart.md` against a live Docker host
 
 ---
 
