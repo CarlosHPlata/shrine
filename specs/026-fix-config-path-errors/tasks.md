@@ -81,7 +81,7 @@
 - [X] T020 [P] Add the fix entry to `specs/progress.md` directly above the 025 entry (line 89), same style: `- [x] **Fix: field-naming config path errors that always stop the command** — see `specs/026-fix-config-path-errors/` (issue #37). …` summarising `pathSource`-labelled `resolvePath` (`resolving <--path|specsDir|teamsDir|routing-dir>: expanding ~: …`, fallback names the supplier), the simplified Traefik wrap, `BuildDeployBundle` propagation, `resolveOptionalSpecsDir` in `BuildTeardownBundle` (absent tolerated, unresolvable fails before the file logger), acceptance SC-001–SC-004, and the gate (`TestConfigPathResolution` C1–C9/S1–S2 + existing `TestTeardown`, CI executes)
 - [X] T021 Run the full local gate at repository root: `gofmt -l .` prints nothing, `go vet ./...` clean, `go test ./...` zero failures, `go vet -tags integration ./tests/integration/...` clean (SC-003)
 - [X] T022 [P] Run `graphify update .` to refresh the knowledge graph after the code changes (project rule, AST-only)
-- [ ] T023 Push the branch and confirm the CI integration pipeline is green — it executes `TestConfigPathResolution` (T005/T013) and `TestTeardown`, which together form the Constitution V gate; optionally walk `specs/026-fix-config-path-errors/quickstart.md` against a built binary with `env -u HOME`
+- [X] T023 Push the branch and confirm the CI integration pipeline is green — it executes `TestConfigPathResolution` (T005/T013) and `TestTeardown`, which together form the Constitution V gate; optionally walk `specs/026-fix-config-path-errors/quickstart.md` against a built binary with `env -u HOME`
 
 ---
 
