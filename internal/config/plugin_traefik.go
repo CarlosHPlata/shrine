@@ -16,7 +16,7 @@ type TraefikDashboardConfig struct {
 
 func (p *TraefikPluginConfig) ResolveRoutingDir(specsDir string) (string, error) {
 	return resolvePath(
-		[]string{p.RoutingDir, specsDir},
+		[]pathSource{{"routing-dir", p.RoutingDir}, {"specsDir", specsDir}},
 		"no routing directory: set --path/-p flag or routing-dir in config.yml",
 	)
 }

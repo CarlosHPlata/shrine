@@ -26,6 +26,10 @@ Fix every error listed in the multi-error report. Shrine surfaces all issues in 
 
 The plan succeeded but the actual Docker operation failed. Check Docker's stderr for errors like missing images, port conflicts, or network issues. Verify the image exists, ports are available, and your registries are configured correctly.
 
+## `resolving specsDir: expanding ~: $HOME is not defined`
+
+A `~`-prefixed path in `config.yml` (`specsDir`, `teamsDir`, or the Traefik `routing-dir`) or in `--path` could not be expanded because the process has no home directory — typical under cron, CI runners, systemd units, and containers. The error names the field or flag that supplied the value: replace it with an absolute path, export `HOME` for that environment, or pass an absolute `--path`. Shrine stops before any deployment side effect, so there is nothing to clean up.
+
 ## See also
 
 - [`shrine apply`](/cli/apply/) — Deploy manifests

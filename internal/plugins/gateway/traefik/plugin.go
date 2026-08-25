@@ -119,7 +119,7 @@ func ReservedHostPorts(cfg *config.TraefikPluginConfig) []int {
 func (p *Plugin) resolvedRoutingDir() (string, error) {
 	routingDir, err := p.cfg.ResolveRoutingDir(filepath.Join(p.specsDir, "traefik"))
 	if err != nil {
-		return "", fmt.Errorf("traefik plugin: resolving routing directory: %w", err)
+		return "", fmt.Errorf("traefik plugin: %w", err)
 	}
 	return routingDir, nil
 }

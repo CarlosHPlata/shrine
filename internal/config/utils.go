@@ -19,11 +19,21 @@ func expandTilde(path string) (string, error) {
 	return filepath.Join(home, path[1:]), nil
 }
 
-func resolvePath(candidates []string, missingErr string) (string, error) {
-	for _, c := range candidates {
-		if c != "" {
-			return expandTilde(c)
+type pathSource struct {
+	name  string
+	value string
+}
+
+func resolvePath(sources []pathSource, missingErr string) (string, error) {
+	for _, s := range sources {
+		if s.value == "" {
+			continue
 		}
+		resolved, err := expandTilde(s.value)
+		if err != nil {
+			return "", fmt.Errorf("resolving %s: %w", s.name, err)
+		}
+		return resolved, nil
 	}
 	return "", errors.New(missingErr)
 }

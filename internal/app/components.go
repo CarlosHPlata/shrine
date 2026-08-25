@@ -9,8 +9,8 @@ import (
 	"github.com/CarlosHPlata/shrine/internal/engine"
 	"github.com/CarlosHPlata/shrine/internal/engine/local"
 	"github.com/CarlosHPlata/shrine/internal/plugins/gateway/traefik"
-	infisicalplugin "github.com/CarlosHPlata/shrine/internal/plugins/secrets/infisical"
 	"github.com/CarlosHPlata/shrine/internal/plugins/secrets"
+	infisicalplugin "github.com/CarlosHPlata/shrine/internal/plugins/secrets/infisical"
 	"github.com/CarlosHPlata/shrine/internal/state"
 	"github.com/CarlosHPlata/shrine/internal/ui"
 )
@@ -50,6 +50,14 @@ func NewQueryContainerBackend(cfg *config.Config, store *state.Store) (engine.Co
 // newTraefikPlugin constructs the Traefik gateway plugin.
 func newTraefikPlugin(cfg *config.Config, container engine.ContainerBackend, specsDir string, observer engine.Observer) (*traefik.Plugin, error) {
 	return traefik.New(cfg.Plugins.Gateway.Traefik, container, specsDir, observer)
+}
+
+// Teardown reads no manifests, so an unset specsDir is not an error.
+func resolveOptionalSpecsDir(cfg *config.Config) (string, error) {
+	if cfg.SpecsDir == "" {
+		return "", nil
+	}
+	return cfg.ResolveSpecsDir("")
 }
 
 // newLocalEngine constructs the local deploy engine.

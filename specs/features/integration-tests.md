@@ -22,6 +22,7 @@ Tests read like a spec, not like Go boilerplate. The `testutils` package exposes
 - `tc.AssertSuccess()` / `tc.AssertFailure()` — exit code assertions
 - `tc.AssertOutputContains(s)` — stdout substring
 - `tc.AssertStderrContains(s)` — stderr substring
+- `tc.AssertStderrNotContains(s)` — stderr must not contain substring
 - `tc.AssertFileExists(path)` — filesystem assertion
 - `tc.AssertSpecHas(path, "dot.notation.key", "value")` — parses YAML and asserts a field value
 
@@ -124,6 +125,20 @@ Test cases (`tests/integration/apply_test.go`):
 - `apply teams --path <dir>` on `tests/testdata/apply/bad-kind/` (valid team + `kind: Aplication`) — assert non-zero exit, `typo.yaml` and `Aplication` on stderr, and `AssertTeamNotInState` (spec 025: nothing is written when any shrine file is broken)
 - `apply teams --path <dir>` on `tests/testdata/apply/multi-broken/` — assert both broken files appear on stderr in one run and `AssertTeamCount(0)`
 - `apply teams --path <dir>` on `tests/testdata/apply/invalid-team/` (Team without `metadata.name`) — assert `validating manifest` + `metadata.name is required` on stderr and `AssertTeamCount(0)`
+
+### Config path resolution — spec 026
+
+No Docker needed. `tests/integration/config_paths_test.go` runs on `NewSuite` with `HOME` emptied via `tc.Setenv("HOME", "")` (inherited by the binary) and a `--config-dir` whose `config.yml` sets `specsDir: ~/manifests` and `teamsDir: ~/teams`; every failing scenario stops before any Docker call or state write.
+
+Test cases (`TestConfigPathResolution`):
+- `deploy`, `deploy --dry-run`, `deploy team <t>` — assert non-zero exit, `resolving specsDir: expanding ~` on stderr exactly once, and no `<state>/logs/` directory (the file logger was never opened)
+- `apply teams` — stderr `resolving teamsDir: expanding ~` and `AssertTeamCount(0)`; with a `specsDir`-only config the error names `specsDir` and not `teamsDir` (the fallback names the field that supplied the value)
+- `apply -f <file>`, `generate team <name>` — stderr `resolving specsDir`
+- `deploy --path '~/manifests'` — stderr `resolving --path: expanding ~` and not `resolving specsDir`
+- `apply teams --path <abs>` then `deploy --dry-run --path <abs>` — both succeed; an absolute flag hides the unresolvable config value
+- `teardown <team>` — stderr `resolving specsDir` exactly once and no `<state>/logs/` (spec 026 US2: `BuildTeardownBundle` stops before composing anything)
+
+The existing `TestTeardown` (no `--config-dir`, hence no `specsDir`) remains the gate for "an absent `specsDir` is still tolerated by teardown".
 
 ### Phase 4 — Docker-backed deploy tests ✅
 

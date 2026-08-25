@@ -87,6 +87,7 @@ func TestResolveSpecsDir(t *testing.T) {
 		cfg       Config
 		want      string
 		wantErr   string
+		noHome    bool
 	}{
 		{
 			name:    "both flag and config empty returns error naming both options",
@@ -123,11 +124,40 @@ func TestResolveSpecsDir(t *testing.T) {
 			flagValue: "/etc/shrine/specs",
 			want:      "/etc/shrine/specs",
 		},
+		{
+			name:    "tilde in config value with no home names specsDir",
+			cfg:     Config{SpecsDir: "~/specs"},
+			noHome:  true,
+			wantErr: "resolving specsDir: expanding ~",
+		},
+		{
+			name:      "tilde in flag value with no home names --path",
+			flagValue: "~/specs",
+			noHome:    true,
+			wantErr:   "resolving --path: expanding ~",
+		},
+		{
+			name:   "absolute config value with no home succeeds",
+			cfg:    Config{SpecsDir: "/abs/specs"},
+			noHome: true,
+			want:   "/abs/specs",
+		},
+		{
+			name:      "absolute flag with tilde config and no home returns the flag",
+			flagValue: "/abs/from/flag",
+			cfg:       Config{SpecsDir: "~/specs"},
+			noHome:    true,
+			want:      "/abs/from/flag",
+		},
 	}
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			t.Setenv("HOME", fakeHome)
+			home := fakeHome
+			if tc.noHome {
+				home = ""
+			}
+			t.Setenv("HOME", home)
 			got, err := tc.cfg.ResolveSpecsDir(tc.flagValue)
 			if tc.wantErr != "" {
 				if err == nil {
@@ -157,6 +187,7 @@ func TestResolveTeamsDir(t *testing.T) {
 		cfg       Config
 		want      string
 		wantErr   string
+		noHome    bool
 	}{
 		{
 			name:    "all three sources empty returns error",
@@ -193,11 +224,39 @@ func TestResolveTeamsDir(t *testing.T) {
 			cfg:  Config{SpecsDir: "~/specs"},
 			want: fakeHome + "/specs",
 		},
+		{
+			name:    "tilde teamsDir with no home names teamsDir",
+			cfg:     Config{TeamsDir: "~/teams"},
+			noHome:  true,
+			wantErr: "resolving teamsDir: expanding ~",
+		},
+		{
+			name:    "fallback to tilde specsDir with no home names specsDir",
+			cfg:     Config{SpecsDir: "~/specs"},
+			noHome:  true,
+			wantErr: "resolving specsDir: expanding ~",
+		},
+		{
+			name:      "tilde flag with no home names --path",
+			flagValue: "~/teams",
+			noHome:    true,
+			wantErr:   "resolving --path: expanding ~",
+		},
+		{
+			name:   "absolute teamsDir with tilde specsDir and no home returns teamsDir",
+			cfg:    Config{TeamsDir: "/from/teams", SpecsDir: "~/specs"},
+			noHome: true,
+			want:   "/from/teams",
+		},
 	}
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			t.Setenv("HOME", fakeHome)
+			home := fakeHome
+			if tc.noHome {
+				home = ""
+			}
+			t.Setenv("HOME", home)
 			got, err := tc.cfg.ResolveTeamsDir(tc.flagValue)
 			if tc.wantErr != "" {
 				if err == nil {
@@ -215,5 +274,19 @@ func TestResolveTeamsDir(t *testing.T) {
 				t.Errorf("ResolveTeamsDir(flag=%q, cfg=%+v) = %q, want %q", tc.flagValue, tc.cfg, got, tc.want)
 			}
 		})
+	}
+}
+
+func TestResolveTeamsDir_FallbackNamesSpecsDirNotTeamsDir(t *testing.T) {
+	t.Setenv("HOME", "")
+	_, err := (&Config{SpecsDir: "~/specs"}).ResolveTeamsDir("")
+	if err == nil {
+		t.Fatal("ResolveTeamsDir succeeded, want a resolution error")
+	}
+	if !strings.Contains(err.Error(), "resolving specsDir") {
+		t.Errorf("error %q should name specsDir", err.Error())
+	}
+	if strings.Contains(err.Error(), "teamsDir") {
+		t.Errorf("error %q must not blame teamsDir when specsDir supplied the value", err.Error())
 	}
 }

@@ -110,7 +110,10 @@ func BuildDeployBundle(cfg *config.Config, store *state.Store, paths *config.Pat
 		return nil, nil, fmt.Errorf("validating registries: %w", err)
 	}
 
-	specsDir, _ := cfg.ResolveSpecsDir(manifestDir)
+	specsDir, err := cfg.ResolveSpecsDir(manifestDir)
+	if err != nil {
+		return nil, nil, err
+	}
 
 	observer, closeObserver, err := newObserverPair(out, paths)
 	if err != nil {
@@ -174,7 +177,10 @@ func BuildDeployBundle(cfg *config.Config, store *state.Store, paths *config.Pat
 // container backend — teardown does not push images), routing backend,
 // local engine. No vault: teardown does not resolve secrets.
 func BuildTeardownBundle(cfg *config.Config, store *state.Store, paths *config.Paths, out io.Writer) (*TeardownBundle, func() error, error) {
-	specsDir, _ := cfg.ResolveSpecsDir("")
+	specsDir, err := resolveOptionalSpecsDir(cfg)
+	if err != nil {
+		return nil, nil, err
+	}
 
 	observer, closeObserver, err := newObserverPair(out, paths)
 	if err != nil {
