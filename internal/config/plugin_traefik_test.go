@@ -14,14 +14,15 @@ func TestResolveRoutingDir(t *testing.T) {
 		specsDir string
 		want     string
 		wantErr  string
+		noHome   bool
 	}{
 		{
 			name:    "both routingDir and specsDir empty returns error",
 			wantErr: "no routing directory",
 		},
 		{
-			name: "routingDir wins over specsDir fallback",
-			cfg:  TraefikPluginConfig{RoutingDir: "/from/routing"},
+			name:     "routingDir wins over specsDir fallback",
+			cfg:      TraefikPluginConfig{RoutingDir: "/from/routing"},
 			specsDir: "/from/specs",
 			want:     "/from/routing",
 		},
@@ -50,11 +51,27 @@ func TestResolveRoutingDir(t *testing.T) {
 			cfg:  TraefikPluginConfig{RoutingDir: "~"},
 			want: fakeHome,
 		},
+		{
+			name:    "tilde routingDir with no home names routing-dir",
+			cfg:     TraefikPluginConfig{RoutingDir: "~/traefik"},
+			noHome:  true,
+			wantErr: "resolving routing-dir: expanding ~",
+		},
+		{
+			name:     "tilde specsDir fallback with no home names specsDir",
+			specsDir: "~/specs/traefik",
+			noHome:   true,
+			wantErr:  "resolving specsDir: expanding ~",
+		},
 	}
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			t.Setenv("HOME", fakeHome)
+			home := fakeHome
+			if tc.noHome {
+				home = ""
+			}
+			t.Setenv("HOME", home)
 			got, err := tc.cfg.ResolveRoutingDir(tc.specsDir)
 			if tc.wantErr != "" {
 				if err == nil {

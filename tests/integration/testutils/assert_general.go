@@ -90,6 +90,14 @@ func (tc *TestCase) AssertOutputNotContains(s string) *TestCase {
 	return tc
 }
 
+func (tc *TestCase) AssertStderrNotContains(s string) *TestCase {
+	tc.t.Helper()
+	if strings.Contains(tc.result.Stderr, s) {
+		tc.t.Fatalf("expected stderr NOT to contain %q\nstderr: %s", s, tc.result.Stderr)
+	}
+	return tc
+}
+
 func expandTilde(path string) (string, error) {
 	if path != "~" && !strings.HasPrefix(path, "~/") {
 		return path, nil

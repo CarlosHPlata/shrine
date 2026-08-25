@@ -110,7 +110,7 @@ func (c *Config) ValidateRegistries() error {
 // Tilde (~) at the start of a path is expanded to the user's home directory.
 func (c *Config) ResolveSpecsDir(flagValue string) (string, error) {
 	return resolvePath(
-		[]string{flagValue, c.SpecsDir},
+		[]pathSource{{"--path", flagValue}, {"specsDir", c.SpecsDir}},
 		"no specs directory: set --path/-p flag or specsDir in config.yml",
 	)
 }
@@ -122,7 +122,7 @@ func (c *Config) ResolveSpecsDir(flagValue string) (string, error) {
 //  4. error if none is set
 func (c *Config) ResolveTeamsDir(flagValue string) (string, error) {
 	return resolvePath(
-		[]string{flagValue, c.TeamsDir, c.SpecsDir},
+		[]pathSource{{"--path", flagValue}, {"teamsDir", c.TeamsDir}, {"specsDir", c.SpecsDir}},
 		"no specs directory: set --path/-p flag, teamsDir or specsDir in config.yml",
 	)
 }
