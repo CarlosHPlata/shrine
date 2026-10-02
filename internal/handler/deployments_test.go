@@ -27,7 +27,10 @@ func (m *memTeamStore) ListTeams() ([]*manifest.TeamManifest, error) {
 }
 func (m *memTeamStore) DeleteTeam(string) error { return nil }
 
-type memDeploymentStore struct{ byTeam map[string][]state.Deployment }
+type memDeploymentStore struct {
+	byTeam  map[string][]state.Deployment
+	listErr error
+}
 
 func (m *memDeploymentStore) Record(team string, d state.Deployment) error {
 	m.byTeam[team] = append(m.byTeam[team], d)
@@ -44,6 +47,9 @@ func (m *memDeploymentStore) Remove(team, name string) error {
 	return nil
 }
 func (m *memDeploymentStore) List(team string) ([]state.Deployment, error) {
+	if m.listErr != nil {
+		return nil, m.listErr
+	}
 	return m.byTeam[team], nil
 }
 

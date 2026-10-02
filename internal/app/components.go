@@ -20,7 +20,7 @@ import (
 // file logger; callers must defer it.
 func newObserverPair(out io.Writer, paths *config.Paths) (engine.Observer, func() error, error) {
 	terminal := ui.NewTerminalObserver(out)
-	fileLogger, err := ui.NewFileLogger(paths.StateDir)
+	fileLogger, err := newFileLogger(paths.StateDir)
 	if err != nil {
 		return nil, nil, fmt.Errorf("initializing file logger: %w", err)
 	}
@@ -28,17 +28,42 @@ func newObserverPair(out io.Writer, paths *config.Paths) (engine.Observer, func(
 	return observer, fileLogger.Close, nil
 }
 
-// newVault constructs the secrets vault plugin from config.
-func newVault(cfg *config.Config) (secrets.SecretsPlugin, error) {
-	return infisicalplugin.New(cfg.Plugins.Secrets.Infisical)
+// closableObserver is the file logger as newObserverPair uses it.
+type closableObserver interface {
+	engine.Observer
+	Close() error
 }
 
-// newContainerBackend constructs the standalone container backend used by the
-// Traefik plugin during deploys (it deploys its own container outside the engine
-// orchestration loop).
-func newContainerBackend(store *state.Store, registries []config.RegistryConfig, observer engine.Observer) (engine.ContainerBackend, error) {
-	return local.NewContainerBackend(store, registries, observer)
-}
+// The collaborator constructors are variables so tests in this package can
+// substitute them without a filesystem, Docker daemon, or network. Production
+// code never reassigns them: each collaborator is still built in one place.
+var (
+	newFileLogger = func(stateDir string) (closableObserver, error) {
+		logger, err := ui.NewFileLogger(stateDir)
+		if err != nil {
+			return nil, err
+		}
+		return logger, nil
+	}
+
+	// newVault constructs the secrets vault plugin from config.
+	newVault = func(cfg *config.Config) (secrets.SecretsPlugin, error) {
+		return infisicalplugin.New(cfg.Plugins.Secrets.Infisical)
+	}
+
+	// newContainerBackend constructs the standalone container backend used by the
+	// Traefik plugin during deploys (it deploys its own container outside the engine
+	// orchestration loop).
+	newContainerBackend = local.NewContainerBackend
+
+	// newTraefikPlugin constructs the Traefik gateway plugin.
+	newTraefikPlugin = func(cfg *config.Config, container engine.ContainerBackend, specsDir string, observer engine.Observer) (*traefik.Plugin, error) {
+		return traefik.New(cfg.Plugins.Gateway.Traefik, container, specsDir, observer)
+	}
+
+	// newLocalEngine constructs the local deploy engine.
+	newLocalEngine = local.NewLocalEngine
+)
 
 // NewQueryContainerBackend builds a container backend for commands that only
 // query Docker state (e.g. delete application's is-it-still-running probe) —
@@ -47,22 +72,12 @@ func NewQueryContainerBackend(cfg *config.Config, store *state.Store) (engine.Co
 	return local.NewContainerBackend(store, cfg.Registries, engine.NoopObserver{})
 }
 
-// newTraefikPlugin constructs the Traefik gateway plugin.
-func newTraefikPlugin(cfg *config.Config, container engine.ContainerBackend, specsDir string, observer engine.Observer) (*traefik.Plugin, error) {
-	return traefik.New(cfg.Plugins.Gateway.Traefik, container, specsDir, observer)
-}
-
 // Teardown reads no manifests, so an unset specsDir is not an error.
 func resolveOptionalSpecsDir(cfg *config.Config) (string, error) {
 	if cfg.SpecsDir == "" {
 		return "", nil
 	}
 	return cfg.ResolveSpecsDir("")
-}
-
-// newLocalEngine constructs the local deploy engine.
-func newLocalEngine(opts local.EngineOptions) (*engine.Engine, error) {
-	return local.NewLocalEngine(opts)
 }
 
 // routingFromPlugin extracts the routing backend from an active Traefik plugin.

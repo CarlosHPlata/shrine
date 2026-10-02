@@ -58,9 +58,10 @@ type ApplyBundle struct {
 
 // BuildApplyBundle composes the dependency graph for `shrine apply --file`.
 //
-// On success the returned cleanup func is non-nil and idempotent — callers
-// MUST defer it. On failure all three return values are zero; partial state
-// has been unwound internally.
+// On success the returned cleanup func is non-nil and safe to call more than
+// once (a repeated call reports the already-closed writer) — callers MUST
+// defer it. On failure all three return values are zero; partial state has
+// been unwound internally.
 func BuildApplyBundle(cfg *config.Config, store *state.Store, paths *config.Paths, out, errOut io.Writer) (*ApplyBundle, func() error, error) {
 	if err := cfg.ValidateRegistries(); err != nil {
 		return nil, nil, fmt.Errorf("validating registries: %w", err)
