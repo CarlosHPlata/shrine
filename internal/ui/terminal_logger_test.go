@@ -3,10 +3,56 @@ package ui
 import (
 	"bytes"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/CarlosHPlata/shrine/internal/engine"
 )
+
+// safeBuffer is a concurrency-safe destination: the spinner goroutine writes
+// while OnEvent does, which os.Stdout tolerates in production.
+type safeBuffer struct {
+	mu  sync.Mutex
+	buf bytes.Buffer
+}
+
+func (b *safeBuffer) Write(p []byte) (int, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.Write(p)
+}
+
+func (b *safeBuffer) String() string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.String()
+}
+
+// newObserverWithBuffer stops any indicator still running when the test
+// ends, so no spinner goroutine outlives it.
+func newObserverWithBuffer(t *testing.T) (*TerminalObserver, *safeBuffer) {
+	t.Helper()
+	buf := &safeBuffer{}
+	obs := NewTerminalObserver(buf)
+	t.Cleanup(func() { stopSpinner(obs) })
+	return obs, buf
+}
+
+func stopSpinner(obs *TerminalObserver) {
+	if obs.spinner != nil {
+		obs.spinner.stop()
+		obs.spinner = nil
+	}
+}
+
+// ev builds an event from alternating field keys and values.
+func ev(name string, status engine.EventStatus, kv ...string) engine.Event {
+	fields := make(map[string]string, len(kv)/2)
+	for i := 0; i+1 < len(kv); i += 2 {
+		fields[kv[i]] = kv[i+1]
+	}
+	return engine.Event{Name: name, Status: status, Fields: fields}
+}
 
 // failedCreateEvents is the exact sequence one failed container creation
 // produces: the engine's informational progress event, the backend's error
@@ -64,6 +110,140 @@ func TestTerminalObserver_ContainerCreate(t *testing.T) {
 		want := "  🏗️  Creating container: shrine-deploy-test.alias-app\n"
 		if got := buf.String(); got != want {
 			t.Errorf("success output changed:\ngot  %q\nwant %q", got, want)
+		}
+	})
+}
+
+func TestTerminalObserver_RendersEachKind(t *testing.T) {
+	const (
+		traefikYml = "/routes/traefik.yml"
+		routeFile  = "/routes/dynamic/team-a-web.yml"
+		dashboard  = "/routes/dynamic/__shrine-dashboard.yml"
+		hint       = "add a websecure entrypoint"
+	)
+
+	cases := []struct {
+		event engine.Event
+		want  string
+	}{
+		{ev("application.deploy", engine.StatusStarted, "name", "web", "owner", "team-a"),
+			"🚀 Deploying Application: web (owner: team-a)\n"},
+		{ev("application.teardown", engine.StatusStarted, "name", "web", "team", "team-a"),
+			"🗑️  Tearing down Application: web (team: team-a)\n"},
+		{ev("resource.deploy", engine.StatusStarted, "name", "db", "type", "postgres"),
+			"📦 Deploying Resource: db (type: postgres)\n"},
+		{ev("resource.teardown", engine.StatusStarted, "name", "db", "team", "team-a"),
+			"🗑️  Tearing down Resource: db (team: team-a)\n"},
+		{ev("network.ensure", engine.StatusInfo, "owner", "team-a"),
+			"  🌐 Ensuring network: shrine.team-a.private\n"},
+		{ev("container.create", engine.StatusInfo, "team", "team-a", "name", "web"),
+			"  🏗️  Creating container: team-a.web\n"},
+		{ev("routing.configure", engine.StatusInfo, "domain", "web.example.com", "port", "8080"),
+			"  🔗 Configuring routing: web.example.com -> port 8080\n"},
+		{ev("gateway.config.preserved", engine.StatusInfo, "path", traefikYml),
+			"  📄 Preserving operator-owned traefik.yml: /routes/traefik.yml\n"},
+		{ev("gateway.config.generated", engine.StatusInfo, "path", traefikYml),
+			"  📝 Generated default traefik.yml: /routes/traefik.yml\n"},
+		{ev("gateway.config.legacy_http_block", engine.StatusWarning, "path", traefikYml, "hint", hint),
+			"  ⚠️  Legacy http block in traefik.yml at /routes/traefik.yml — add a websecure entrypoint\n"},
+		{ev("gateway.config.tls_port_no_websecure", engine.StatusWarning, "path", traefikYml, "hint", hint),
+			"  ⚠️  tlsPort set but traefik.yml is missing websecure entrypoint at /routes/traefik.yml — add a websecure entrypoint\n"},
+		{ev("gateway.alias.tls_no_websecure", engine.StatusWarning, "path", traefikYml, "team", "team-a", "name", "web", "tls_aliases", "alias.example.com", "hint", hint),
+			"  ⚠️  alias tls: true but websecure entrypoint missing in /routes/traefik.yml for team-a.web (alias.example.com) — add a websecure entrypoint\n"},
+		{ev("gateway.config.legacy_probe_error", engine.StatusWarning, "path", traefikYml, "error", "permission denied"),
+			"  ⚠️  Could not probe traefik.yml for legacy http block (deploy continues): /routes/traefik.yml (permission denied)\n"},
+		{ev("gateway.config.tls_port_probe_error", engine.StatusWarning, "path", traefikYml, "error", "permission denied"),
+			"  ⚠️  Could not probe traefik.yml for websecure entrypoint (deploy continues): /routes/traefik.yml (permission denied)\n"},
+		{ev("gateway.dashboard.generated", engine.StatusInfo, "path", dashboard),
+			"  📝 Generated dashboard dynamic file: /routes/dynamic/__shrine-dashboard.yml\n"},
+		{ev("gateway.dashboard.preserved", engine.StatusInfo, "path", dashboard),
+			"  📄 Preserving operator-owned dashboard dynamic file: /routes/dynamic/__shrine-dashboard.yml\n"},
+		{ev("gateway.dashboard.removed", engine.StatusInfo, "path", dashboard),
+			"  🗑️  Removed stale dashboard dynamic file: /routes/dynamic/__shrine-dashboard.yml\n"},
+		{ev("gateway.route.generated", engine.StatusInfo, "path", routeFile),
+			"  📝 Generated route file: /routes/dynamic/team-a-web.yml\n"},
+		{ev("gateway.route.preserved", engine.StatusInfo, "path", routeFile),
+			"  📄 Preserving operator-owned route file: /routes/dynamic/team-a-web.yml\n"},
+		{ev("gateway.route.stat_error", engine.StatusWarning, "path", routeFile, "error", "permission denied"),
+			"  ⚠️  Could not stat route file (deploy continues): /routes/dynamic/team-a-web.yml (permission denied)\n"},
+		{ev("gateway.route.orphan", engine.StatusWarning, "path", routeFile),
+			"  ⚠️  Orphan route file left on disk; remove with: rm /routes/dynamic/team-a-web.yml\n"},
+		{ev("dns.register", engine.StatusInfo, "domain", "web.example.com"),
+			"  🌍 Registering DNS: web.example.com\n"},
+		{ev("container.start", engine.StatusInfo, "name", "team-a.web"),
+			"    ▶️  Starting existing container: team-a.web\n"},
+		{ev("container.recreate", engine.StatusInfo, "name", "team-a.web"),
+			"    🔄 Image changed for team-a.web, replacing container...\n"},
+		{ev("container.fresh", engine.StatusInfo, "name", "team-a.web"),
+			"    ✨ Creating fresh container: team-a.web\n"},
+		{ev("container.created", engine.StatusFinished, "name", "team-a.web"),
+			"    ✅ Container team-a.web is running\n"},
+		{ev("hostport.published", engine.StatusFinished, "team", "team-a", "name", "web", "hostPort", "30000", "containerPort", "8080", "proto", "tcp"),
+			"    📡 Published team-a/web on 127.0.0.1:30000 -> 8080/tcp\n"},
+		{ev("container.remove", engine.StatusInfo, "name", "team-a.web", "reason", "not found"),
+			"    ℹ️  Container team-a.web not found, skipping removal\n"},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.event.Name, func(t *testing.T) {
+			obs, buf := newObserverWithBuffer(t)
+
+			obs.OnEvent(tc.event)
+
+			if got := buf.String(); got != tc.want {
+				t.Errorf("rendered line changed:\ngot  %q\nwant %q", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestTerminalObserver_RoutingConfigureAliases(t *testing.T) {
+	const routingLine = "  🔗 Configuring routing: web.example.com -> port 8080\n"
+
+	t.Run("aliases add a sub-line", func(t *testing.T) {
+		obs, buf := newObserverWithBuffer(t)
+
+		obs.OnEvent(ev("routing.configure", engine.StatusInfo,
+			"domain", "web.example.com", "port", "8080", "aliases", "a.example.com, b.example.com/api"))
+
+		want := routingLine + "    ↳ Aliases: a.example.com, b.example.com/api\n"
+		if got := buf.String(); got != want {
+			t.Errorf("got  %q\nwant %q", got, want)
+		}
+	})
+
+	t.Run("no aliases, no sub-line", func(t *testing.T) {
+		obs, buf := newObserverWithBuffer(t)
+
+		obs.OnEvent(ev("routing.configure", engine.StatusInfo,
+			"domain", "web.example.com", "port", "8080", "aliases", ""))
+
+		if got := buf.String(); got != routingLine {
+			t.Errorf("got  %q\nwant %q", got, routingLine)
+		}
+	})
+}
+
+func TestTerminalObserver_GenericErrorLine(t *testing.T) {
+	t.Run("kind with no dedicated rendering", func(t *testing.T) {
+		obs, buf := newObserverWithBuffer(t)
+
+		obs.OnEvent(ev("routing.finalize", engine.StatusError, "error", "boom"))
+
+		want := "  ❌ Error [routing.finalize]: boom\n"
+		if got := buf.String(); got != want {
+			t.Errorf("got  %q\nwant %q", got, want)
+		}
+	})
+
+	t.Run("kind rendered at every status keeps its own line too", func(t *testing.T) {
+		obs, buf := newObserverWithBuffer(t)
+
+		obs.OnEvent(ev("dns.register", engine.StatusError, "domain", "web.example.com", "error", "boom"))
+
+		want := "  ❌ Error [dns.register]: boom\n  🌍 Registering DNS: web.example.com\n"
+		if got := buf.String(); got != want {
+			t.Errorf("got  %q\nwant %q", got, want)
 		}
 	})
 }

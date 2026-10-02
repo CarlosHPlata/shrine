@@ -140,6 +140,14 @@ Test cases (`TestConfigPathResolution`):
 
 The existing `TestTeardown` (no `--config-dir`, hence no `specsDir`) remains the gate for "an absent `specsDir` is still tolerated by teardown".
 
+### File logger — spec 027
+
+Requires Docker. `tests/integration/file_logger_test.go` runs on `NewDockerSuite` with the same `BeforeEach` as `TestTeardown` (`apply teams` + `deploy` of the `basic` fixture into a fresh state dir). It is the only place the log file's on-disk behaviour is pinned — the line format itself is covered by in-memory unit tests in `internal/ui`.
+
+Test cases (`TestFileLogger`):
+- after `apply teams` + `deploy` — `<state>/logs/shrine.log` exists and holds `[started] application.deploy name="whoami" owner="<team>"` (created on first use)
+- after `teardown <team>` against the same state dir — the deploy entry is still present and `[finished] network.remove name="shrine.<team>.private"` has been added (appended across runs, never truncated). The network-removal entry is used because only teardown emits it.
+
 ### Phase 4 — Docker-backed deploy tests ✅
 
 Requires a live Docker daemon. Ubuntu GH Actions runners have Docker out of the box — no DinD needed.

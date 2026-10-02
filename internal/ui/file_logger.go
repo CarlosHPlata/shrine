@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"sort"
@@ -17,8 +18,8 @@ const logFileName = "shrine.log"
 // FileLogger appends every event (including errors) to {stateDir}/logs/shrine.log
 // in a simple human-readable plain-text format.
 type FileLogger struct {
-	file *os.File
-	mu   sync.Mutex
+	out io.WriteCloser
+	mu  sync.Mutex
 }
 
 func NewFileLogger(stateDir string) (*FileLogger, error) {
@@ -33,7 +34,13 @@ func NewFileLogger(stateDir string) (*FileLogger, error) {
 		return nil, fmt.Errorf("opening log file %q: %w", path, err)
 	}
 
-	return &FileLogger{file: f}, nil
+	return newFileLogger(f), nil
+}
+
+// newFileLogger takes the destination as a writer so the line format can be
+// tested without a file.
+func newFileLogger(out io.WriteCloser) *FileLogger {
+	return &FileLogger{out: out}
 }
 
 func (l *FileLogger) OnEvent(e engine.Event) {
@@ -41,11 +48,11 @@ func (l *FileLogger) OnEvent(e engine.Event) {
 	defer l.mu.Unlock()
 
 	ts := time.Now().UTC().Format(time.RFC3339)
-	fmt.Fprintf(l.file, "%s [%s] %s%s\n", ts, e.Status, e.Name, formatFields(e.Fields))
+	fmt.Fprintf(l.out, "%s [%s] %s%s\n", ts, e.Status, e.Name, formatFields(e.Fields))
 }
 
 func (l *FileLogger) Close() error {
-	return l.file.Close()
+	return l.out.Close()
 }
 
 func formatFields(fields map[string]string) string {
