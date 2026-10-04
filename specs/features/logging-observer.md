@@ -62,4 +62,6 @@ Responsibilities:
 
 Use dot-separated namespaces: `<subsystem>.<operation>` (e.g. `image.pull`, `container.create`, `network.create`, `route.write`). The `Status` field carries the lifecycle: `started` → `finished` | `error`.
 
+Event names are always lowercase. A name derived from a manifest kind uses the kind in lowercase (`application.teardown`, `resource.remove`), never the recorded form (`Application`): observers match names exactly, so a capitalised name is silently dropped by the terminal and stands out in the log.
+
 Fields should use lowercase snake_case keys: `"image_ref"`, `"container_name"`, `"team"`.

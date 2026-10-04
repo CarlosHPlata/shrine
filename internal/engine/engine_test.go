@@ -2,6 +2,8 @@ package engine
 
 import (
 	"errors"
+	"slices"
+	"strings"
 	"testing"
 
 	"github.com/CarlosHPlata/shrine/internal/manifest"
@@ -27,10 +29,12 @@ func (f *fakeContainerBackend) RemoveContainer(op RemoveContainerOp) error {
 }
 
 // fakeRoutingBackend records WriteRoute, RemoveRoute and Finalize calls via a
-// shared calls slice. finalizeErr is returned from Finalize when non-nil.
+// shared calls slice. finalizeErr and removeRouteErr are returned from Finalize
+// and RemoveRoute when non-nil.
 type fakeRoutingBackend struct {
-	calls       *[]string
-	finalizeErr error
+	calls          *[]string
+	finalizeErr    error
+	removeRouteErr error
 }
 
 func (f *fakeRoutingBackend) WriteRoute(op WriteRouteOp) error {
@@ -39,7 +43,7 @@ func (f *fakeRoutingBackend) WriteRoute(op WriteRouteOp) error {
 }
 func (f *fakeRoutingBackend) RemoveRoute(team string, host string) error {
 	*f.calls = append(*f.calls, "RemoveRoute:"+team+"/"+host)
-	return nil
+	return f.removeRouteErr
 }
 func (f *fakeRoutingBackend) Finalize() error {
 	*f.calls = append(*f.calls, "Finalize")
@@ -52,6 +56,14 @@ type recordingObserver struct {
 }
 
 func (r *recordingObserver) OnEvent(e Event) { r.events = append(r.events, e) }
+
+// timelineObserver records event names into the slice the fake backends
+// write to, so a test can assert how events and backend calls interleave.
+type timelineObserver struct {
+	calls *[]string
+}
+
+func (o *timelineObserver) OnEvent(e Event) { *o.calls = append(*o.calls, "Event:"+e.Name) }
 
 // stubResolver returns empty resolved values for any resource/application.
 type stubResolver struct{}
@@ -238,6 +250,106 @@ func TestEngine_ExecuteTeardown_StepLoopFailureSkipsFinalize(t *testing.T) {
 		if c == "Finalize" {
 			t.Fatalf("Finalize must NOT be invoked when a teardown step fails; calls=%v", calls)
 		}
+	}
+}
+
+func TestEngine_ExecuteTeardown_AnnouncesEachDeploymentBeforeRemovingIt(t *testing.T) {
+	cases := []struct {
+		name  string
+		steps []planner.PlannedStep
+		want  []string
+	}{
+		{
+			name: "application then resource",
+			steps: []planner.PlannedStep{
+				{Kind: manifest.ApplicationKind, Name: "web"},
+				{Kind: manifest.ResourceKind, Name: "db"},
+			},
+			want: []string{
+				"Event:application.teardown",
+				"RemoveContainer:team-x/web",
+				"Event:resource.teardown",
+				"RemoveContainer:team-x/db",
+			},
+		},
+		{name: "team with no deployments", steps: nil, want: nil},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			var calls []string
+			e := &Engine{
+				Container: &fakeContainerBackend{calls: &calls},
+				Observer:  &timelineObserver{calls: &calls},
+			}
+
+			if err := e.ExecuteTeardown("team-x", tc.steps); err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+
+			if !slices.Equal(calls, tc.want) {
+				t.Errorf("timeline = %v, want %v", calls, tc.want)
+			}
+		})
+	}
+}
+
+func TestEngine_ExecuteTeardown_NamesFailureEventsInLowercase(t *testing.T) {
+	cases := []struct {
+		name      string
+		step      planner.PlannedStep
+		container ContainerBackend
+		routing   RoutingBackend
+		wantEvent string
+		wantErr   string
+	}{
+		{
+			name:      "application container removal",
+			step:      planner.PlannedStep{Kind: manifest.ApplicationKind, Name: "web"},
+			container: &teardownFailingContainerBackend{},
+			wantEvent: "application.remove",
+			wantErr:   `Application "web": remove container failed`,
+		},
+		{
+			name:      "resource container removal",
+			step:      planner.PlannedStep{Kind: manifest.ResourceKind, Name: "db"},
+			container: &teardownFailingContainerBackend{},
+			wantEvent: "resource.remove",
+			wantErr:   `Resource "db": remove container failed`,
+		},
+		{
+			name:      "application route removal",
+			step:      planner.PlannedStep{Kind: manifest.ApplicationKind, Name: "web"},
+			container: &fakeContainerBackend{calls: new([]string)},
+			routing:   &fakeRoutingBackend{calls: new([]string), removeRouteErr: errors.New("remove route failed")},
+			wantEvent: "application.routing_remove",
+			wantErr:   `Application "web" routing: remove route failed`,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			obs := &recordingObserver{}
+			e := &Engine{Container: tc.container, Routing: tc.routing, Observer: obs}
+
+			err := e.ExecuteTeardown("team-x", []planner.PlannedStep{tc.step})
+
+			if err == nil || err.Error() != tc.wantErr {
+				t.Fatalf("error = %v, want %q", err, tc.wantErr)
+			}
+			for _, ev := range obs.events {
+				if ev.Name != strings.ToLower(ev.Name) {
+					t.Errorf("event name %q is not lowercase", ev.Name)
+				}
+			}
+			failure := obs.events[len(obs.events)-1]
+			if failure.Name != tc.wantEvent || failure.Status != StatusError {
+				t.Errorf("last event = %s [%s], want %s [%s]", failure.Name, failure.Status, tc.wantEvent, StatusError)
+			}
+			if failure.Fields["team"] != "team-x" || failure.Fields["name"] != tc.step.Name || failure.Fields["error"] != tc.wantErr {
+				t.Errorf("failure event fields = %v", failure.Fields)
+			}
+		})
 	}
 }
 

@@ -27,9 +27,9 @@ Helpers (`testdoubles_test.go`): `fakeFileLogger`, `swapConstructor[T]`, `useInM
 
 | ID | Test | Assertions | Closes |
 |----|------|------------|--------|
-| B-1 | `TestTeardown_RemovesPlannedDeploymentsThenNetwork` | bundle built by hand from stand-ins (data-model §7); `removed == [{t, web}, {t, db}]` (application before resource); `networks == [t]`; observer saw `Application.teardown` and `Resource.teardown` started events (named after the recorded manifest kind — see tasks.md Implementation Notes) with `team`/`name` fields; error nil | FR-006, SC-004 |
+| B-1 | `TestTeardown_RemovesPlannedDeploymentsThenNetwork` | bundle built by hand from stand-ins (data-model §7); `removed == [{t, web}, {t, db}]` (application before resource); `networks == [t]`; observer saw `application.teardown` and `resource.teardown` started events (lowercase since spec 028 — see tasks.md Implementation Notes) with `team`/`name` fields; error nil | FR-006, SC-004 |
 | B-2 | `TestTeardown_ReturnsListErrorWithoutTouchingBackend` | `listErr` → `errors.Is(err, listErr)`; `removed` and `networks` empty | FR-006 |
-| B-3 | `TestTeardown_StopsAtFirstRemovalFailure` | `removeErr` → `errors.Is(err, removeErr)`; `len(removed) == 1`; `networks` empty; an `Application.remove` `error` event observed | FR-006 |
+| B-3 | `TestTeardown_StopsAtFirstRemovalFailure` | `removeErr` → `errors.Is(err, removeErr)`; `len(removed) == 1`; `networks` empty; an `application.remove` `error` event observed | FR-006 |
 
 Guard: none of B-* imports or calls `app.Build*`, `local.*`, `traefik.*`, `infisicalplugin.*`, `ui.*`; the bundle literal is the only use of `app`.
 

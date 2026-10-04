@@ -94,11 +94,10 @@ func TestTeardown_RemovesPlannedDeploymentsThenNetwork(t *testing.T) {
 	if !slices.Equal(standIns.backend.networks, []string{teardownTeam}) {
 		t.Errorf("networks removed = %v, want exactly the team's", standIns.backend.networks)
 	}
-	// Teardown events are named after the manifest kind as it was recorded.
-	if !standIns.observer.saw(manifest.ApplicationKind+".teardown", engine.StatusStarted, "web") {
+	if !standIns.observer.saw("application.teardown", engine.StatusStarted, "web") {
 		t.Errorf("observer did not see the application teardown start, got %v", standIns.observer.events)
 	}
-	if !standIns.observer.saw(manifest.ResourceKind+".teardown", engine.StatusStarted, "db") {
+	if !standIns.observer.saw("resource.teardown", engine.StatusStarted, "db") {
 		t.Errorf("observer did not see the resource teardown start, got %v", standIns.observer.events)
 	}
 }
@@ -133,7 +132,7 @@ func TestTeardown_StopsAtFirstRemovalFailure(t *testing.T) {
 		t.Errorf("expected one attempted removal and no network removal, got removed=%v networks=%v",
 			standIns.backend.removed, standIns.backend.networks)
 	}
-	if !standIns.observer.saw(manifest.ApplicationKind+".remove", engine.StatusError, "web") {
+	if !standIns.observer.saw("application.remove", engine.StatusError, "web") {
 		t.Errorf("observer did not see the removal error, got %v", standIns.observer.events)
 	}
 }

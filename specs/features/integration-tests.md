@@ -147,6 +147,16 @@ Requires Docker. `tests/integration/file_logger_test.go` runs on `NewDockerSuite
 Test cases (`TestFileLogger`):
 - after `apply teams` + `deploy` — `<state>/logs/shrine.log` exists and holds `[started] application.deploy name="whoami" owner="<team>"` (created on first use)
 - after `teardown <team>` against the same state dir — the deploy entry is still present and `[finished] network.remove name="shrine.<team>.private"` has been added (appended across runs, never truncated). The network-removal entry is used because only teardown emits it.
+- after the same `teardown <team>` — the log also holds `[started] application.teardown name="whoami" team="<team>"` (spec 028: teardown event names are lowercase, like every other entry)
+
+### Teardown output — spec 028
+
+Requires Docker. No scenario is added: teardown runs that already exist gain one stdout assertion each, so the "Tearing down" headers are verified through the real binary without an extra apply + deploy + teardown round-trip.
+
+- `TestTeardown` — `teardown <team>` stdout contains `Tearing down Application: whoami (team: <team>)`
+- `TestTeardownMultiTeam` ("should only teardown the target team leaving the other running") — stdout contains `Tearing down Resource: shared-cache (team: <team-a>)`
+
+The failure names (`application.remove`, `resource.remove`, `application.routing_remove`) are covered by unit tests in `internal/engine` only, because a removal failure cannot be forced deterministically against a real daemon.
 
 ### Phase 4 — Docker-backed deploy tests ✅
 
