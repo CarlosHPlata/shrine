@@ -49,7 +49,7 @@ func formatAliasEntry(ar engine.AliasRoute) string {
 	return ar.Host
 }
 
-func emitAliasTLSNoWebsecureSignal(op engine.WriteRouteOp, staticConfigPath string, observer engine.Observer) {
+func emitAliasTLSNoWebsecureSignal(op engine.WriteRouteOp, staticConfigPath string, cfg *config.TraefikPluginConfig, observer engine.Observer) {
 	var tlsAliases []engine.AliasRoute
 	for _, ar := range op.AdditionalRoutes {
 		if ar.TLS {
@@ -60,7 +60,7 @@ func emitAliasTLSNoWebsecureSignal(op engine.WriteRouteOp, staticConfigPath stri
 		return
 	}
 
-	ok, err := hasWebsecureEntrypoint(staticConfigPath)
+	ok, err := willHaveWebsecureEntrypoint(staticConfigPath, cfg)
 	if err != nil {
 		observer.OnEvent(engine.Event{
 			Name:   "gateway.config.tls_port_probe_error",
@@ -99,7 +99,7 @@ func (r *RoutingBackend) WriteRoute(op engine.WriteRouteOp) error {
 	if err := mkdirAllFn(r.dynamicDir(), 0o755); err != nil {
 		return fmt.Errorf("traefik routing: creating dynamic dir: %w", err)
 	}
-	emitAliasTLSNoWebsecureSignal(op, r.staticConfigPath, r.observer)
+	emitAliasTLSNoWebsecureSignal(op, r.staticConfigPath, r.cfg, r.observer)
 
 	path := filepath.Join(r.dynamicDir(), routeFileName(op.Team, op.ServiceName))
 	present, err := isPathPresent(path)
