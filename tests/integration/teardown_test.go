@@ -38,7 +38,9 @@ func TestTeardown(t *testing.T) {
 	})
 
 	s.Test("should teardown a deployed team and remove its containers and network", func(tc *TestCase) {
-		tc.Run("teardown", testTeam, "--state-dir", tc.StateDir).AssertSuccess()
+		tc.Run("teardown", testTeam, "--state-dir", tc.StateDir).
+			AssertSuccess().
+			AssertOutputContains("Tearing down Application: whoami (team: " + testTeam + ")")
 		tc.AssertContainerNotRunning(testTeam + ".whoami")
 		tc.AssertNetworkNotExists("shrine." + testTeam + ".private")
 	})
@@ -63,7 +65,9 @@ func TestTeardownMultiTeam(t *testing.T) {
 			"--state-dir", tc.StateDir,
 		).AssertSuccess()
 
-		tc.Run("teardown", teardownTeamA, "--state-dir", tc.StateDir).AssertSuccess()
+		tc.Run("teardown", teardownTeamA, "--state-dir", tc.StateDir).
+			AssertSuccess().
+			AssertOutputContains("Tearing down Resource: shared-cache (team: " + teardownTeamA + ")")
 
 		tc.AssertContainerNotRunning(teardownTeamA + ".shared-cache")
 		tc.AssertContainerRunning(teardownTeamB + ".dependent-app")

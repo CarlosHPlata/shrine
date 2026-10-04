@@ -207,6 +207,6 @@ Expected flow for deployments `[{Resource, "db"}, {Application, "web"}]` and tea
 | 2 | `RemoveContainer({Team: t, Name: "db"})` | `resource.teardown` started `{team: t, name: db}` |
 | 3 | `RemoveNetwork(t)` | — |
 
-> **Implementation correction**: the engine builds these names from the manifest kind as recorded (`manifest.ApplicationKind` = `"Application"`), so the events actually observed are `Application.teardown`, `Resource.teardown`, and `Application.remove` — capitalised. The handler test pins the observed names; see tasks.md Implementation Notes.
+> **Implementation correction**: the engine builds these names from the manifest kind as recorded (`manifest.ApplicationKind` = `"Application"`), so the events actually observed are `Application.teardown`, `Resource.teardown`, and `Application.remove` — capitalised. The handler test pins the observed names; see tasks.md Implementation Notes. Resolved by spec 028 (issue #46): the engine now emits the lowercase names shown in the table above and the handler test asserts them.
 
 Failure rows: `listErr` → returned unchanged, no backend calls; `removeErr` on the first removal → returned wrapped (`errors.Is` true), `len(removed) == 1`, `networks` empty, an `application.remove` error event observed.

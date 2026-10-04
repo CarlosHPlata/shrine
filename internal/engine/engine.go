@@ -239,8 +239,9 @@ func (engine *Engine) deployApplication(
 }
 
 func (engine *Engine) teardownKind(kind string, team string, step planner.PlannedStep) error {
+	eventPrefix := strings.ToLower(kind)
 	engine.Observer.OnEvent(Event{
-		Name:   kind + ".teardown",
+		Name:   eventPrefix + ".teardown",
 		Status: StatusStarted,
 		Fields: map[string]string{"team": team, "name": step.Name},
 	})
@@ -250,13 +251,13 @@ func (engine *Engine) teardownKind(kind string, team string, step planner.Planne
 		Name: step.Name,
 	}
 	if err := engine.Container.RemoveContainer(op); err != nil {
-		return engine.emitErr(kind+".remove", map[string]string{"team": team, "name": step.Name},
+		return engine.emitErr(eventPrefix+".remove", map[string]string{"team": team, "name": step.Name},
 			fmt.Errorf("%s %q: %w", kind, step.Name, err))
 	}
 
 	if step.Kind == manifest.ApplicationKind && engine.Routing != nil {
 		if err := engine.Routing.RemoveRoute(team, step.Name); err != nil {
-			return engine.emitErr(kind+".routing_remove", map[string]string{"team": team, "name": step.Name},
+			return engine.emitErr(eventPrefix+".routing_remove", map[string]string{"team": team, "name": step.Name},
 				fmt.Errorf("%s %q routing: %w", kind, step.Name, err))
 		}
 	}

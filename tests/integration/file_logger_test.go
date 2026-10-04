@@ -31,6 +31,7 @@ func TestFileLogger(t *testing.T) {
 		// Only teardown removes the team network, so this entry can only come
 		// from the second run.
 		teardownEntry := `[finished] network.remove name="shrine.` + testTeam + `.private"`
+		teardownStartedEntry := `[started] application.teardown name="whoami" team="` + testTeam + `"`
 
 		tc.AssertFileExists(logFile)
 		tc.AssertFileContains(logFile, deployEntry)
@@ -39,5 +40,6 @@ func TestFileLogger(t *testing.T) {
 
 		tc.AssertFileContains(logFile, deployEntry)
 		tc.AssertFileContains(logFile, teardownEntry)
+		tc.AssertFileContains(logFile, teardownStartedEntry)
 	})
 }
