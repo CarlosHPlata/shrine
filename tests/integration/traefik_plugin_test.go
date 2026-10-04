@@ -9,6 +9,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/docker/docker/api/types/container"
@@ -82,6 +83,65 @@ func traefikFixturePath() string {
 }
 
 func aliasFixturePath(variant string) string { return fixturesPath("traefik-alias-" + variant) }
+
+func readDynamicRouters(tc *TestCase, path string) map[string]map[string]any {
+	content, err := os.ReadFile(path)
+	if err != nil {
+		tc.Fatalf("read dynamic file %s: %v", path, err)
+	}
+	var doc struct {
+		HTTP struct {
+			Routers map[string]map[string]any `yaml:"routers"`
+		} `yaml:"http"`
+	}
+	if err := yaml.Unmarshal(content, &doc); err != nil {
+		tc.Fatalf("parse dynamic file %s: %v\ncontent: %s", path, err, content)
+	}
+	if len(doc.HTTP.Routers) == 0 {
+		tc.Fatalf("dynamic file %s has no http.routers\ncontent: %s", path, content)
+	}
+	return doc.HTTP.Routers
+}
+
+func routerEntryPoints(router map[string]any) string {
+	raw, _ := router["entryPoints"].([]any)
+	entryPoints := make([]string, 0, len(raw))
+	for _, entryPoint := range raw {
+		name, _ := entryPoint.(string)
+		entryPoints = append(entryPoints, name)
+	}
+	return strings.Join(entryPoints, ",")
+}
+
+func assertPlainRouter(tc *TestCase, routers map[string]map[string]any, name string) {
+	router, ok := routers[name]
+	if !ok {
+		tc.Fatalf("router %q not found; routers: %v", name, routers)
+	}
+	if got := routerEntryPoints(router); got != "web" {
+		tc.Fatalf("router %q entryPoints = [%s], want [web]", name, got)
+	}
+	if tls, hasTLS := router["tls"]; hasTLS {
+		tc.Fatalf("router %q must not carry a tls block, got %v", name, tls)
+	}
+}
+
+func assertTLSRouter(tc *TestCase, routers map[string]map[string]any, name string) {
+	router, ok := routers[name]
+	if !ok {
+		tc.Fatalf("router %q not found; routers: %v", name, routers)
+	}
+	if got := routerEntryPoints(router); got != "web,websecure" {
+		tc.Fatalf("router %q entryPoints = [%s], want [web,websecure]", name, got)
+	}
+	tls, hasTLS := router["tls"]
+	if !hasTLS {
+		tc.Fatalf("router %q must carry a tls block: %v", name, router)
+	}
+	if block, isMap := tls.(map[string]any); !isMap || len(block) != 0 {
+		tc.Fatalf("router %q tls block must be empty, got %v", name, tls)
+	}
+}
 
 func TestTraefikPlugin(t *testing.T) {
 	s := NewDockerSuite(t, traefikTestTeam)
@@ -1473,5 +1533,248 @@ providers:
 			"--path", traefikFixturePath(),
 		).AssertSuccess()
 		tc.AssertOutputNotContains("Removed stale dashboard dynamic file")
+	})
+
+	// Spec 029 S1 (012 T016/T017): a tls alias gets the secure router shape; the primary router stays plain.
+	s.Test("should publish alias router with tls block when alias sets tls: true", func(tc *TestCase) {
+		tc.Run("apply", "teams",
+			"--path", aliasFixturePath("tls"),
+			"--state-dir", tc.StateDir,
+		).AssertSuccess()
+
+		configDir := tc.Path("config")
+		routingDir := tc.Path("traefik")
+		writeConfig(t, configDir, `plugins:
+  gateway:
+    traefik:
+      routing-dir: `+routingDir+`
+      port: 8119
+      tlsPort: 8447
+`)
+
+		tc.Run("deploy",
+			"--config-dir", configDir,
+			"--state-dir", tc.StateDir,
+			"--path", aliasFixturePath("tls"),
+		).AssertSuccess()
+
+		routers := readDynamicRouters(tc, filepath.Join(routingDir, "dynamic", "shrine-alias-test-whoami-tls.yml"))
+		assertTLSRouter(tc, routers, "shrine-alias-test-whoami-tls-alias-0")
+		assertPlainRouter(tc, routers, "shrine-alias-test-whoami-tls")
+		tc.AssertOutputContains("(tls)")
+		tc.AssertOutputNotContains("alias tls: true but websecure entrypoint missing")
+	})
+
+	// Spec 029 S2 (012 T023/T024, US2): tls is decided per alias and all routers share one backend.
+	s.Test("should give only the opted-in alias a tls router when aliases are mixed", func(tc *TestCase) {
+		tc.Run("apply", "teams",
+			"--path", aliasFixturePath("tls-mixed"),
+			"--state-dir", tc.StateDir,
+		).AssertSuccess()
+
+		configDir := tc.Path("config")
+		routingDir := tc.Path("traefik")
+		writeConfig(t, configDir, `plugins:
+  gateway:
+    traefik:
+      routing-dir: `+routingDir+`
+      port: 8120
+      tlsPort: 8448
+`)
+
+		tc.Run("deploy",
+			"--config-dir", configDir,
+			"--state-dir", tc.StateDir,
+			"--path", aliasFixturePath("tls-mixed"),
+		).AssertSuccess()
+
+		const primary = "shrine-alias-test-whoami-tls-mixed"
+		routers := readDynamicRouters(tc, filepath.Join(routingDir, "dynamic", primary+".yml"))
+		assertPlainRouter(tc, routers, primary)
+		assertPlainRouter(tc, routers, primary+"-alias-0")
+		assertTLSRouter(tc, routers, primary+"-alias-1")
+		for _, name := range []string{primary, primary + "-alias-0", primary + "-alias-1"} {
+			if service := routers[name]["service"]; service != primary {
+				tc.Fatalf("router %q service = %v, want %q", name, service, primary)
+			}
+		}
+	})
+
+	// Spec 029 S3 (012 T024, SC-005): removing tls: true reverts the alias router.
+	s.Test("should revert alias router to plain when tls is removed and re-deployed", func(tc *TestCase) {
+		tc.Run("apply", "teams",
+			"--path", aliasFixturePath("tls"),
+			"--state-dir", tc.StateDir,
+		).AssertSuccess()
+
+		configDir := tc.Path("config")
+		routingDir := tc.Path("traefik")
+		writeConfig(t, configDir, `plugins:
+  gateway:
+    traefik:
+      routing-dir: `+routingDir+`
+      port: 8121
+      tlsPort: 8449
+`)
+
+		tc.Run("deploy",
+			"--config-dir", configDir,
+			"--state-dir", tc.StateDir,
+			"--path", aliasFixturePath("tls"),
+		).AssertSuccess()
+
+		dynamicFile := filepath.Join(routingDir, "dynamic", "shrine-alias-test-whoami-tls.yml")
+		assertTLSRouter(tc, readDynamicRouters(tc, dynamicFile), "shrine-alias-test-whoami-tls-alias-0")
+
+		// Spec 009 preserve policy: a manifest change only lands once the per-app file is absent.
+		if err := os.Remove(dynamicFile); err != nil {
+			t.Fatalf("rm per-app file before manifest-change deploy: %v", err)
+		}
+
+		tc.Run("deploy",
+			"--config-dir", configDir,
+			"--state-dir", tc.StateDir,
+			"--path", aliasFixturePath("tls-removed"),
+		).AssertSuccess()
+
+		routers := readDynamicRouters(tc, dynamicFile)
+		assertPlainRouter(tc, routers, "shrine-alias-test-whoami-tls-alias-0")
+		assertPlainRouter(tc, routers, "shrine-alias-test-whoami-tls")
+		tc.AssertOutputNotContains("(tls)")
+	})
+
+	// Spec 029 S4 (012 T026): manifests without tls generate stable routing and no tls output.
+	s.Test("should keep non-tls alias routing byte-stable and silent about tls", func(tc *TestCase) {
+		tc.Run("apply", "teams",
+			"--path", aliasFixturePath("prefix"),
+			"--state-dir", tc.StateDir,
+		).AssertSuccess()
+
+		configDir := tc.Path("config")
+		routingDir := tc.Path("traefik")
+		writeConfig(t, configDir, `plugins:
+  gateway:
+    traefik:
+      routing-dir: `+routingDir+`
+      port: 8122
+`)
+
+		dynamicFile := filepath.Join(routingDir, "dynamic", "shrine-alias-test-whoami-prefix.yml")
+		deployAndRead := func() []byte {
+			tc.Run("deploy",
+				"--config-dir", configDir,
+				"--state-dir", tc.StateDir,
+				"--path", aliasFixturePath("prefix"),
+			).AssertSuccess()
+			tc.AssertOutputNotContains("(tls)")
+			tc.AssertOutputNotContains("alias tls: true but websecure entrypoint missing")
+			content, err := os.ReadFile(dynamicFile)
+			if err != nil {
+				t.Fatalf("read dynamic file: %v", err)
+			}
+			return content
+		}
+
+		first := deployAndRead()
+		if bytes.Contains(first, []byte("websecure")) || bytes.Contains(first, []byte("tls:")) {
+			t.Fatalf("non-tls manifest must not produce tls routing:\ncontent: %s", first)
+		}
+
+		preserved := deployAndRead()
+		if !bytes.Equal(first, preserved) {
+			t.Fatalf("dynamic file changed across an unchanged redeploy\nfirst:\n%s\nsecond:\n%s", first, preserved)
+		}
+
+		// The redeploy above preserves the file without rewriting it, so only a regeneration proves the output is deterministic.
+		if err := os.Remove(dynamicFile); err != nil {
+			t.Fatalf("rm per-app file before regeneration: %v", err)
+		}
+
+		regenerated := deployAndRead()
+		if !bytes.Equal(first, regenerated) {
+			t.Fatalf("regenerated dynamic file differs from the original\nfirst:\n%s\nregenerated:\n%s", first, regenerated)
+		}
+	})
+
+	// Spec 029 S5 (018 T012, SC-004): a finalize failure fails the deploy and names routing finalize.
+	s.Test("should exit non-zero and attribute the error to routing finalize when the gateway cannot start", func(tc *TestCase) {
+		configDir := tc.Path("config")
+		routingDir := tc.Path("traefik")
+		// The gateway image is resolved only inside Finalize and nothing listens on port 1, so app steps succeed and Finalize fails without needing the network.
+		writeConfig(t, configDir, `plugins:
+  gateway:
+    traefik:
+      image: localhost:1/shrine-test/unpullable-gateway:0
+      routing-dir: `+routingDir+`
+      port: 8123
+`)
+
+		tc.Run("deploy",
+			"--config-dir", configDir,
+			"--state-dir", tc.StateDir,
+			"--path", traefikFixturePath(),
+		).AssertFailure()
+
+		tc.AssertOutputContains("Deploying Application: hello-eligible")
+		tc.AssertOutputContains("Error [routing.finalize]")
+		tc.AssertFileContains(filepath.Join(tc.StateDir, "logs", "shrine.log"), "[error] routing.finalize")
+		tc.AssertFileExists(filepath.Join(routingDir, "dynamic", traefikTestTeam+"-hello-eligible.yml"))
+		tc.AssertContainerRunning(traefikTestTeam + ".hello-eligible")
+		tc.AssertContainerNotExists(traefikContainerName)
+	})
+
+	// Spec 029 S6 (018 T018, FR-008): dry-run previews the finalize phase after the per-app route operations.
+	s.Test("should print the finalize route operation last among route operations on dry-run", func(tc *TestCase) {
+		configDir := tc.Path("config")
+		routingDir := tc.Path("traefik")
+		writeConfig(t, configDir, `plugins:
+  gateway:
+    traefik:
+      routing-dir: `+routingDir+`
+      port: 8124
+`)
+
+		tc.Run("deploy", "--dry-run",
+			"--config-dir", configDir,
+			"--state-dir", tc.StateDir,
+			"--path", traefikFixturePath(),
+		).AssertSuccess()
+
+		stdout := tc.RunResult().Stdout
+		if count := strings.Count(stdout, "[ROUTE]  Finalize"); count != 1 {
+			t.Fatalf("dry-run must print the finalize route operation exactly once, got %d\nstdout: %s", count, stdout)
+		}
+		lastWriteRoute := strings.LastIndex(stdout, "[ROUTE]  WriteRoute")
+		if lastWriteRoute < 0 || lastWriteRoute > strings.Index(stdout, "[ROUTE]  Finalize") {
+			t.Fatalf("finalize must be printed after every WriteRoute operation\nstdout: %s", stdout)
+		}
+
+		tc.AssertContainerNotExists(traefikContainerName)
+		tc.AssertFileNotExists(filepath.Join(routingDir, "traefik.yml"))
+		tc.AssertFileNotExists(filepath.Join(routingDir, "dynamic"))
+	})
+
+	// Spec 029 S7 (018 T014/T019, SC-003): the gateway is published through the engine's finalize phase.
+	s.Test("should leave static config and gateway container in place after the finalize phase", func(tc *TestCase) {
+		configDir := tc.Path("config")
+		routingDir := tc.Path("traefik")
+		writeConfig(t, configDir, `plugins:
+  gateway:
+    traefik:
+      routing-dir: `+routingDir+`
+      port: 8125
+`)
+
+		tc.Run("deploy",
+			"--config-dir", configDir,
+			"--state-dir", tc.StateDir,
+			"--path", traefikFixturePath(),
+		).AssertSuccess()
+
+		tc.AssertFileExists(filepath.Join(routingDir, "traefik.yml"))
+		tc.AssertContainerRunning(traefikContainerName)
+		logFile := filepath.Join(tc.StateDir, "logs", "shrine.log")
+		tc.AssertFileContains(logFile, "[started] routing.finalize")
+		tc.AssertFileContains(logFile, "[info] routing.finalize")
 	})
 }
