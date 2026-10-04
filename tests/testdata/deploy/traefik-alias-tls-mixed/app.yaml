@@ -1,0 +1,20 @@
+apiVersion: shrine/v1
+kind: Application
+metadata:
+  name: whoami-tls-mixed
+  owner: shrine-alias-test
+spec:
+  image: traefik/whoami
+  port: 80
+  replicas: 1
+  networking:
+    exposeToPlatform: true
+  routing:
+    domain: whoami-tls-mixed.shrine.lab
+    aliases:
+      - host: lan.shrine.lab
+        pathPrefix: /lan
+      - host: ext.shrine.lab
+        pathPrefix: /ext
+        stripPrefix: false
+        tls: true

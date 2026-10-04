@@ -818,6 +818,73 @@ func TestWriteRoute_AliasWithTLS_NoWarning_WhenWebsecurePresent(t *testing.T) {
 	}
 }
 
+func stubReadFileNotExist(t *testing.T) {
+	t.Helper()
+	orig := readFileFn
+	t.Cleanup(func() { readFileFn = orig })
+	readFileFn = func(string) ([]byte, error) { return nil, fs.ErrNotExist }
+}
+
+func countAliasTLSNoWebsecureWarnings(events []engine.Event) int {
+	count := 0
+	for _, ev := range events {
+		if ev.Name == "gateway.alias.tls_no_websecure" {
+			count++
+		}
+	}
+	return count
+}
+
+// Clean first deploy: traefik.yml does not exist yet and Finalize will generate
+// it with websecure because tlsPort is set, so the warning would be spurious.
+func TestWriteRoute_AliasWithTLS_NoWarning_WhenStaticConfigAbsentAndTLSPortSet(t *testing.T) {
+	stubLstatNotExist(t)
+	stubReadFileNotExist(t)
+	captureWriteFileFn(t)
+
+	rec := &recordingObserver{}
+	rb := &RoutingBackend{
+		routingDir:       "/fake",
+		staticConfigPath: "/fake/traefik.yml",
+		observer:         rec,
+		cfg:              &config.TraefikPluginConfig{TLSPort: 8443},
+	}
+	op := baseOp()
+	op.AdditionalRoutes = []engine.AliasRoute{{Host: "a.example.com", TLS: true}}
+
+	if err := rb.WriteRoute(op); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if got := countAliasTLSNoWebsecureWarnings(rec.events); got != 0 {
+		t.Fatalf("expected no gateway.alias.tls_no_websecure event, got %d: %+v", got, rec.events)
+	}
+}
+
+func TestWriteRoute_AliasWithTLS_EmitsWarning_WhenStaticConfigAbsentAndTLSPortUnset(t *testing.T) {
+	stubLstatNotExist(t)
+	stubReadFileNotExist(t)
+	captureWriteFileFn(t)
+
+	rec := &recordingObserver{}
+	rb := &RoutingBackend{
+		routingDir:       "/fake",
+		staticConfigPath: "/fake/traefik.yml",
+		observer:         rec,
+		cfg:              &config.TraefikPluginConfig{},
+	}
+	op := baseOp()
+	op.AdditionalRoutes = []engine.AliasRoute{{Host: "a.example.com", TLS: true}}
+
+	if err := rb.WriteRoute(op); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if got := countAliasTLSNoWebsecureWarnings(rec.events); got != 1 {
+		t.Fatalf("expected exactly 1 gateway.alias.tls_no_websecure event, got %d: %+v", got, rec.events)
+	}
+}
+
 // T015: no warning emitted when no alias has TLS=true, regardless of static config.
 func TestWriteRoute_NoAliasHasTLS_NoWarning_RegardlessOfStaticConfig(t *testing.T) {
 	stubLstatNotExist(t)

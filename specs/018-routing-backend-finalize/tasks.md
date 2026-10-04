@@ -59,7 +59,7 @@ Single Go module (`github.com/CarlosHPlata/shrine`). All paths are repository-re
 - [X] T009 [P] [US1] Unit test in `internal/engine/engine_test.go`: assert the same finalize-call / no-finalize-on-failure invariants hold for `Engine.ExecuteTeardown` (FR-005)
 - [X] T010 [P] [US1] Unit test in `internal/engine/engine_test.go`: when the fake `RoutingBackend.Finalize` returns an error, assert the engine returns `fmt.Errorf("routing finalize: %w", err)` AND emits a `routing.finalize` observer event with `status=error` and the underlying error string in the event payload (FR-003, SC-004)
 - [X] T011 [P] [US1] Unit test in `internal/engine/engine_test.go`: when `Engine.Routing` is nil, assert `ExecuteDeploy` and `ExecuteTeardown` succeed without invoking `Finalize` and without emitting a `routing.finalize` event (nil-backend rule from contracts)
-- [~] T012 [US1] DEFERRED to CI — integration test scenario in `tests/integration/traefik_plugin_test.go`: build a bundle that injects a routing backend whose `Finalize` returns an error, run the real `shrine deploy` subprocess via `NewDockerSuite`, and assert (a) non-zero exit code, (b) operator-facing log contains a `routing.finalize` event with `status=error` (SC-004 / FR-003)
+- [x] T012 [US1] DEFERRED to CI — integration test scenario in `tests/integration/traefik_plugin_test.go`: build a bundle that injects a routing backend whose `Finalize` returns an error, run the real `shrine deploy` subprocess via `NewDockerSuite`, and assert (a) non-zero exit code, (b) operator-facing log contains a `routing.finalize` event with `status=error` (SC-004 / FR-003) — delivered by `specs/029-tls-finalize-integration-tests` (scenario S5). The failure is provoked black-box with an unpullable gateway image instead of an injected backend.
 
 ### Implementation for User Story 1
 
@@ -78,14 +78,14 @@ Single Go module (`github.com/CarlosHPlata/shrine`). All paths are repository-re
 ### Tests for User Story 2
 
 - [X] T013 [P] [US2] Unit test in `internal/plugins/gateway/traefik/routing_test.go`: assert `RoutingBackend.Finalize()` writes the expected static `traefik.yml` and dashboard dynamic config into `<specsDir>/traefik/` and `<specsDir>/traefik/dynamic/` and issues the Traefik `ContainerOp` against its held `ContainerBackend` (covers the body moved out of `Plugin.Deploy()`)
-- [~] T014 [P] [US2] DEFERRED to CI — Extend `tests/integration/traefik_plugin_test.go`: assert that after `shrine deploy` against a manifest with at least one routed application, the static config files and the Traefik container exist (post-Finalize state matches pre-refactor state — SC-003)
+- [x] T014 [P] [US2] DEFERRED to CI — Extend `tests/integration/traefik_plugin_test.go`: assert that after `shrine deploy` against a manifest with at least one routed application, the static config files and the Traefik container exist (post-Finalize state matches pre-refactor state — SC-003) — delivered by `specs/029-tls-finalize-integration-tests` (scenario S7).
 
 ### Implementation for User Story 2
 
 - [X] T015 [US2] Move the body of `traefik.Plugin.Deploy()` into `traefik.RoutingBackend.Finalize()` in `internal/plugins/gateway/traefik/routing.go` (static config generation, dashboard dynamic config generation, and Traefik container creation via the held `ContainerBackend`) — replaces the no-op placeholder added in T003 (FR-007)
 - [X] T016 [US2] Add a `ContainerBackend` field to `traefik.RoutingBackend` and pass the bundle's container backend into it at plugin construction in `internal/plugins/gateway/traefik/plugin.go` (the handle is the same one `Plugin` holds today)
 - [X] T017 [US2] Update the routing factory in `internal/app/components.go` so the `RoutingBackend` returned to the bundle carries the `ContainerBackend` reference required by `Finalize` (composition root is the only place that knows about the cross-wiring)
-- [~] T018 [US2] DEFERRED to CI — Extend `tests/integration/traefik_plugin_test.go` dry-run assertion: confirm `shrine deploy --dry-run` output ends with the `[ROUTE]  Finalize` line emitted by `DryRunRoutingBackend.Finalize` (FR-008)
+- [x] T018 [US2] DEFERRED to CI — Extend `tests/integration/traefik_plugin_test.go` dry-run assertion: confirm `shrine deploy --dry-run` output ends with the `[ROUTE]  Finalize` line emitted by `DryRunRoutingBackend.Finalize` (FR-008) — delivered by `specs/029-tls-finalize-integration-tests` (scenario S6), asserting the finalize line comes after every `WriteRoute` line.
 
 **Checkpoint**: `go test -tags integration ./tests/integration/...` passes. Operators see the same containers, the same routes, the same exit codes — only addition is the `routing.finalize` observer log line (info/success) at the end of a deploy.
 
@@ -99,7 +99,7 @@ Single Go module (`github.com/CarlosHPlata/shrine`). All paths are repository-re
 
 ### Tests for User Story 3
 
-- [~] T019 [P] [US3] DEFERRED to CI — Add an assertion in `tests/integration/traefik_plugin_test.go` (or a small unit test in `internal/handler/deploy_test.go` if one exists) that the success path performs the post-engine publish through the engine's `Finalize` (i.e. the test double's `Finalize` was the one that ran — not a plugin-specific method) (FR-007)
+- [x] T019 [P] [US3] DEFERRED to CI — Add an assertion in `tests/integration/traefik_plugin_test.go` (or a small unit test in `internal/handler/deploy_test.go` if one exists) that the success path performs the post-engine publish through the engine's `Finalize` (i.e. the test double's `Finalize` was the one that ran — not a plugin-specific method) (FR-007) — delivered by `specs/029-tls-finalize-integration-tests` (scenario S7), asserted by its effects: `routing.finalize` started/info entries in `shrine.log`.
 
 ### Implementation for User Story 3
 

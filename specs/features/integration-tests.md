@@ -158,6 +158,24 @@ Requires Docker. No scenario is added: teardown runs that already exist gain one
 
 The failure names (`application.remove`, `resource.remove`, `application.routing_remove`) are covered by unit tests in `internal/engine` only, because a removal failure cannot be forced deterministically against a real daemon.
 
+### TLS alias routers and routing finalize — spec 029
+
+Requires Docker. Seven scenarios appended to `TestTraefikPlugin` in `tests/integration/traefik_plugin_test.go` deliver the integration tasks that specs 012 and 018 deferred (issue #38). No existing scenario is changed. Router shapes are asserted by parsing `<routing-dir>/dynamic/<team>-<app>.yml` (`readDynamicRouters`, `assertPlainRouter`, `assertTLSRouter`), so each assertion names the router it is about.
+
+Fixtures (`tests/testdata/deploy/`):
+- `traefik-alias-tls` — `whoami-tls`, one alias with `tls: true`
+- `traefik-alias-tls-removed` — same application and alias, without `tls`
+- `traefik-alias-tls-mixed` — `whoami-tls-mixed`, a plain alias followed by a `tls: true` alias
+
+Test cases:
+- "should publish alias router with tls block when alias sets tls: true" — alias router has `entryPoints: [web, websecure]` and `tls: {}`; primary router stays `[web]` with no `tls`; stdout carries the `(tls)` marker and no missing-websecure warning
+- "should give only the opted-in alias a tls router when aliases are mixed" — only `alias-1` is a TLS router; all three routers share one service
+- "should revert alias router to plain when tls is removed and re-deployed" — after removing the per-app file (spec 009 preserve policy) and deploying the twin fixture, the alias router is plain
+- "should keep non-tls alias routing byte-stable and silent about tls" — an unchanged redeploy and a remove-and-regenerate both yield identical bytes; no `websecure`, `tls:`, `(tls)`, or warning anywhere
+- "should exit non-zero and attribute the error to routing finalize when the gateway cannot start" — the gateway image points at `localhost:1`, so application steps succeed and only Finalize fails; stdout has `Error [routing.finalize]`, `shrine.log` has `[error] routing.finalize`, the application container and its route file exist, `platform.traefik` does not
+- "should print the finalize route operation last among route operations on dry-run" — `[ROUTE]  Finalize` appears once, after every `[ROUTE]  WriteRoute`; no container or routing files are created
+- "should leave static config and gateway container in place after the finalize phase" — `traefik.yml` exists, `platform.traefik` runs, and `shrine.log` holds `[started] routing.finalize` and `[info] routing.finalize` (a successful finalize prints nothing on stdout)
+
 ### Phase 4 — Docker-backed deploy tests ✅
 
 Requires a live Docker daemon. Ubuntu GH Actions runners have Docker out of the box — no DinD needed.
