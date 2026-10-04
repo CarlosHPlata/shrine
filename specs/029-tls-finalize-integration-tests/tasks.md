@@ -128,6 +128,7 @@
 - [x] T025 [P] In `specs/features/integration-tests.md`, add the three new fixtures and seven new `TestTraefikPlugin` scenarios, following the document's existing format for the Traefik suite
 - [x] T026 [P] In `specs/progress.md`, add a `[x]` entry for 029 above the 028 entry, in the same style: what was deferred, what now covers it (S1–S7), the two findings (finalize success is log-only; preserve policy makes unchanged redeploys trivially identical), and the gate (`TestTraefikPlugin`, CI executes)
 - [x] T027 Run `graphify update .` from the repo root
+- [x] T030 Fix found by S1 in CI (maintainer decision: same PR, separate commit): in `internal/plugins/gateway/traefik/`, add `willHaveWebsecureEntrypoint` to `config_gen.go`, pass the plugin config to `emitAliasTLSNoWebsecureSignal` in `routing.go`, and add the two absent-static-config unit tests to `routing_test.go` (see plan.md Amendment)
 - [ ] T028 Push the branch, open a PR referencing issue #38, and from the CI run confirm: the seven new sub-tests `--- PASS`; every pre-existing sub-test has the same result as on `main`; the `Integration Test` step took under 4 minutes (if not, raise `-timeout` in the Makefile `test-integration` target in a follow-up commit and say so in the PR)
 - [ ] T029 Re-run the CI workflow twice more and confirm three consecutive green runs (SC-005)
 

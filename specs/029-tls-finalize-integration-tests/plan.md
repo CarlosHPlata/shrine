@@ -109,6 +109,16 @@ Ordered so each step is independently compile-checkable. Detail per scenario is 
 11. **Docs** — update the 012/018 task lists, `integration-tests.md`, `progress.md`; run `graphify update .`.
 12. **CI gate** — push; confirm the seven new sub-tests pass, all existing ones still pass, and the integration step duration is under 4 minutes.
 
+## Amendment (2026-10-04): product fix found by S1
+
+The first CI run of PR #48 failed S1 on one assertion: stdout contained `alias tls: true but websecure entrypoint missing` on a clean first deploy with `tlsPort` set. Cause: `WriteRoute` probes `traefik.yml` for `websecure` before `Finalize` has generated the file, and an absent file was treated as "no websecure". Reported per FR-016; the maintainer chose to fix it in this PR as a separate commit, which supersedes the "no production code" constraint (SC-006, Regression Safety item 1) for this one change.
+
+- `internal/plugins/gateway/traefik/config_gen.go` — new `willHaveWebsecureEntrypoint(path, cfg)`: when `traefik.yml` is absent, the answer follows `tlsPort` (what `Finalize` is about to generate); otherwise the file is probed as before.
+- `internal/plugins/gateway/traefik/routing.go` — `emitAliasTLSNoWebsecureSignal` takes the plugin config and uses the new function.
+- `internal/plugins/gateway/traefik/routing_test.go` — two unit tests: absent file + `tlsPort` set → no warning (red before the fix); absent file + `tlsPort` unset → warning still emitted.
+
+Unchanged: the warning for a preserved `traefik.yml` lacking `websecure`, the probe-error path, and the warning when neither the file nor `tlsPort` provides the entrypoint.
+
 ## Complexity Tracking
 
 No violations.
