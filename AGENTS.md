@@ -225,23 +225,33 @@ shrine/
 ```
 shrine deploy
      │
-     ├── manifest.LoadDir()          → ManifestSet (all Applications + Resources, recursive)
-     ├── planner.Resolve()           → validates deps, access, quotas, template refs
-     ├── planner.ChainEnrich()       → infers deploy-order edges from same-team valueFrom refs; fail-fast on cross-team or absent target unless an explicit spec.dependencies entry covers it
-     ├── planner.Order()             → topo-sorted []PlannedStep (Kahn's algorithm)
-     ├── resolver.ResolveResource()  → ResolvedResource{Env, Exports}: Env feeds the container; Exports (the spec.outputs allowlist) feeds consumers. Resolved in dependency order so a resource can read another's exports.
-     ├── engine.ExecuteDeploy()
+     ├── planner.LoadDir()           → ManifestSet (all Applications + Resources, recursive)
+     ├── planner.Plan()              → the single planning entry point
+     │     ├── Resolve()             → validates deps, access, quotas, template refs
+     │     ├── ChainEnrich()         → infers deploy-order edges from same-team valueFrom refs; fail-fast on cross-team or absent target unless an explicit spec.dependencies entry covers it
+     │     ├── Detect*Collisions()   → host-port and routing collision checks
+     │     └── Order()               → topo-sorted []PlannedStep (Kahn's algorithm)
+     ├── engine.ExecuteDeploy(steps, set)
      │     ├── Container.CreatePlatformNetwork()
+     │     ├── Resolver.ResolveResource()  ← pre-pass over every Resource in the set, in resource-dependency order
      │     ├── for each step (topo order):
+     │     │     ├── Resolver.ResolveApplication()   ← Application steps only: env from static values + valueFrom
      │     │     ├── Container.CreateNetwork(team)
      │     │     ├── Container.CreateContainer(op)   ← image pull, reconcile-by-name, multi-network attach
      │     │     ├── Routing.WriteRoute(op)           ← Traefik dynamic config via SSH
      │     │     └── DNS.WriteRecord(op)              ← AdGuard API call
-     │     └── ...
+     │     └── Routing.Finalize()
      └── done
 ```
 
-`--dry-run` swaps all three backends for print-only implementations wired at startup. No special-casing in the engine.
+**The resolver is an engine collaborator, not a pipeline stage.** The handler never calls it; `Engine` holds a `resolver.Resolver` and invokes it at two points inside `ExecuteDeploy`:
+
+1. `ResolveResource` — a pre-pass over every Resource in the manifest set (not just the planned steps), before any container is created. Each call returns `ResolvedResource{Env, Exports}`: `Env` feeds that resource's container; `Exports` (the `spec.outputs` allowlist) is collected into `ResolvedDependencies` for consumers. Resources resolve in dependency order so one can read another's exports.
+2. `ResolveApplication` — once per Application step inside `deployApplication`, resolving its env against the `ResolvedDependencies` built by the pre-pass.
+
+`--dry-run` swaps all three backends for print-only implementations and the resolver for `DryRunResolver`, wired at startup. No special-casing in the engine.
+
+**Doc/code drift policy.** This file is the brief humans and AI sessions navigate the code from. A change that moves a seam — who calls whom across the packages above, or the order of the stages in this diagram — must update `AGENTS.md` in the same PR.
 
 ## Key Design Decisions
 
