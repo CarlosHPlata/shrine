@@ -149,7 +149,7 @@ inference hold uniformly.
 ## Phase 7: Polish & Cross-Cutting Concerns
 
 - [x] T028 [P] Update the generate-resource skeleton to scaffold `env` and `output` blocks in `internal/handler/resources.go`
-- [x] T029 [P] Update the dry-run rendering to distinguish the resource's container environment (`Env`) from its published interface (`Exports`) in `internal/handler/dryrun.go` (and `internal/handler/deploy_plan_format.go` if it lists resource values)
+- [~] T029 [P] DESCOPED (spec 030, 2026-10-05) — Update the dry-run rendering to distinguish the resource's container environment (`Env`) from its published interface (`Exports`) in `internal/handler/dryrun.go` (and `internal/handler/deploy_plan_format.go` if it lists resource values). `internal/handler/dryrun.go` does not exist and the rendering was never implemented; the preview prints neither `Env` nor `Exports`. Tracked in `specs/progress.md` under Known Gaps.
 - [x] T030 [P] Update the resource manifest reference (env/output split + migration guide) under `docs/` and sync `AGENTS.md`
 - [x] T031 Mark the `021` acceptance criteria complete in `specs/progress.md`
 - [x] T032 Run `graphify update .` to refresh the knowledge graph after code changes

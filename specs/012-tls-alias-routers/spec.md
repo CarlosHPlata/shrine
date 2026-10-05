@@ -5,6 +5,10 @@
 **Status**: Draft
 **Input**: GitHub issue [#13](https://github.com/CarlosHPlata/shrine/issues/13) — "App manifest should support websecure entrypoint on alias routers"
 
+## Amendments
+
+- **2026-10-05 — [spec 030](../030-reconcile-spec-docs/spec.md)**: Brought into line with the [generated gateway file lifecycle](../009-preserve-app-configs/spec.md#generated-gateway-file-lifecycle-canonical): per-application routing files are written once. Amended: User Story 2 acceptance scenario 2, SC-001, SC-004, SC-005. Partly descoped: FR-004 — the error for a non-boolean `tls` does not name the application or alias index, and a few string values are accepted. **Terminology**: throughout this spec, "operator-preserved" and "operator-owned" mean *already exists*; every routing file Shrine has written before is preserved, whether or not an operator edited it.
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - Operator publishes a single alias over HTTPS via the manifest (Priority: P1)
@@ -46,7 +50,8 @@ An operator runs the same app with two aliases: one internal (HTTP-only on the L
 **Acceptance Scenarios**:
 
 1. **Given** a manifest with two alias entries where the first omits `tls` and the second sets `tls: true`, **When** `shrine deploy` completes, **Then** the generated dynamic config contains exactly two alias routers, one HTTP-only and one HTTPS-enabled, and both point to the same backend service.
-2. **Given** the same manifest, **When** the operator removes `tls: true` from the second alias and re-deploys, **Then** the second alias router is regenerated without `tls: {}` and attaches only to `web` — the dynamic config returns to a fully HTTP-only state.
+2. **Given** the same manifest, **When** the operator removes `tls: true` from the second alias, deletes the application's routing file, and re-deploys, **Then** the second alias router is regenerated without `tls: {}` and attaches only to `web` — the dynamic config returns to a fully HTTP-only state.
+   > *Amended 2026-10-05 by spec 030. Originally:* "**When** the operator removes `tls: true` from the second alias and re-deploys, **Then** the second alias router is regenerated without `tls: {}` and attaches only to `web`". *Without deleting the file it is preserved — see the [generated gateway file lifecycle](../009-preserve-app-configs/spec.md#generated-gateway-file-lifecycle-canonical).*
 
 ---
 
@@ -85,7 +90,8 @@ An operator who has not opted into per-alias TLS leaves all alias entries unchan
 - **FR-001**: The application manifest schema MUST accept an optional boolean `tls` field on each entry of `routing.aliases`. The field defaults to `false` when omitted.
 - **FR-002**: When the Traefik gateway plugin is active and an alias entry sets `tls: true`, Shrine MUST generate the alias router in the application's dynamic config file with the `entryPoints` list `[web, websecure]` (in that order) and MUST emit an empty `tls: {}` block on the router.
 - **FR-003**: When the Traefik gateway plugin is active and an alias entry sets `tls: false` or omits the `tls` field, Shrine MUST generate the alias router exactly as today — `entryPoints: [web]` only, no `tls` block, no other 443-related artefact. The primary-domain router MUST remain unchanged regardless of any alias's `tls` value.
-- **FR-004**: Manifest parsing MUST reject a `tls` value that is not a YAML boolean (i.e., reject strings, numbers, objects, lists), surfacing a clear error that names the offending application and alias index.
+- **FR-004** *(partly descoped 2026-10-05)*: Manifest parsing MUST reject a `tls` value that is not a YAML boolean (i.e., reject strings, numbers, objects, lists), surfacing a clear error that names the offending application and alias index.
+  > *Descoped by spec 030.* **Shipped:** numbers, lists, objects, and most strings (including quoted `"true"` and `"false"`) are rejected at parse time. **Not shipped:** the error is the YAML decoder's — it names the file and line (`cannot unmarshal !!str … into bool`), not the application or alias index; and the YAML 1.1 boolean words `yes`, `no`, `on`, `off`, `y`, `n` are accepted as booleans even when quoted. Tracked in [`specs/progress.md`](../progress.md) under Known Gaps.
 - **FR-005**: Manifest parsing MUST reject a `tls` field declared anywhere outside a `routing.aliases` entry (e.g., at the `routing` top level). The error MUST name the application and the offending field path. This forecloses an ambiguity where operators could appear to opt the primary domain into HTTPS via this feature.
 - **FR-006**: The cross-application collision check (per spec 006 FR-008a) MUST treat host+path collisions independently of the `tls` flag — two aliases on different applications with the same host+path collide regardless of whether either sets `tls: true`. The TLS flag is a routing decoration, not a uniqueness key.
 - **FR-007**: When `tls: true` is set on at least one alias of an application AND the active Traefik static configuration (Shrine-generated or operator-preserved) does not declare a `websecure` entrypoint, Shrine MUST emit a deploy-time warning naming the application, the alias index/host+path, and instructing the operator to wire `websecure` (via spec 011's `tlsPort` or an operator-edited static config). The warning MUST be emitted on every deploy where the mismatch is still present and MUST NOT block the deploy — the alias router is still written so operators can land both changes in any order.
@@ -104,11 +110,14 @@ An operator who has not opted into per-alias TLS leaves all alias entries unchan
 
 ### Measurable Outcomes
 
-- **SC-001**: An operator who needs to expose an existing alias over HTTPS can do so by adding a single `tls: true` line to the existing alias entry — no second manifest, no hand-edit of generated config, no extra commands beyond a normal `shrine deploy`.
+- **SC-001**: An operator who needs to expose an existing alias over HTTPS can do so by adding a single `tls: true` line to the existing alias entry, deleting the application's routing file, and running a normal `shrine deploy` — no second manifest and no hand-edit of generated config. An existing routing file is not rewritten (see the [generated gateway file lifecycle](../009-preserve-app-configs/spec.md#generated-gateway-file-lifecycle-canonical)).
+  > *Amended 2026-10-05 by spec 030. Originally:* "An operator who needs to expose an existing alias over HTTPS can do so by adding a single `tls: true` line to the existing alias entry — no second manifest, no hand-edit of generated config, no extra commands beyond a normal `shrine deploy`."
 - **SC-002**: After deploying a manifest with `tls: true` on N of M alias entries, the generated dynamic config contains exactly N alias routers attached to `web` + `websecure` with `tls: {}`, and exactly M − N alias routers attached to `web` only with no `tls` block. The primary-domain router is unchanged.
 - **SC-003**: 100% of existing Shrine deployments whose manifests do NOT use `tls` on any alias continue to deploy successfully after upgrading to the release containing this feature, with byte-identical generated dynamic config (modulo unrelated, already-shipped changes).
-- **SC-004**: A manifest with an invalid `tls` value (non-boolean, or set outside an alias entry) is rejected at validation time with a single clear error naming the offending field; no dynamic config file is written or mutated for that application.
-- **SC-005**: Removing `tls: true` from an alias and re-deploying causes the corresponding alias router to lose its `websecure` entrypoint and `tls: {}` block within one deploy cycle (subject to spec 009 preservation, which is unchanged here). Operators do not need to hand-edit the generated dynamic config to revert.
+- **SC-004**: A manifest with `tls` set outside an alias entry is rejected before deploy with a single clear error naming the offending field. A manifest with a non-boolean `tls` value is rejected with an error naming the file and line only, and a few string values are not rejected at all — see FR-004. In every rejected case no dynamic config file is written or mutated for that application.
+  > *Amended 2026-10-05 by spec 030. Originally:* "A manifest with an invalid `tls` value (non-boolean, or set outside an alias entry) is rejected at validation time with a single clear error naming the offending field; no dynamic config file is written or mutated for that application."
+- **SC-005**: Removing `tls: true` from an alias, deleting the application's routing file, and re-deploying causes the regenerated alias router to have no `websecure` entrypoint and no `tls: {}` block within that deploy cycle. Operators do not need to hand-edit the generated dynamic config to revert; without deleting the file it is preserved (see the [generated gateway file lifecycle](../009-preserve-app-configs/spec.md#generated-gateway-file-lifecycle-canonical)).
+  > *Amended 2026-10-05 by spec 030. Originally:* "Removing `tls: true` from an alias and re-deploying causes the corresponding alias router to lose its `websecure` entrypoint and `tls: {}` block within one deploy cycle (subject to spec 009 preservation, which is unchanged here). Operators do not need to hand-edit the generated dynamic config to revert."
 - **SC-006**: Zero new GitHub issues filed against Shrine in the 30 days following the release reporting "had to hand-edit dynamic config to publish an alias over HTTPS" or "tls: true on an alias did not produce the expected router shape."
 
 ## Assumptions
