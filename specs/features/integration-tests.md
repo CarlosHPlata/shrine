@@ -1,7 +1,7 @@
 # Spec: Integration Test Suite
 
 ## Status
-In progress (Phases 1–5 complete)
+In progress (Phases 1–6, 8, and 10–12 complete; Phases 7 and 9 are each missing one listed case — see the note under each)
 
 ## Goal
 
@@ -215,7 +215,7 @@ Requires a live Docker daemon. Ubuntu GH Actions runners have Docker out of the 
 
 ---
 
-### Phase 6 — `apply -f` error cases (pending)
+### Phase 6 — `apply -f` error cases ✅
 
 No Docker. All errors are returned before the deploy engine is reached — pure parsing and validation.
 
@@ -232,7 +232,9 @@ Note: `manifest.Parse` does not currently validate the file extension. This test
 
 ---
 
-### Phase 7 — `apply -f` deploy cases (pending)
+### Phase 7 — `apply -f` deploy cases (partial)
+
+Missing as of 2026-10-05 (checked for spec 030): the `app-with-dep.yml` case — `valueFrom` resolved from state after the resource is deployed — has no scenario in `tests/integration/apply_test.go`. Every other case listed below is covered.
 
 Requires a live Docker daemon.
 
@@ -259,7 +261,7 @@ Note: `PlanSingle` uses `specsDir` from config for dependency resolution. In tes
 
 ---
 
-### Phase 8 — `delete team` tests (pending)
+### Phase 8 — `delete team` tests ✅
 
 Split across two suites because the "has deployments" check reads from `deployments.txt`, only written after a real Docker deploy.
 
@@ -274,7 +276,9 @@ New assertion helper: `tc.AssertTeamNotInState(name string) *TestCase` (add to `
 
 ---
 
-### Phase 9 — `describe` tests (pending)
+### Phase 9 — `describe` tests (partial)
+
+Missing as of 2026-10-05 (checked for spec 030): "can describe a resource" in the Docker suite has no scenario in `tests/integration/describe_test.go`. Every other case listed below is covered.
 
 **No-Docker suite** (`tests/integration/describe_test.go`):
 - can describe a team → `AssertSuccess()`, `AssertOutputContains(teamName)`
@@ -288,7 +292,7 @@ New assertion helper: `tc.AssertTeamNotInState(name string) *TestCase` (add to `
 
 ---
 
-### Phase 10 — `get` tests (pending)
+### Phase 10 — `get` tests ✅
 
 **No-Docker suite** (`tests/integration/get_test.go`):
 - can get teams → `shrine get teams`, `AssertOutputContains(teamName)`
@@ -300,7 +304,7 @@ New assertion helper: `tc.AssertTeamNotInState(name string) *TestCase` (add to `
 
 ---
 
-### Phase 11 — `status` tests (pending)
+### Phase 11 — `status` tests ✅
 
 **No-Docker suite** (`tests/integration/status_test.go`):
 - error when getting status of non-existing app → `AssertStderrContains("not found")`
@@ -313,7 +317,7 @@ New assertion helper: `tc.AssertTeamNotInState(name string) *TestCase` (add to `
 
 ---
 
-### Phase 12 — `teardown` tests (pending)
+### Phase 12 — `teardown` tests ✅
 
 All require Docker.
 

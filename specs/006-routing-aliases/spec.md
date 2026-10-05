@@ -5,6 +5,10 @@
 **Status**: Draft  
 **Input**: User description: "Issue 1 — Feature: routing.aliases in application manifests. Applications can only declare a single routing.domain. Add a routing.aliases field that accepts additional host + optional pathPrefix combinations. When the Traefik plugin is active, each alias generates an additional router in the dynamic config file pointing to the same backend service. If the plugin is inactive, aliases are parsed but silently ignored."
 
+## Amendments
+
+- **2026-10-05 — [spec 030](../030-reconcile-spec-docs/spec.md)**: Spec 009 made per-application routing files write-once, so a manifest change alone no longer alters an existing file. Amended: the edge case on removing or changing an alias, FR-009, SC-001, SC-004.
+
 ## Clarifications
 
 ### Session 2026-04-30
@@ -67,7 +71,8 @@ An operator authoring or sharing manifests across hosts may include `routing.ali
 - **`aliases` is present but the application has no `routing.domain`**: The manifest is invalid. Aliases extend a primary domain — they do not replace one. The deploy fails with a clear error.
 - **Alias `host` or `pathPrefix` contains characters that would corrupt the generated gateway config** (e.g., spaces, control characters): The manifest is invalid and the deploy fails with a clear error identifying the bad value. Validation does not attempt full RFC compliance — it rejects the obviously-malformed values that would break the gateway router rule.
 - **`pathPrefix` is present but does not start with `/`, is empty, or is just `/`**: The manifest is invalid and the deploy fails with a clear error naming the application and the offending value. A trailing `/` (e.g., `/finances/`) is accepted and normalized internally to its no-trailing-slash form so two cosmetically different manifests produce identical gateway behavior.
-- **Operator removes or changes an alias and re-deploys**: The router(s) corresponding to the removed alias are cleaned up the same way Shrine already cleans up routes for the primary domain when a manifest changes.
+- **Operator removes or changes an alias and re-deploys**: Nothing changes while the application's routing file exists. The alias's router is removed or updated when the file is regenerated — the operator deletes it and re-deploys — or edited by hand. See the [generated gateway file lifecycle](../009-preserve-app-configs/spec.md#generated-gateway-file-lifecycle-canonical).
+  > *Amended 2026-10-05 by spec 030. Originally:* "The router(s) corresponding to the removed alias are cleaned up the same way Shrine already cleans up routes for the primary domain when a manifest changes."
 - **A gateway plugin other than Traefik is active**: Aliases are still parsed but silently ignored unless that plugin chooses to consume them. This spec only defines Traefik behavior.
 - **Two different applications declare a colliding host+path** (one app's primary or alias matches another app's primary or alias): The deploy fails with a clear error that names both applications and the colliding host+path. No gateway config is updated for the conflicting pair until the operator removes or renames one side; other applications in the same deploy that are unaffected by the conflict are not punished by the failure (i.e., the validation error identifies exactly which applications are in conflict).
 
@@ -86,7 +91,8 @@ An operator authoring or sharing manifests across hosts may include `routing.ali
 - **FR-007a**: When an alias has a non-empty `pathPrefix`, the alias router MUST strip that prefix from the request path before forwarding to the backend by default (`stripPrefix: true`), so backends that serve at root can be reached unchanged behind a prefixed alias. When the operator explicitly sets `stripPrefix: false`, the alias router MUST forward the original path (prefix included) to the backend.
 - **FR-008**: When alias entries would produce a router identical (same host+path matching) to one already produced by the primary domain or by another alias on the same application, manifest validation MUST fail with a clear error that names the application and the duplicate alias index. Shrine MUST NOT silently dedup such entries; loud failure matches the FR-008a cross-application stance and avoids the operator wondering why their second alias never resolved.
 - **FR-008a**: When two different applications would produce routers for the same host+path combination (whether via primary domain or alias on either side), Shrine MUST fail the deploy with a clear error that names both applications and the colliding host+path. Shrine MUST NOT write or update gateway config for either side of the conflict until the operator resolves it.
-- **FR-009**: Alias routers MUST be removed from the gateway dynamic config when the alias is removed from the manifest and the application is re-deployed, the same way primary-domain routers are removed today when `routing.domain` changes.
+- **FR-009**: A per-application routing file generated after an alias is removed from the manifest MUST NOT contain that alias's router. An existing file is not rewritten (see the [generated gateway file lifecycle](../009-preserve-app-configs/spec.md#generated-gateway-file-lifecycle-canonical)); the router leaves the gateway when the operator deletes the file and re-deploys, or edits it.
+  > *Amended 2026-10-05 by spec 030. Originally:* "Alias routers MUST be removed from the gateway dynamic config when the alias is removed from the manifest and the application is re-deployed, the same way primary-domain routers are removed today when `routing.domain` changes."
 - **FR-010**: When no gateway plugin is active, or when a gateway plugin other than Traefik is active and does not consume aliases, Shrine MUST parse `routing.aliases` without error and MUST NOT emit a warning; aliases simply have no effect on routing for that deploy.
 - **FR-011**: Manifests that omit `routing.aliases` entirely MUST behave exactly as they do today; this feature MUST NOT change behavior for any existing manifest.
 - **FR-012**: The deploy log MUST include an observable signal (info-level or equivalent) listing the alias addresses published for each application when the Traefik plugin is active, so operators can confirm aliases took effect without inspecting generated config files.
@@ -101,10 +107,12 @@ An operator authoring or sharing manifests across hosts may include `routing.ali
 
 ### Measurable Outcomes
 
-- **SC-001**: An operator who needs to expose an existing application at a second hostname can do so by adding a single `aliases` entry to the existing manifest — no second manifest, no duplicated image reference, no extra commands beyond a normal `shrine deploy`.
+- **SC-001**: An operator who needs to expose an existing application at a second hostname can do so by adding a single `aliases` entry to the existing manifest, deleting the application's routing file, and running a normal `shrine deploy` — no second manifest and no duplicated image reference. An existing routing file is not rewritten (see the [generated gateway file lifecycle](../009-preserve-app-configs/spec.md#generated-gateway-file-lifecycle-canonical)).
+  > *Amended 2026-10-05 by spec 030. Originally:* "An operator who needs to expose an existing application at a second hostname can do so by adding a single `aliases` entry to the existing manifest — no second manifest, no duplicated image reference, no extra commands beyond a normal `shrine deploy`."
 - **SC-002**: After deploying a manifest with N aliases, the application is reachable at the primary `routing.domain` and at all N alias addresses, with 100% of requests to those addresses landing on the same backend instance.
 - **SC-003**: The same manifest can be deployed to a host with the Traefik plugin active and to a host without it; both deploys complete successfully with zero alias-related warnings or errors on the non-Traefik host.
-- **SC-004**: Removing an alias from the manifest and re-deploying removes the corresponding route from the gateway within one deploy cycle — the alias address stops resolving without operator intervention beyond `shrine deploy`.
+- **SC-004**: Removing an alias from the manifest, deleting the application's routing file, and re-deploying removes the corresponding route from the gateway within that deploy cycle. Without deleting or editing the file, the alias address keeps resolving (see the [generated gateway file lifecycle](../009-preserve-app-configs/spec.md#generated-gateway-file-lifecycle-canonical)).
+  > *Amended 2026-10-05 by spec 030. Originally:* "Removing an alias from the manifest and re-deploying removes the corresponding route from the gateway within one deploy cycle — the alias address stops resolving without operator intervention beyond `shrine deploy`."
 - **SC-005**: Existing applications (manifests with no `aliases` field) experience zero behavioral change after this feature ships — first-deploy and re-deploy produce byte-identical primary-domain routing config compared to the prior release.
 
 ## Assumptions

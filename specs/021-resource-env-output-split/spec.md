@@ -5,6 +5,10 @@
 **Status**: Draft
 **Input**: User description: "Right now resources have an Output spec that is breaking the SRP principle, first it was planned to be used as to declare the output values so others can consume, but, it became nowadays the same place to declare env variables, we have to change it, so resources declare env part like application specs, and additionally the output. How it will work values on env are infered for the secrets, and output it's only the lists of env and host and port that can be exported, they should not be able to declare any value there, no value, valuefrom, the only valid one is the template"
 
+## Amendments
+
+- **2026-10-05 — [spec 030](../030-reconcile-spec-docs/spec.md)**: The preview (`--dry-run`) resolves values to placeholders but never printed them. Descoped: FR-013. Amended: User Story 1's Independent Test.
+
 ## Overview
 
 A Resource's `output` block currently serves two unrelated jobs: it declares the
@@ -47,9 +51,12 @@ the SRP violation persists.
 **Independent Test**: Author a resource with an `env` block (mix of `value`,
 `generated`, `valueFrom: vault:...`, and `template`) and an `output` block that
 lists a subset of those env names plus `host` and a `template` connection
-string. Deploy (real and `--dry-run`) and confirm the container receives the
+string. Deploy for real and confirm the container receives the
 full resolved `env`, while only the listed keys are published as the resource's
-exported interface.
+exported interface. `--dry-run` validates the same manifests but does not display
+resolved values (FR-013).
+
+> *Amended 2026-10-05 by spec 030. Originally:* "Deploy (real and `--dry-run`) and confirm the container receives the full resolved `env`, while only the listed keys are published as the resource's exported interface."
 
 **Acceptance Scenarios**:
 
@@ -133,7 +140,8 @@ and directs the operator to move it under `env`.
 - **FR-010**: Output names MUST be unique within a Resource.
 - **FR-011**: A manifest that declares `value`, `valueFrom`, or `generated` on any `output` entry MUST be rejected with an error that names the offending resource and output and directs the operator to declare the value under `env` and list its name under `output` to export it.
 - **FR-012**: The deploy-order dependency inference (derived from same-team `valueFrom` references) MUST continue to function, keyed off the referenced **exported** output keys.
-- **FR-013**: Dry-run output MUST reflect the split — the resource's resolved `env` as the container environment and the resource's `output` as the published interface — without performing real secret generation or vault reads.
+- **FR-013** *(descoped 2026-10-05)*: Dry-run output MUST reflect the split — the resource's resolved `env` as the container environment and the resource's `output` as the published interface — without performing real secret generation or vault reads.
+  > *Descoped by spec 030.* **Shipped:** the preview resolves a resource's `env` and exports to placeholders (`[GENERATED]`, `[VAULT:<path>]`, `[PORT]`) without generating secrets or reading the vault. **Not shipped:** the preview prints neither the container environment nor the published interface. Tracked in [`specs/progress.md`](../progress.md) under Known Gaps.
 
 ### Key Entities *(include if feature involves data)*
 

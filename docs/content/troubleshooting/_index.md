@@ -30,6 +30,10 @@ The plan succeeded but the actual Docker operation failed. Check Docker's stderr
 
 A `~`-prefixed path in `config.yml` (`specsDir`, `teamsDir`, or the Traefik `routing-dir`) or in `--path` could not be expanded because the process has no home directory — typical under cron, CI runners, systemd units, and containers. The error names the field or flag that supplied the value: replace it with an absolute path, export `HOME` for that environment, or pass an absolute `--path`. Shrine stops before any deployment side effect, so there is nothing to clean up.
 
+## A routing change in the manifest did not take effect
+
+You changed `routing.domain`, an alias, `stripPrefix`, `tls`, or one of the gateway's ports, redeployed, and Traefik still serves the old route. The deploy output shows `Preserving operator-owned route file` or `Preserving operator-owned traefik.yml`: Shrine writes generated gateway files once and never rewrites them. Delete the file named in that line and redeploy, or edit it by hand. See [Generated gateway files are written once](/guides/traefik/#generated-gateway-files-are-written-once).
+
 ## See also
 
 - [`shrine apply`](/cli/apply/) — Deploy manifests

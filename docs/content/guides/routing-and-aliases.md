@@ -94,6 +94,25 @@ Each alias produces its own router. The primary-domain router is never affected 
 
 Two different applications may not declare a router for the same `host` + `pathPrefix` combination. Shrine fails the deploy with a clear error naming both applications and the colliding route.
 
+## Changing routing after the first deploy
+
+Shrine writes an application's route file, `{routing-dir}/dynamic/<team>-<app>.yml`, the first time it deploys the app and never rewrites it. Adding, removing, or editing an alias — or changing `routing.domain`, `pathPrefix`, `stripPrefix`, or `tls` — has no effect on an app that is already deployed until that file is regenerated or edited by hand.
+
+To regenerate it, delete the file and deploy again:
+
+```bash
+rm /srv/shrine/traefik/dynamic/my-team-hello.yml
+shrine deploy
+```
+
+The deploy output tells you when a file was left alone:
+
+```text
+  📄 Preserving operator-owned route file: /srv/shrine/traefik/dynamic/my-team-hello.yml
+```
+
+See [Generated gateway files are written once](/guides/traefik/#generated-gateway-files-are-written-once) for the full list of what is and is not picked up.
+
 ## Logging
 
 The deploy log includes a line per alias listing the published address and, when `pathPrefix` is set with `stripPrefix: false`, a `(no strip)` marker:

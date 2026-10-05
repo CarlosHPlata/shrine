@@ -5,6 +5,10 @@
 **Status**: Draft  
 **Input**: User description: "Bug: shrine deploy overwrites traefik.yml when it already exists. On every deploy, Shrine regenerates traefik.yml unconditionally, discarding any manual edits. Shrine should treat traefik.yml as an operator-owned file once it exists — same policy already applied to files in dynamic/. Only generate it on first deploy when the file is absent."
 
+## Amendments
+
+- **2026-10-05 — [spec 030](../030-reconcile-spec-docs/spec.md)**: Spec 009 extended this spec's write-once rule from `traefik.yml` to per-application routing files, superseding FR-008. Amended: FR-008.
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - Operator-Edited traefik.yml Survives Re-Deploys (Priority: P1)
@@ -79,7 +83,8 @@ An operator wants to discard their local edits to `traefik.yml` and return to th
 - **FR-005**: Shrine MUST NOT require any new flag, env var, or config field for the preserve-on-exists behavior; it is the single, default policy for `traefik.yml`.
 - **FR-006**: When Shrine skips regeneration because `traefik.yml` already exists, the deploy MUST log an observable signal (at info level or equivalent) indicating the file was preserved, so operators can confirm the new behavior in deploy output.
 - **FR-007**: If a stat on `traefik.yml` fails for a reason other than "file does not exist", the deploy MUST fail with an error that names the file and the underlying cause; Shrine MUST NOT fall back to overwriting.
-- **FR-008**: The preserve policy applies only to the `traefik.yml` static config file; Shrine-managed per-route files in `dynamic/` (one file per Shrine-managed route, with deterministic names) continue to be written and removed by Shrine as today.
+- **FR-008**: The preserve policy defined by this spec applies to the `traefik.yml` static config file. Per-route files in `dynamic/` were made write-once by spec 009 and are no longer rewritten or removed by Shrine — see the [generated gateway file lifecycle](../009-preserve-app-configs/spec.md#generated-gateway-file-lifecycle-canonical).
+  > *Amended 2026-10-05 by spec 030. Originally:* "The preserve policy applies only to the `traefik.yml` static config file; Shrine-managed per-route files in `dynamic/` (one file per Shrine-managed route, with deterministic names) continue to be written and removed by Shrine as today."
 - **FR-009**: The "exists" check MUST detect any entry at the `traefik.yml` path — regular file, symlink (regardless of target), directory, or any other file type — and treat it as operator-owned; Shrine MUST NOT follow symlinks when deciding whether to regenerate, and MUST NOT inspect or validate the file's type or content before deciding.
 
 ### Key Entities

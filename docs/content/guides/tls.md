@@ -27,7 +27,7 @@ plugins:
       tlsPort: 443
 ```
 
-Run `shrine deploy` once. Shrine recreates the Traefik container with the new port binding and, when the static config (`traefik.yml`) is Shrine-generated (not operator-preserved), adds the `websecure` entrypoint:
+Run `shrine deploy`. Shrine recreates the Traefik container with the new port binding. If `traefik.yml` does not exist yet, Shrine generates it with the `websecure` entrypoint:
 
 ```yaml
 # generated traefik.yml (relevant section)
@@ -40,7 +40,7 @@ entryPoints:
 
 The `websecure` entrypoint contains only its `address`. Shrine never injects `tls`, `certResolver`, or any TLS-termination keys — those are operator-owned.
 
-If your `traefik.yml` was preserved from a prior operator edit (per Shrine's preservation regime), Shrine will not overwrite it. You must add the `websecure` entrypoint yourself, or delete the file so Shrine regenerates it.
+On a host where the gateway has been deployed before, `traefik.yml` already exists and Shrine does not modify it. The deploy prints a warning beginning `tlsPort set but traefik.yml is missing websecure entrypoint`. Either delete `traefik.yml` before deploying — Shrine regenerates it with `websecure` in the same deploy — or add the entrypoint to the file by hand and restart the gateway. See [Generated gateway files are written once](/guides/traefik/#generated-gateway-files-are-written-once).
 
 ## Mark an alias as TLS
 
@@ -57,6 +57,8 @@ routing:
 ```
 
 Shrine generates that alias router with `entryPoints: [web, websecure]` and an empty `tls: {}` block. Traefik terminates TLS on that route using whatever certificate configuration is already active on the `websecure` entrypoint. The primary-domain router and any aliases without `tls: true` stay HTTP-only.
+
+If the application was already deployed, its route file exists and Shrine does not rewrite it: delete `{routing-dir}/dynamic/<team>-<app>.yml` and redeploy for `tls: true` to take effect. See [Generated gateway files are written once](/guides/traefik/#generated-gateway-files-are-written-once).
 
 The `tls` field is only valid inside a `routing.aliases[]` entry. Declaring it on the primary `routing` block is a validation error.
 
