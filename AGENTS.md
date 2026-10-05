@@ -182,7 +182,7 @@ shrine/
 │   │   ├── enrich.go           # Enricher chain + helpers — infers same-team valueFrom edges; fail-fast on cross-team. See specs/020-infer-valuefrom-deps/spec.md
 │   │   ├── enrich_valuefrom.go # Production rules for valueFrom: resource.*/application.* refs (see specs/020-infer-valuefrom-deps/quickstart.md)
 │   │   ├── order.go            # Topo sort over Resource+Application graph → []PlannedStep
-│   │   └── plan.go             # Plan(), PlanSingle() entry points: load → resolve → enrich → order/single-step
+│   │   └── plan.go             # Plan(): the single deploy-planning entry point over a pre-loaded ManifestSet — resolve → enrich → collision checks → order (or one step when filtered to an app/resource). PlanTeardown(): steps from recorded deployments
 │   ├── resolver/               # Materializes outputs and env at deploy time
 │   │   ├── resolver.go         # LiveResolver: secrets, templates, valueFrom lookup
 │   │   └── dry_run_resolver.go # DryRunResolver: same API, placeholder values
@@ -301,7 +301,7 @@ Self-contained gateway plugin. Activates when `plugins.gateway.traefik` is prese
 - writes `traefik.yml` (static config) to the resolved routing-dir
 - registers a `RoutingBackend` that writes `dynamic/{team}-{name}.yml` per app with both `routing.domain` and `networking.exposeToPlatform: true`
 - starts the `platform.traefik` container on `shrine.platform` with `RestartPolicy: always`, the routing-dir bind-mounted to `/etc/traefik`, and host port bindings for the entry point (and dashboard, if enabled)
-- preserves operator-added files in routing-dir (only files matching `{team}-{name}.yml` produced by shrine are managed)
+- writes each generated file once and never rewrites or removes it afterwards: `traefik.yml` and `dynamic/{team}-{name}.yml` are left untouched once they exist, and teardown warns about leftover route files rather than deleting them; operator-added files in routing-dir are never touched. See [specs/009-preserve-app-configs/spec.md](specs/009-preserve-app-configs/spec.md#generated-gateway-file-lifecycle-canonical)
 
 `shrine deploy --dry-run` validates plugin config (failing fast on missing dashboard credentials) but writes no files and starts no container; route operations are emitted as `[ROUTE]` log lines via the dry-run routing backend.
 

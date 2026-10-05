@@ -1,7 +1,13 @@
 # Spec: Traefik Routing Backend (Phase 9)
 
 ## Status
-Pending
+Superseded
+
+Routing shipped as a local gateway plugin specified in `specs/001-traefik-gateway-plugin/` and extended by specs 002, 004, 006, 008–012, 016, 018, and 024. This file is kept as the original design record. The shipped design differs from it in three ways:
+
+1. Shrine writes files to a local routing directory that it mounts into a Traefik container it manages. There is no SSH push to a separate gateway host.
+2. Per-application files are named `<team>-<name>.yml` and live under `dynamic/` in the routing directory.
+3. Files are written once and never removed by Shrine; teardown warns about the files it leaves behind instead. See the [generated gateway file lifecycle](../009-preserve-app-configs/spec.md#generated-gateway-file-lifecycle-canonical).
 
 ## Goal
 
@@ -31,6 +37,8 @@ The dry-run backend (`internal/engine/dryrun/`) already implements it (prints op
 The engine holds backends as optional interfaces. Nil backends are skipped. Dry-run is just a different set of implementations wired in at startup — no special-casing in the engine itself.
 
 ## Acceptance Criteria
+
+*The criteria below describe the original design and were not implemented as written; see Status.*
 
 - [ ] Given an Application with `spec.routing.domain` set, `shrine deploy` writes a valid Traefik v3 dynamic config YAML to `/opt/traefik/config/` on the gateway (or the path from `traefik.configDir` in config.yml)
 - [ ] The generated file is named `shrine-<team>-<sanitized-domain>.yml`

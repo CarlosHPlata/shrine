@@ -1,7 +1,9 @@
 # Spec: Decoupled Logging & UI (Observer Pattern)
 
 ## Status
-Pending
+Done
+
+Shipped as designed below, with one naming difference: the terminal renderer is `TerminalObserver` in `internal/ui/terminal_logger.go`, not `TerminalUI`. Acceptance criteria verified against the code on 2026-10-05 (spec 030). Later features that touched the event stream and its renderers: `specs/027-app-ui-unit-coverage/`, `specs/028-fix-teardown-event-names/`.
 
 ## Goal
 
@@ -13,11 +15,11 @@ Currently `Engine` and `DockerBackend` call `fmt.Printf` directly. This ties UI 
 
 ## Acceptance Criteria
 
-- [ ] `Engine` and `DockerBackend` emit no `fmt.Printf` calls — all output goes through an `Observer`
-- [ ] A `TerminalUI` implementation brings back the existing rich CLI output (emojis, spinner)
-- [ ] Spinner state is managed by `TerminalUI`, not by `DockerBackend`
-- [ ] Swapping `Observer` implementations (e.g. a silent no-op for tests) requires no changes to `Engine` or `DockerBackend`
-- [ ] All existing unit tests still pass
+- [x] `Engine` and `DockerBackend` emit no `fmt.Printf` calls — all output goes through an `Observer`
+- [x] A `TerminalUI` implementation brings back the existing rich CLI output (emojis, spinner)
+- [x] Spinner state is managed by `TerminalUI`, not by `DockerBackend`
+- [x] Swapping `Observer` implementations (e.g. a silent no-op for tests) requires no changes to `Engine` or `DockerBackend`
+- [x] All existing unit tests still pass
 
 ## Design
 
