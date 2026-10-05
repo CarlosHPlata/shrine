@@ -105,6 +105,8 @@ spec:
 
 **Strict allowlist.** Other manifests may consume only keys listed in `outputs`. An env var that is not exported is private to the resource — though an operator may deliberately fold a private value into an exported `template`. An `outputs` entry may **not** set `value`/`valueFrom`/`generated` — those fields are deprecated on outputs; declare them under `env` and list the name under `outputs` to export it. (Pre-split manifests that set those on an output are rejected at plan time with a migration error.)
 
+See the [Wiring env and outputs guide](/guides/wiring-env-and-outputs/) for a walkthrough.
+
 ## Application
 
 An Application is a deployable container with routing, env injection, and dependency wiring.

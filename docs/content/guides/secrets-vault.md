@@ -127,14 +127,9 @@ At deploy time Shrine resolves the Resource's `password` env var from the vault,
 
 ## Dry-run behaviour
 
-When you run `shrine deploy --dry-run`, Shrine does not contact the vault. Any `vault:` reference is rendered as the placeholder `[VAULT:<path>]` in the plan output so you can review the deployment plan without requiring network connectivity or valid credentials.
+When you run `shrine deploy --dry-run`, Shrine does not contact the vault. Every `vault:` reference is resolved to a placeholder internally, so the preview succeeds without network connectivity or valid credentials.
 
-Example dry-run output:
-
-```
-env DB_PASSWORD=[VAULT:shrine-test/prod/DB_PASSWORD]
-env API_KEY=[VAULT:shrine-test/prod/API_KEY]
-```
+The preview validates manifest structure and dependency wiring and prints the deploy order and the container operations. It does not print environment values, so the placeholders themselves are not displayed.
 
 This lets you validate manifest structure and dependency wiring in CI lint jobs or on developer laptops that have no vault access.
 
