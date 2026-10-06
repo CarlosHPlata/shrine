@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+
+	"github.com/CarlosHPlata/shrine/internal/manifest"
 )
 
 type ResourceOptions struct {
@@ -11,9 +13,12 @@ type ResourceOptions struct {
 	Team             string
 	OutputDir        string
 	Type             string
-	Version          string
+	Version          string // as typed; empty means the default for PullPolicy
 	ExposeToPlatform bool
+	PullPolicy       string // the configuration's imagePullPolicy, empty when unset
 }
+
+const defaultResourceVersionTag = "16"
 
 const resourceSkeleton = `apiVersion: shrine/v1
 kind: Resource
@@ -22,8 +27,7 @@ metadata:
   owner: %s
 spec:
   type: %s
-  version: "%s"
-  networking:
+%s  networking:
     exposeToPlatform: %v
   # env declares the container's runtime configuration (same shape as an
   # Application's env, plus generated secrets).
@@ -54,17 +58,40 @@ func GenerateResource(opts ResourceOptions) error {
 		return fmt.Errorf("resource manifest already exists at %q", path)
 	}
 
-	content := fmt.Sprintf(resourceSkeleton,
-		opts.Name,
-		opts.Team,
-		opts.Type,
-		opts.Version,
-		opts.ExposeToPlatform,
-	)
-	if err := os.WriteFile(path, []byte(content), 0644); err != nil {
+	if err := os.WriteFile(path, []byte(renderResourceSkeleton(opts)), 0644); err != nil {
 		return fmt.Errorf("writing resource manifest: %w", err)
 	}
 
 	fmt.Printf("Created resource manifest: %s\n", path)
 	return nil
+}
+
+func renderResourceSkeleton(opts ResourceOptions) string {
+	version := opts.Version
+	if version == "" {
+		version = defaultResourceVersion(opts.PullPolicy)
+	}
+	return fmt.Sprintf(resourceSkeleton,
+		opts.Name,
+		opts.Team,
+		opts.Type,
+		versionLine(version),
+		opts.ExposeToPlatform,
+	)
+}
+
+// defaultResourceVersion is empty under Pinned so the skeleton omits the
+// line: a version would be a fixed version the next deploy rejects (R-08).
+func defaultResourceVersion(pullPolicy string) string {
+	if pullPolicy == manifest.ImagePullPolicyPinned {
+		return ""
+	}
+	return defaultResourceVersionTag
+}
+
+func versionLine(version string) string {
+	if version == "" {
+		return ""
+	}
+	return fmt.Sprintf("  version: %q\n", version)
 }

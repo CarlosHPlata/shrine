@@ -99,7 +99,7 @@ spec:
 | `spec.networking.exposeToPlatform` | no | `false` | Attach the resource to the shared platform network so gateway plugins can reach it. |
 | `spec.volumes[].name` | yes (per entry) | — | Logical volume name; must be unique within the manifest. |
 | `spec.volumes[].mountPath` | yes (per entry) | — | Absolute path inside the container. |
-| `spec.imagePullPolicy` | no | `Always` for `:latest` or no tag, `IfNotPresent` otherwise | Image pull policy: `Always`, `IfNotPresent`, or `Pinned`. See [Image pull policy](#image-pull-policy). |
+| `spec.imagePullPolicy` | no | the `imagePullPolicy` default in `config.yml` when set; else `Always` for `:latest` or no tag, `IfNotPresent` otherwise | Image pull policy: `Always`, `IfNotPresent`, or `Pinned`. See [Image pull policy](#image-pull-policy). |
 
 † Each `env` entry must set exactly one of `value`, `valueFrom`, `template`, or `generated`.
 
@@ -158,7 +158,7 @@ spec:
 | `spec.replicas` | no | 1 | Number of container instances to run. |
 | `spec.networking.exposeToPlatform` | no | `false` | Attach the container to the platform network and include it in Traefik routing generation. |
 | `spec.networking.publish` | no | not published | Publish the container's `spec.port` on the host's loopback interface (`localhost:<port>`). See [`spec.networking.publish`](#specnetworkingpublish). |
-| `spec.imagePullPolicy` | no | `Always` for `:latest` or no tag, `IfNotPresent` otherwise | Image pull policy: `Always`, `IfNotPresent`, or `Pinned`. See [Image pull policy](#image-pull-policy). |
+| `spec.imagePullPolicy` | no | the `imagePullPolicy` default in `config.yml` when set; else `Always` for `:latest` or no tag, `IfNotPresent` otherwise | Image pull policy: `Always`, `IfNotPresent`, or `Pinned`. See [Image pull policy](#image-pull-policy). |
 
 ### `spec.routing`
 
@@ -229,7 +229,7 @@ Each env var must set exactly one of `value`, `valueFrom`, or `template`.
 
 ### Image pull policy
 
-`spec.imagePullPolicy` decides who owns the version an artifact runs. It takes one of three values; when absent, Shrine derives one from the image reference: `Always` for `latest` or no tag, `IfNotPresent` for any other tag.
+`spec.imagePullPolicy` decides who owns the version an artifact runs. It takes one of three values. The effective policy of an artifact is decided in this order: the manifest's own field; else the `imagePullPolicy` default in `config.yml` when it is set; else a rule derived from the image reference, `Always` for `latest` or no tag and `IfNotPresent` for any other tag. A `Pinned` default therefore holds every manifest that names no policy to the rules below.
 
 | Value | Who owns the version | What deploy does |
 |-------|----------------------|------------------|
@@ -248,6 +248,12 @@ A violation is reported with the manifest's other validation errors, before anyt
 ```text
 application "web": spec.image "ghcr.io/me/web:1.2" names a fixed version but the image pull policy is Pinned; use "ghcr.io/me/web" or "ghcr.io/me/web:latest"
 resource "db": spec.version "16" names a fixed version but the image pull policy is Pinned; omit it or use "latest"
+```
+
+When the policy came from the configuration default rather than the manifest, the message names the setting and the two ways out instead:
+
+```text
+resource "db": spec.version "16" names a fixed version but the image pull policy is Pinned (from config.yml imagePullPolicy); set spec.imagePullPolicy on the manifest or change the default
 ```
 
 **The pin lifecycle.** The first deploy of a `Pinned` artifact pulls the newest version of its repository, deploys it, and records a pin: the exact version (the registry digest), the readable version it was resolved from, and the date. Every later deploy runs the pinned exact version, fetching it by digest only when the host no longer has it and never consulting the tag again, across a plain redeploy, a redeploy that recreates the container, a teardown followed by a deploy, and a wiped local image cache. Deploy output says which happened: `📌 Pinned team.name at latest@3f2a9c1b4d7e` on the first deploy, `📌 Using pinned team.name latest@3f2a9c1b4d7e (since 2026-10-06)` afterwards. `shrine deploy --dry-run` previews the decision without writing anything.

@@ -12,6 +12,9 @@ import (
 type ManifestSet struct {
 	Applications map[string]*manifest.ApplicationManifest
 	Resources    map[string]*manifest.ResourceManifest
+
+	// pullPolicySources is filled by applyEffectivePullPolicy; nil until then.
+	pullPolicySources map[string]pullPolicySource
 }
 
 // ErrDuplicateManifest is returned by MergeManifest when the named manifest is

@@ -36,7 +36,7 @@ func Plan(set *ManifestSet, store state.TeamStore, registries []config.RegistryC
 
 	applyEffectivePullPolicy(set, defaultPullPolicy)
 
-	if errs := Resolve(set, store, registries, defaultPullPolicy); len(errs) > 0 {
+	if errs := Resolve(set, store, registries); len(errs) > 0 {
 		return PlanResult{ValidationErr: errs}
 	}
 

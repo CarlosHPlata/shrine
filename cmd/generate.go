@@ -53,10 +53,6 @@ var generateAppCmd = &cobra.Command{
 			return err
 		}
 		name := args[0]
-		image := appImage
-		if image == "" {
-			image = name + ":latest"
-		}
 		domain := appDomain
 		if domain == "" {
 			domain = name + ".shrine.lab"
@@ -75,7 +71,8 @@ var generateAppCmd = &cobra.Command{
 			Domain:           domain,
 			PathPrefix:       pathPrefix,
 			ExposeToPlatform: appExpose,
-			Image:            image,
+			Image:            appImage,
+			PullPolicy:       cfg.ImagePullPolicy,
 		})
 	},
 }
@@ -98,6 +95,7 @@ var generateResourceCmd = &cobra.Command{
 			Type:             resType,
 			Version:          resVersion,
 			ExposeToPlatform: resExpose,
+			PullPolicy:       cfg.ImagePullPolicy,
 		})
 	},
 }
@@ -112,12 +110,12 @@ func init() {
 	generateAppCmd.Flags().StringVar(&appDomain, "domain", "", "Public domain for the application (defaults to [name].home.lab)")
 	generateAppCmd.Flags().StringVar(&appPathPrefix, "pathprefix", "", "Path prefix for routing (defaults to /[name])")
 	generateAppCmd.Flags().BoolVar(&appExpose, "expose", false, "Expose to Platform network")
-	generateAppCmd.Flags().StringVar(&appImage, "image", "", "Docker image to run (defaults to [name]:latest)")
+	generateAppCmd.Flags().StringVar(&appImage, "image", "", "Docker image to run (defaults to [name]:latest, or [name] when imagePullPolicy in config.yml is Pinned)")
 
 	// Resource flags
 	generateResourceCmd.PersistentFlags().StringVarP(&generateTeam, "team", "t", "default-team", "Team that owns the resource")
 	generateResourceCmd.Flags().StringVar(&resType, "type", "postgres", "Type of resource")
-	generateResourceCmd.Flags().StringVar(&resVersion, "version", "16", "Version of the resource")
+	generateResourceCmd.Flags().StringVar(&resVersion, "version", "", "Version of the resource (defaults to 16; omitted when imagePullPolicy in config.yml is Pinned)")
 	generateResourceCmd.Flags().BoolVar(&resExpose, "expose", false, "Expose Toplatform network")
 
 	rootCmd.AddCommand(generateCmd)

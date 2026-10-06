@@ -29,7 +29,7 @@ Read with [AGENTS.md](../../../AGENTS.md); only what this epic touches is listed
 | Composition root | `internal/app/app.go`: `BuildDeployBundle`, `BuildApplyBundle`, `BuildTeardownBundle`; `internal/app/components.go`: `NewQueryContainerBackend` | Where a new command's dependencies are assembled. |
 | Terminal rendering | `internal/ui/terminal_logger.go` | One `case` per event name; unknown names render generically. |
 | Config | `internal/config/config.go`: `Config`, `Load` | Top-level keys `registries`, `specsDir`, `teamsDir`, `plugins`. |
-| Generate templates | `internal/handler/apps.go`, `internal/handler/resources.go`, `cmd/generate.go` | App image defaults to `<name>:latest`; resource version defaults to `16`. |
+| Generate templates | `internal/handler/apps.go`, `internal/handler/resources.go`, `cmd/generate.go` | App image defaults to `<name>:latest`; resource version defaults to `16`. | *Amended by T4 (spec 034):* both defaults are decided in the handler from the configuration default, and the `--version` flag default is empty so an explicit `16` can be told from an omitted flag.
 
 ## 2. Decisions
 
@@ -207,6 +207,8 @@ One `ResolveImageOp` per step, in step order, from the step's manifest. The firs
 - `Pinned` Resource with `spec.version` other than empty or `latest`: `resource "db": spec.version "16" names a fixed version but the image pull policy is Pinned (from config.yml imagePullPolicy); set spec.imagePullPolicy on the manifest or change the default`. The parenthetical appears only when the policy came from the configuration default. *Amended by T3 (spec 033):* when the policy came from the manifest the message ends `; omit it or use "latest"`, because the design's second clause only makes sense for a configuration-sourced policy; T4 adds the configuration wording. A Resource `spec.image` override naming a fixed version gets the Application-shaped message; the `<type>:<version>` image the parser derives is not treated as an override, so one mistake is reported once. The two helpers live in a new `internal/planner/policy.go` beside `resolve.go`.
 - Not `Pinned` and Resource `spec.version` empty: `resource "db": spec.version is required`, the text parse-time validation uses today.
 
+*Amended by T4 (spec 034):* `applyEffectivePullPolicy` records on the `ManifestSet` which precedence layer supplied each artifact's policy, and `validateImagePolicies(set)` reads that record to choose the message ending; the `defaultPullPolicy` parameter is removed from `validateImagePolicies` and `Resolve`, since `Plan` is the only place the default enters. The configuration-sourced Application message ends `(from config.yml imagePullPolicy); set spec.imagePullPolicy on the manifest or change the default`, like the Resource message; the manifest-sourced endings are T3's.
+
 `internal/manifest/parser.go`: the Resource image default becomes `<type>:<version>` when a version is set and `<type>` when it is not. `internal/manifest/validate.go`: the `spec.version is required` check is removed from `validateResourceSpec`; the enum check for `spec.imagePullPolicy` accepts the third value.
 
 ### 4.6 Bump
@@ -251,7 +253,7 @@ Exact strings are fixed by each ticket's contract; the table fixes the shape.
 
 ### 4.10 Generate
 
-`handler.AppOptions` and `handler.ResourceOptions` gain `PullPolicy string`, the effective default from `cfg.ImagePullPolicy`. Under `Pinned` the app image defaults to `<name>` and the resource skeleton omits the `version:` line; otherwise the templates are unchanged. No `imagePullPolicy:` line is written, so the manifest keeps following the configuration default.
+`handler.AppOptions` and `handler.ResourceOptions` gain `PullPolicy string`, the effective default from `cfg.ImagePullPolicy`. Under `Pinned` the app image defaults to `<name>` and the resource skeleton omits the `version:` line; otherwise the templates are unchanged. No `imagePullPolicy:` line is written, so the manifest keeps following the configuration default. *Amended by T4 (spec 034):* the image default moves from `cmd/generate.go` into `handler.GenerateApp`, and the `--version` flag default becomes empty with `handler.GenerateResource` filling `16` unless the default is `Pinned`; an explicit `--image` or `--version` is written verbatim under every default. Rendering is split into `renderAppSkeleton` and `renderResourceSkeleton` so unit tests stay off the filesystem.
 
 ### 4.11 Documentation touch points
 

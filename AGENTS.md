@@ -284,11 +284,12 @@ shrine deploy
 
 ```
 <config-dir>/                    # default: ~/.config/shrine/
-└── config.yml                   # registry credentials, specsDir, gateway IP
+└── config.yml                   # registry credentials, specsDir, gateway IP, image pull policy default
 ```
 
 ```yaml
 specsDir: ~/projects/myapp/manifests   # default specs directory (~ is expanded)
+imagePullPolicy: Pinned                 # optional default pull policy for manifests that name none: Always | IfNotPresent | Pinned; absent = derived rule
 registries:
   - host: ghcr.io
     username: myuser

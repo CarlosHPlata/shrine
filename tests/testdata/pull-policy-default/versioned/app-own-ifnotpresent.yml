@@ -1,0 +1,9 @@
+apiVersion: shrine/v1
+kind: Application
+metadata:
+  name: app-own-ifnotpresent
+  owner: shrine-deploy-test
+spec:
+  image: traefik/whoami:v1.10.1
+  port: 80
+  imagePullPolicy: IfNotPresent

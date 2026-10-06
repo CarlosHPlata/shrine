@@ -24,7 +24,7 @@ shrine generate application [name] [flags]
       --domain string       Public domain for the application (defaults to [name].home.lab)
       --expose              Expose to Platform network
   -h, --help                help for application
-      --image string        Docker image to run (defaults to [name]:latest)
+      --image string        Docker image to run (defaults to [name]:latest, or [name] when imagePullPolicy in config.yml is Pinned)
       --pathprefix string   Path prefix for routing (defaults to /[name])
       --port int            Port the application listens on (default 8080)
       --replicas int        Number of replicas to run (default 1)

@@ -34,7 +34,7 @@ func TestResolve_PublishGrantsNoCrossTeamAccess(t *testing.T) {
 		},
 	}
 
-	errs := Resolve(set, stubTeamStore{}, nil, "")
+	errs := Resolve(set, stubTeamStore{}, nil)
 	if len(errs) == 0 {
 		t.Fatal("cross-team dependency on a publish-only app must be rejected")
 	}
@@ -49,7 +49,7 @@ func TestResolve_PublishGrantsNoCrossTeamAccess(t *testing.T) {
 
 	// Flipping the raw field on makes the same dependency valid.
 	set.Applications["target"].Spec.Networking.ExposeToPlatform = true
-	if errs := Resolve(set, stubTeamStore{}, nil, ""); len(errs) != 0 {
+	if errs := Resolve(set, stubTeamStore{}, nil); len(errs) != 0 {
 		t.Errorf("exposeToPlatform target should be reachable, got: %v", errs)
 	}
 }
