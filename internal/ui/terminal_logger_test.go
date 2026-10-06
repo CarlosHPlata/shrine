@@ -187,6 +187,12 @@ func TestTerminalObserver_RendersEachKind(t *testing.T) {
 		{ev("image.resolve", engine.StatusFinished, "team", "team-a", "name", "web", "ref", "nginx:1.27",
 			"digest", "sha256:a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2", "source", "manifest"),
 			"  🔎 Resolved team-a.web nginx:1.27@a1b2c3d4e5f6\n"},
+		{ev("image.resolve", engine.StatusFinished, "team", "team-a", "name", "web", "ref", "ghcr.io/me/web@sha256:3f2a9c1b4d7e3f2a",
+			"digest", "sha256:3f2a9c1b4d7e3f2a9c1b4d7e3f2a9c1b4d7e3f2a9c1b4d7e3f2a9c1b4d7e3f2a", "requested", "ghcr.io/me/web:latest", "source", "resolved"),
+			"  📌 Pinned team-a.web at latest@3f2a9c1b4d7e\n"},
+		{ev("image.resolve", engine.StatusFinished, "team", "team-a", "name", "db", "ref", "postgres@sha256:9c1b4d7e3f2a9c1b",
+			"digest", "sha256:9c1b4d7e3f2a9c1b4d7e3f2a9c1b4d7e3f2a9c1b4d7e3f2a9c1b4d7e3f2a9c1b", "requested", "postgres:17", "source", "pinned", "pinned_at", "2026-10-06"),
+			"  📌 Using pinned team-a.db 17@9c1b4d7e3f2a (since 2026-10-06)\n"},
 	}
 
 	for _, tc := range cases {
@@ -295,4 +301,38 @@ func TestTerminalObserver_GenericErrorLine(t *testing.T) {
 			t.Errorf("got  %q\nwant %q", got, want)
 		}
 	})
+}
+
+func TestReadableVersion(t *testing.T) {
+	const digest = "sha256:9c1b4d7e3f2a9c1b4d7e3f2a9c1b4d7e3f2a9c1b4d7e3f2a9c1b4d7e3f2a9c1b"
+	cases := map[string]string{
+		"postgres:17":                     "17@9c1b4d7e3f2a",
+		"postgres":                        "latest@9c1b4d7e3f2a",
+		"127.0.0.1:5000/shrine/whoami":    "latest@9c1b4d7e3f2a",
+		"ghcr.io/me/web:latest":           "latest@9c1b4d7e3f2a",
+		"postgres@sha256:aaaaaaaaaaaaaaa": "9c1b4d7e3f2a",
+	}
+	for requested, want := range cases {
+		t.Run(requested, func(t *testing.T) {
+			if got := readableVersion(requested, digest); got != want {
+				t.Errorf("readableVersion(%q) = %q, want %q", requested, got, want)
+			}
+		})
+	}
+}
+
+func TestTerminalObserver_PinnedLinesForUntaggedAndDigestRequests(t *testing.T) {
+	const digest = "sha256:9c1b4d7e3f2a9c1b4d7e3f2a9c1b4d7e3f2a9c1b4d7e3f2a9c1b4d7e3f2a9c1b"
+	obs, buf := newObserverWithBuffer(t)
+
+	obs.OnEvent(ev("image.resolve", engine.StatusFinished, "team", "team-a", "name", "db", "ref", "postgres@"+digest,
+		"digest", digest, "requested", "postgres", "source", "pinned", "pinned_at", "2026-10-06"))
+	obs.OnEvent(ev("image.resolve", engine.StatusFinished, "team", "team-a", "name", "db", "ref", "postgres@"+digest,
+		"digest", digest, "requested", "postgres@"+digest, "source", "pinned", "pinned_at", "2026-10-06"))
+
+	want := "  📌 Using pinned team-a.db latest@9c1b4d7e3f2a (since 2026-10-06)\n" +
+		"  📌 Using pinned team-a.db 9c1b4d7e3f2a (since 2026-10-06)\n"
+	if got := buf.String(); got != want {
+		t.Errorf("got  %q\nwant %q", got, want)
+	}
 }

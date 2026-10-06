@@ -12,6 +12,19 @@ import (
 	"github.com/CarlosHPlata/shrine/internal/state"
 )
 
+// imagePinSnapshot reads every recorded pin once for the preview; a store
+// without pins yields an empty snapshot.
+func imagePinSnapshot(store *state.Store) (map[string]state.ImagePin, error) {
+	if store == nil || store.ImagePins == nil {
+		return map[string]state.ImagePin{}, nil
+	}
+	pins, err := store.ImagePins.ListAll()
+	if err != nil {
+		return nil, fmt.Errorf("listing image pins: %w", err)
+	}
+	return pins, nil
+}
+
 // buildPortContext gathers the host-port knowledge living outside the
 // manifest set: gateway-reserved ports from config and persisted allocations
 // from state.
@@ -74,7 +87,11 @@ func DryRun(out, errOut io.Writer, manifestDir string, store *state.Store, cfg *
 
 	fmt.Fprint(out, formatDeployPlan(result.Steps, result.ManifestSet, result.InferredEdges))
 
-	engineInst := dryrun.NewDryRunEngine(out, ports.Persisted)
+	pins, err := imagePinSnapshot(store)
+	if err != nil {
+		return err
+	}
+	engineInst := dryrun.NewDryRunEngine(out, ports.Persisted, pins)
 	if err := engineInst.ExecuteDeploy(result.Steps, result.ManifestSet); err != nil {
 		return err
 	}
