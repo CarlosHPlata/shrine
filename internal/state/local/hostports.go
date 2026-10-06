@@ -61,7 +61,7 @@ func newHostPortStoreWithFileOps(baseDir string, reserved []int, read readFileFn
 }
 
 func atomicWriteFile(path string, data []byte) error {
-	tmp, err := os.CreateTemp(filepath.Dir(path), "hostports-*.txt.tmp")
+	tmp, err := os.CreateTemp(filepath.Dir(path), filepath.Base(path)+".*.tmp")
 	if err != nil {
 		return fmt.Errorf("creating temporary file: %w", err)
 	}
