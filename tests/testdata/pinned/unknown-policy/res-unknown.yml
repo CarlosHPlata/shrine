@@ -1,0 +1,10 @@
+apiVersion: shrine/v1
+kind: Resource
+metadata:
+  name: cache-unknown
+  owner: shrine-deploy-test
+spec:
+  type: cache
+  version: "1"
+  image: traefik/whoami
+  imagePullPolicy: Sometimes

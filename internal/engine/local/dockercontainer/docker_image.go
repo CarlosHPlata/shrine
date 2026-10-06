@@ -2,12 +2,16 @@ package dockercontainer
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"strings"
+	"time"
 
 	"github.com/CarlosHPlata/shrine/internal/engine"
 	"github.com/CarlosHPlata/shrine/internal/manifest"
+	"github.com/CarlosHPlata/shrine/internal/state"
+	"github.com/containerd/errdefs"
 	"github.com/docker/docker/api/types/filters"
 	"github.com/docker/docker/api/types/image"
 )
@@ -27,25 +31,201 @@ func (backend *DockerBackend) ResolveImage(op engine.ResolveImageOp) (engine.Res
 
 	backend.emitStarted("image.resolve", map[string]string{"team": op.Team, "name": op.Name, "ref": ref})
 
-	located, err := backend.locateImage(ctx, ref, op.ImagePullPolicy)
+	var resolved engine.ResolvedImage
+	if manifest.IsManifestOwnedPolicy(op.ImagePullPolicy) {
+		resolved, err = backend.resolveManifestOwned(ctx, op, ref)
+	} else {
+		resolved, err = backend.resolvePinned(ctx, op, ref)
+	}
 	if err != nil {
 		return engine.ResolvedImage{}, err
 	}
 
-	resolved := engine.ResolvedImage{
+	backend.emitFinished("image.resolve", resolvedImageFields(op, resolved))
+	return resolved, nil
+}
+
+func resolvedImageFields(op engine.ResolveImageOp, resolved engine.ResolvedImage) map[string]string {
+	fields := map[string]string{
+		"team":   op.Team,
+		"name":   op.Name,
+		"ref":    resolved.Ref,
+		"digest": resolved.Digest,
+		"source": resolved.Source,
+	}
+	if resolved.Requested != "" {
+		fields["requested"] = resolved.Requested
+	}
+	if resolved.Source == engine.ImageSourcePinned {
+		fields["pinned_at"] = resolved.PinnedAt.UTC().Format(time.DateOnly)
+	}
+	return fields
+}
+
+func (backend *DockerBackend) resolveManifestOwned(ctx context.Context, op engine.ResolveImageOp, ref string) (engine.ResolvedImage, error) {
+	located, err := backend.locateImage(ctx, ref, op.ImagePullPolicy)
+	if err != nil {
+		return engine.ResolvedImage{}, err
+	}
+	if err := backend.releasePin(op); err != nil {
+		return engine.ResolvedImage{}, err
+	}
+	return engine.ResolvedImage{
 		Ref:     ref,
 		Digest:  pickRepoDigest(located.RepoDigests, repositoryOf(ref)),
 		ImageID: located.ID,
 		Source:  engine.ImageSourceManifest,
+	}, nil
+}
+
+func (backend *DockerBackend) resolvePinned(ctx context.Context, op engine.ResolveImageOp, ref string) (engine.ResolvedImage, error) {
+	pin, found, err := backend.usablePin(op, ref)
+	if err != nil {
+		return engine.ResolvedImage{}, err
 	}
-	backend.emitFinished("image.resolve", map[string]string{
-		"team":   op.Team,
-		"name":   op.Name,
-		"ref":    ref,
-		"digest": resolved.Digest,
-		"source": resolved.Source,
-	})
-	return resolved, nil
+	if found {
+		return backend.reusePin(ctx, op, pin)
+	}
+	return backend.pinNewest(ctx, op, ref)
+}
+
+// usablePin returns the artifact's pin when it is for the repository the
+// manifest names now; a pin for another repository is meaningless and is
+// treated as absent so the next deploy pins afresh (spec 033 FR-011).
+func (backend *DockerBackend) usablePin(op engine.ResolveImageOp, ref string) (state.ImagePin, bool, error) {
+	pins, ok := backend.pinStore()
+	if !ok {
+		return state.ImagePin{}, false, nil
+	}
+	pin, err := pins.Get(op.Team, op.Name)
+	if errors.Is(err, state.ErrImagePinNotFound) {
+		return state.ImagePin{}, false, nil
+	}
+	if err != nil {
+		return state.ImagePin{}, false, fmt.Errorf("reading image pin for %s/%s: %w", op.Team, op.Name, err)
+	}
+	return pin, sameRepository(pin.Requested, ref), nil
+}
+
+// reusePin runs the pinned exact version, fetching it by digest only when
+// the host no longer has it; the tag is never consulted (R-13).
+func (backend *DockerBackend) reusePin(ctx context.Context, op engine.ResolveImageOp, pin state.ImagePin) (engine.ResolvedImage, error) {
+	local, present, err := backend.findImageByReference(ctx, pin.Pinned)
+	if err != nil {
+		return engine.ResolvedImage{}, err
+	}
+	if !present {
+		if err := backend.pullImage(ctx, pin.Pinned); err != nil {
+			return engine.ResolvedImage{}, backend.notServedError(op, pin, err)
+		}
+		if local, err = backend.inspectImage(ctx, pin.Pinned); err != nil {
+			return engine.ResolvedImage{}, err
+		}
+	}
+	_, digest, _ := strings.Cut(pin.Pinned, "@")
+	return engine.ResolvedImage{
+		Ref:       pin.Pinned,
+		Digest:    digest,
+		ImageID:   local.ID,
+		Source:    engine.ImageSourcePinned,
+		Requested: pin.Requested,
+		PinnedAt:  pin.PinnedAt,
+	}, nil
+}
+
+// pinNewest is the first deploy under Pinned: pull the newest version of the
+// repository, record its exact version, and run that.
+func (backend *DockerBackend) pinNewest(ctx context.Context, op engine.ResolveImageOp, ref string) (engine.ResolvedImage, error) {
+	if err := backend.pullImage(ctx, ref); err != nil {
+		return engine.ResolvedImage{}, err
+	}
+	local, err := backend.inspectImage(ctx, ref)
+	if err != nil {
+		return engine.ResolvedImage{}, err
+	}
+	digest := pickRepoDigest(local.RepoDigests, repositoryOf(ref))
+	if digest == "" {
+		return engine.ResolvedImage{}, backend.emitErr("image.resolve", resolveErrorFields(op, ref),
+			fmt.Errorf("image %q carries no registry digest and cannot be pinned", ref))
+	}
+
+	pin := state.ImagePin{
+		Kind:      op.Kind,
+		Name:      op.Name,
+		Requested: ref,
+		Pinned:    pinnedReference(ref, digest),
+		PinnedAt:  backend.clock(),
+	}
+	pins, ok := backend.pinStore()
+	if !ok {
+		return engine.ResolvedImage{}, fmt.Errorf("recording image pin for %s/%s: no image pin store", op.Team, op.Name)
+	}
+	if err := pins.Put(op.Team, pin); err != nil {
+		return engine.ResolvedImage{}, fmt.Errorf("recording image pin for %s/%s: %w", op.Team, op.Name, err)
+	}
+	return engine.ResolvedImage{
+		Ref:       pin.Pinned,
+		Digest:    digest,
+		ImageID:   local.ID,
+		Source:    engine.ImageSourceResolved,
+		Requested: ref,
+	}, nil
+}
+
+// releasePin makes the artifact manifest-owned again: a pin belongs to the
+// pinned policy, and a stale one would surprise on return (design TD-6).
+func (backend *DockerBackend) releasePin(op engine.ResolveImageOp) error {
+	pins, ok := backend.pinStore()
+	if !ok {
+		return nil
+	}
+	if err := pins.Release(op.Team, op.Name); err != nil {
+		return fmt.Errorf("releasing image pin for %s/%s: %w", op.Team, op.Name, err)
+	}
+	return nil
+}
+
+// notServedError is the pinned failure of R-14: the registry no longer has
+// the exact version and the host does not either. Until bump exists (T6) the
+// way out is the manifest's policy.
+func (backend *DockerBackend) notServedError(op engine.ResolveImageOp, pin state.ImagePin, cause error) error {
+	return backend.emitErr("image.resolve", resolveErrorFields(op, pin.Pinned),
+		fmt.Errorf("pinned exact version %q for %s/%s is no longer served by the registry; deploy the %s under %s or %s to release the pin, then return to %s: %w",
+			pin.Pinned, op.Team, op.Name, strings.ToLower(op.Kind),
+			manifest.ImagePullPolicyAlways, manifest.ImagePullPolicyIfNotPresent, manifest.ImagePullPolicyPinned, cause))
+}
+
+func resolveErrorFields(op engine.ResolveImageOp, ref string) map[string]string {
+	return map[string]string{"team": op.Team, "name": op.Name, "ref": ref}
+}
+
+func (backend *DockerBackend) pinStore() (state.ImagePinStore, bool) {
+	if backend.state == nil || backend.state.ImagePins == nil {
+		return nil, false
+	}
+	return backend.state.ImagePins, true
+}
+
+// findImageByReference is the local presence check for a digest reference;
+// ImageList's reference filter does not match repo@digest, ImageInspect does.
+func (backend *DockerBackend) findImageByReference(ctx context.Context, ref string) (localImage, bool, error) {
+	inspected, err := backend.client.ImageInspect(ctx, ref)
+	if errdefs.IsNotFound(err) {
+		return localImage{}, false, nil
+	}
+	if err != nil {
+		return localImage{}, false, backend.emitErr("image.inspect", map[string]string{"ref": ref},
+			fmt.Errorf("inspecting image %q: %w", ref, err))
+	}
+	return localImage{ID: inspected.ID, RepoDigests: inspected.RepoDigests}, true, nil
+}
+
+func pinnedReference(ref, digest string) string {
+	return repositoryOf(ref) + "@" + digest
+}
+
+func sameRepository(a, b string) bool {
+	return normalizeRepository(repositoryOf(a)) == normalizeRepository(repositoryOf(b))
 }
 
 // locateImage keeps today's pull semantics: any policy but Always reuses a

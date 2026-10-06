@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/CarlosHPlata/shrine/internal/engine"
+	"github.com/CarlosHPlata/shrine/internal/manifest"
 )
 
 type TerminalObserver struct {
@@ -158,10 +159,36 @@ func (t *TerminalObserver) OnEvent(e engine.Event) {
 		if e.Status == engine.StatusStarted {
 			fmt.Fprintf(t.out, "🔎 Resolving image for %s.%s (%s)\n", e.Fields["team"], e.Fields["name"], e.Fields["ref"])
 		}
-		if e.Status == engine.StatusFinished && e.Fields["source"] == engine.ImageSourceManifest {
-			fmt.Fprintf(t.out, "  🔎 Resolved %s.%s %s\n", e.Fields["team"], e.Fields["name"], exactVersion(e.Fields["ref"], e.Fields["digest"]))
+		if e.Status == engine.StatusFinished {
+			t.renderImageResolved(e)
 		}
 	}
+}
+
+func (t *TerminalObserver) renderImageResolved(e engine.Event) {
+	artifact := e.Fields["team"] + "." + e.Fields["name"]
+	switch e.Fields["source"] {
+	case engine.ImageSourceManifest:
+		fmt.Fprintf(t.out, "  🔎 Resolved %s %s\n", artifact, exactVersion(e.Fields["ref"], e.Fields["digest"]))
+	case engine.ImageSourceResolved:
+		fmt.Fprintf(t.out, "  📌 Pinned %s at %s\n", artifact, readableVersion(e.Fields["requested"], e.Fields["digest"]))
+	case engine.ImageSourcePinned:
+		fmt.Fprintf(t.out, "  📌 Using pinned %s %s (since %s)\n", artifact, readableVersion(e.Fields["requested"], e.Fields["digest"]), e.Fields["pinned_at"])
+	}
+}
+
+// readableVersion is the pin as a person reads it: the tag it was resolved
+// from and a short exact version, or the short exact version alone when the
+// request was itself a digest (design section 3.5).
+func readableVersion(requested, digest string) string {
+	if manifest.IsDigestReference(requested) {
+		return shortDigest(digest)
+	}
+	tag := manifest.TagOf(requested)
+	if tag == "" {
+		tag = "latest"
+	}
+	return tag + "@" + shortDigest(digest)
 }
 
 func exactVersion(ref, digest string) string {

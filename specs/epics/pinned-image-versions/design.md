@@ -12,9 +12,9 @@ Read with [AGENTS.md](../../../AGENTS.md); only what this epic touches is listed
 
 | Concern | Where | What it does now |
 |---|---|---|
-| Pull policy values and the derived rule | `internal/manifest/types.go`: `ImagePullPolicyAlways`, `ImagePullPolicyIfNotPresent`, `EffectivePullPolicy(image, declared)` | `latest` or no tag yields `Always`; any other tag yields `IfNotPresent`. |
+| Pull policy values and the derived rule | `internal/manifest/types.go`: `ImagePullPolicyAlways`, `ImagePullPolicyIfNotPresent`, `EffectivePullPolicy(image, declared)` | `latest` or no tag yields `Always`; any other tag yields `IfNotPresent`. *Amended by T3 (spec 033):* the tag was taken from the last colon of the whole reference, so an untagged image on a registry with a port (`127.0.0.1:5000/app`) derived `IfNotPresent`; `TagOf` now counts a colon only after the last slash and the derived rule follows the documented wording. |
 | Resource image defaulting | `internal/manifest/parser.go`, `parseManifest`, Resource case | When `spec.image` is empty, sets it to `<type>:<version>`, but only when `version` is non-empty. |
-| Parse-time validation | `internal/manifest/validate.go`: `validateApplicationSpec`, `validateResourceSpec` | `spec.image` required on Application; `spec.version` required on Resource. |
+| Parse-time validation | `internal/manifest/validate.go`: `validateApplicationSpec`, `validateResourceSpec` | `spec.image` required on Application; `spec.version` required on Resource. *Amended by T3 (spec 033):* no enum check on `spec.imagePullPolicy` existed; an unknown value silently behaved as `IfNotPresent`. T3 adds `validatePullPolicy` for both kinds. |
 | Plan-time, config-aware validation | `internal/planner/resolve.go`: `Resolve`, `validateRegistryImages` | Validates `reg:<alias>` prefixes against config registries. The precedent for validation that needs config. |
 | Planning entry point | `internal/planner/plan.go`: `Plan(set, teams, registries, ports, filter)` | Called from `handler.Deploy`, `handler.DryRun`, and `handler.ApplySingle`. |
 | Container ops | `internal/engine/engine.go`: `ExecuteDeploy`, `deployApplication`, `deployResource` | Builds a `CreateContainerOp` per step with `Image` and `ImagePullPolicy` taken from the manifest. |
@@ -128,7 +128,7 @@ Resource    hello-db  postgres:17                 postgres@sha256:9c1b4d7e3f2a�
 
 ### 3.5 Readable form
 
-Wherever a pin is shown in a table: `<readable>@<twelve hex>`, where readable is the tag of `Requested`, or the short digest alone when `Requested` is itself a digest reference. Examples: `latest@3f2a9c1b4d7e`, `17@9c1b4d7e3f2a`. `describe` shows the full `Pinned` string and the date.
+Wherever a pin is shown in a table: `<readable>@<twelve hex>`, where readable is the tag of `Requested`, or the short digest alone when `Requested` is itself a digest reference. Examples: `latest@3f2a9c1b4d7e`, `17@9c1b4d7e3f2a`. `describe` shows the full `Pinned` string and the date. *Amended by T3 (spec 033):* an untagged `Requested` (`postgres`) reads as `latest`.
 
 ## 4. Interfaces and flow
 
@@ -145,10 +145,12 @@ type ResolveImageOp struct {
 }
 
 type ResolvedImage struct {
-    Ref     string // what the container is created from: the expanded tag reference, or the pinned digest reference
-    Digest  string // sha256:… from the registry; empty only when the image has no repository digest
-    ImageID string // local image id, the config-hash input
-    Source  string // "manifest" | "pinned" | "resolved" | "repinned"
+    Ref       string    // what the container is created from: the expanded tag reference, or the pinned digest reference
+    Digest    string    // sha256:… from the registry; empty only when the image has no repository digest
+    ImageID   string    // local image id, the config-hash input
+    Source    string    // "manifest" | "pinned" | "resolved" | "repinned"
+    Requested string    // T3 (spec 033): the expanded tag reference a pin was resolved from; Ref is a digest under Pinned, so the readable tag lives here
+    PinnedAt  time.Time // T3 (spec 033): zero unless Source is "pinned"
 }
 
 type ContainerBackend interface {
@@ -166,10 +168,10 @@ In `internal/engine/local/dockercontainer/docker_image.go`, replacing the privat
 1. Expand the `reg:` alias once, as `CreateContainer` does today.
 2. `Always` or `IfNotPresent`: today's behaviour, then `ImageInspect` for the image id and the repository digest. If the artifact has a pin, release it (TD-6). `Source` is `manifest`.
 3. `Pinned` with `Repin` empty:
-   - pin exists: `ImageInspect(pin.Pinned)`; when absent locally, pull `pin.Pinned` with the registry credentials of its host; a pull failure returns `pinned exact version <pin.Pinned> for <team>/<name> is no longer served; run "shrine bump <kind> <name>" to choose another` (T3 wording says "edit the manifest" until T6 lands). `Ref` is `pin.Pinned`, `Source` is `pinned`.
+   - pin exists: `ImageInspect(pin.Pinned)`; when absent locally, pull `pin.Pinned` with the registry credentials of its host; a pull failure returns `pinned exact version <pin.Pinned> for <team>/<name> is no longer served; run "shrine bump <kind> <name>" to choose another` (T3 wording says "edit the manifest" until T6 lands). `Ref` is `pin.Pinned`, `Source` is `pinned`. *Amended by T3 (spec 033), as shipped:* a pin is usable only when its `Requested` repository equals the expanded reference's repository; otherwise it is treated as absent and replaced by the no-pin branch, because a pin for an image the manifest no longer names is meaningless. The T3 message reads `pinned exact version "<pin.Pinned>" for <team>/<name> is no longer served by the registry; deploy the <kind> under Always or IfNotPresent to release the pin, then return to Pinned: <pull cause>`, since "edit the manifest" is misleading under `Pinned`, where no version can be named; T6 replaces the second clause with the bump wording. Both pinned failures (no longer served, no registry digest) are emitted by the backend as `image.resolve` error events so the cause renders under the resolving line before the engine's own error, as a pull failure does.
    - no pin: pull the expanded manifest reference, pick the repository digest, `Put` the pin with `PinnedAt` now, `Ref` is the digest reference, `Source` is `resolved`.
 4. `Pinned` with `Repin` set: pull `Repin`, pick the digest, `Put` the pin, `Source` is `repinned`.
-5. Events: `image.resolve` started with `team`, `name`, `ref`; finished with `team`, `name`, `ref`, `digest`, `source`; error with the message. `image.pull` events stay as they are.
+5. Events: `image.resolve` started with `team`, `name`, `ref`; finished with `team`, `name`, `ref`, `digest`, `source`; error with the message. `image.pull` events stay as they are. *Amended by T3 (spec 033):* finished also carries `requested` for the pinned sources and `pinned_at` (`YYYY-MM-DD`) for `pinned`.
 
 Picking the digest: `pickRepoDigest(inspect.RepoDigests, repository)` returns the entry whose part before `@` equals the repository of the pulled reference. An empty result is an error for `Pinned` and a warning-free empty `Digest` for manifest-owned artifacts.
 
@@ -195,12 +197,14 @@ One `ResolveImageOp` per step, in step order, from the step's manifest. The firs
 [DOCKER] ImageResolve: name=team.web image=nginx:1.27 policy=IfNotPresent -> manifest-owned
 ```
 
+*Amended by T3 (spec 033):* the pinned line prints the full `Pinned` reference, not the twelve-character form, because the preview is where an operator copies the exact version from; the preview shows the pin on record as is, since it expands no alias and cannot apply the repository-match rule of section 4.2.
+
 ### 4.5 Plan-time normalisation and validation
 
 `internal/planner/plan.go`: `Plan` gains a `defaultPullPolicy string` parameter, empty meaning the derived rule, and calls `applyEffectivePullPolicy(set, defaultPullPolicy)` before `Resolve`. `internal/planner/resolve.go`: `Resolve` gains `validateImagePolicies(set, defaultPullPolicy)` after `validateRegistryImages`:
 
 - `Pinned` and a tag other than `latest`, or a digest reference: `application "x": spec.image "repo:1.2" names a fixed version but the image pull policy is Pinned; use "repo" or "repo:latest"`.
-- `Pinned` Resource with `spec.version` other than empty or `latest`: `resource "db": spec.version "16" names a fixed version but the image pull policy is Pinned (from config.yml imagePullPolicy); set spec.imagePullPolicy on the manifest or change the default`. The parenthetical appears only when the policy came from the configuration default.
+- `Pinned` Resource with `spec.version` other than empty or `latest`: `resource "db": spec.version "16" names a fixed version but the image pull policy is Pinned (from config.yml imagePullPolicy); set spec.imagePullPolicy on the manifest or change the default`. The parenthetical appears only when the policy came from the configuration default. *Amended by T3 (spec 033):* when the policy came from the manifest the message ends `; omit it or use "latest"`, because the design's second clause only makes sense for a configuration-sourced policy; T4 adds the configuration wording. A Resource `spec.image` override naming a fixed version gets the Application-shaped message; the `<type>:<version>` image the parser derives is not treated as an override, so one mistake is reported once. The two helpers live in a new `internal/planner/policy.go` beside `resolve.go`.
 - Not `Pinned` and Resource `spec.version` empty: `resource "db": spec.version is required`, the text parse-time validation uses today.
 
 `internal/manifest/parser.go`: the Resource image default becomes `<type>:<version>` when a version is set and `<type>` when it is not. `internal/manifest/validate.go`: the `spec.version is required` check is removed from `validateResourceSpec`; the enum check for `spec.imagePullPolicy` accepts the third value.
@@ -261,8 +265,8 @@ Exact strings are fixed by each ticket's contract; the table fixes the shape.
 The core scenario is: deploy, move the registry's `latest` to a different image, redeploy, assert the same digest. Public registries cannot be moved, so T3's suite starts a registry container:
 
 - `testutils.StartLocalRegistry(tc)` runs `registry:2` bound to `127.0.0.1:0`, records the port, and removes the container in `AfterEach`. Docker treats `127.0.0.1` registries as insecure by default, so the daemon needs no configuration and the config file needs no `registries` entry.
-- `testutils.PushAs(tc, source, ref)` tags a small public image already present on the runner, `alpine:3.19` and `alpine:3.20` serve, as `127.0.0.1:<port>/shrine/app:latest` and pushes it. Moving `latest` is a second `PushAs` with the other source.
-- `testutils.AssertContainerImageDigest(name, digest)` inspects the container's image and compares `RepoDigests`.
+- `testutils.PushAs(tc, source, ref)` tags a small public image already present on the runner, `alpine:3.19` and `alpine:3.20` serve, as `127.0.0.1:<port>/shrine/app:latest` and pushes it. Moving `latest` is a second `PushAs` with the other source. *Amended by T3 (spec 033), as shipped:* the sources are `traefik/whoami:v1.10.1` and `v1.10.2`, pushed as `shrine/whoami:latest`, because an alpine container exits at once and fails the running assertions; `PushAs` is a method on the `LocalRegistry` that `StartLocalRegistry` returns and it returns the pushed digest; the pinned manifests are written at run time by `WritePinnedFixture` (the port is only known then) and only the validation fixtures live under `tests/testdata/pinned/`.
+- `testutils.AssertContainerImageDigest(name, digest)` inspects the container's image and compares `RepoDigests`. *Amended by T3 (spec 033):* not needed; every pinned container is created from the digest reference, so the existing `AssertContainerImage` on `Config.Image` plus an image-id comparison prove the same thing.
 - The "wiped cache" cycle is `docker image rm` of the pinned digest on the runner between deploys.
 
 The fixtures under `tests/testdata/pinned/` are manifests with `imagePullPolicy: Pinned` whose image is `127.0.0.1:<port>/shrine/app`; the port is substituted at test time the way other suites substitute the state directory.

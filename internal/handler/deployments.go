@@ -226,16 +226,21 @@ func DeleteApplication(store *state.Store, container engine.ContainerBackend, op
 
 	port, portErr := store.HostPorts.GetHostPort(team, opts.Name)
 	hasPort := portErr == nil
+	pin, hasPin := findImagePin(store, team, opts.Name)
 	record := findApplicationRecord(store, team, opts.Name)
+	nothingHeld := !hasPort && !hasPin && !record
 
 	if opts.DryRun {
 		if hasPort {
 			fmt.Printf("[dry-run] would release host port %d for %s\n", port, ref)
 		}
+		if hasPin {
+			fmt.Printf("[dry-run] would release image pin %s for %s\n", pin.Pinned, ref)
+		}
 		if record {
 			fmt.Printf("[dry-run] would remove deployment record for %s\n", ref)
 		}
-		if !hasPort && !record {
+		if nothingHeld {
 			fmt.Printf("[dry-run] nothing to delete for application %q in team %q\n", opts.Name, team)
 		}
 		return nil
@@ -247,16 +252,32 @@ func DeleteApplication(store *state.Store, container engine.ContainerBackend, op
 		}
 		fmt.Printf("Released host port %d for %s.\n", port, ref)
 	}
+	if hasPin {
+		if err := store.ImagePins.Release(team, opts.Name); err != nil {
+			return fmt.Errorf("releasing image pin for %s: %w", ref, err)
+		}
+		fmt.Printf("Released image pin for %s.\n", ref)
+	}
 	if record {
 		if err := store.Deployments.Remove(team, opts.Name); err != nil {
 			return fmt.Errorf("removing deployment record for %s: %w", ref, err)
 		}
 		fmt.Printf("Removed deployment record for %s.\n", ref)
 	}
-	if !hasPort && !record {
+	if nothingHeld {
 		fmt.Printf("Nothing to delete for application %q in team %q.\n", opts.Name, team)
 	}
 	return nil
+}
+
+// findImagePin reports the application's pin when the store has one; a
+// store without pins (older callers, partial test stores) holds none.
+func findImagePin(store *state.Store, team, name string) (state.ImagePin, bool) {
+	if store.ImagePins == nil {
+		return state.ImagePin{}, false
+	}
+	pin, err := store.ImagePins.Get(team, name)
+	return pin, err == nil
 }
 
 // resolveDeleteTeam returns the team owning the application, searching every
@@ -287,6 +308,18 @@ func resolveDeleteTeam(store *state.Store, name, team string) (string, error) {
 	for _, td := range all {
 		if td.Deployment.Name == name && td.Deployment.Kind == manifest.ApplicationKind {
 			candidates[td.Team] = true
+		}
+	}
+	if store.ImagePins != nil {
+		pins, err := store.ImagePins.ListAll()
+		if err != nil {
+			return "", fmt.Errorf("listing image pins: %w", err)
+		}
+		for key, pin := range pins {
+			owner, app, found := strings.Cut(key, "/")
+			if found && app == name && pin.Kind == manifest.ApplicationKind {
+				candidates[owner] = true
+			}
 		}
 	}
 

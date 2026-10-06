@@ -29,10 +29,11 @@ var (
 
 var deleteApplicationCmd = &cobra.Command{
 	Use:   "application [name]",
-	Short: "Delete an application from state and release its published host port",
-	Long: `Forget an application: release its published host port allocation and drop
-its stale deployment record. The application's container must already be torn
-down — Docker state is authoritative and a live container blocks the delete.`,
+	Short: "Delete an application from state and release its host port and image pin",
+	Long: `Forget an application: release its published host port allocation and its
+image pin, and drop its stale deployment record. The application's container
+must already be torn down — Docker state is authoritative and a live container
+blocks the delete.`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		backend, err := app.NewQueryContainerBackend(cfg, store)

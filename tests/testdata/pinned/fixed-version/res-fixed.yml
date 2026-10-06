@@ -1,0 +1,10 @@
+apiVersion: shrine/v1
+kind: Resource
+metadata:
+  name: cache-fixed
+  owner: shrine-deploy-test
+spec:
+  type: cache
+  version: "16"
+  image: traefik/whoami
+  imagePullPolicy: Pinned

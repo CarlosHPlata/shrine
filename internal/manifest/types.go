@@ -16,7 +16,23 @@ const (
 const (
 	ImagePullPolicyAlways       = "Always"
 	ImagePullPolicyIfNotPresent = "IfNotPresent"
+	ImagePullPolicyPinned       = "Pinned"
 )
+
+// IsKnownPullPolicy reports whether policy is one of the three accepted values.
+func IsKnownPullPolicy(policy string) bool {
+	switch policy {
+	case ImagePullPolicyAlways, ImagePullPolicyIfNotPresent, ImagePullPolicyPinned:
+		return true
+	}
+	return false
+}
+
+// IsManifestOwnedPolicy reports whether the manifest, not Shrine, owns the
+// version under policy.
+func IsManifestOwnedPolicy(policy string) bool {
+	return policy == ImagePullPolicyAlways || policy == ImagePullPolicyIfNotPresent
+}
 
 // Metadata holds fields shared by all manifest kinds.
 type Metadata struct {
@@ -213,17 +229,44 @@ type TeamManifest struct {
 	Spec     TeamSpec `yaml:"spec"`
 }
 
+// EffectivePullPolicy returns the declared policy, else the derived rule:
+// Always for latest or no tag, IfNotPresent for any other tag or a digest.
 func EffectivePullPolicy(image string, declared string) string {
+	return EffectivePullPolicyWithDefault(image, declared, "")
+}
+
+// EffectivePullPolicyWithDefault applies the precedence of PRD R-04: the
+// manifest's own field, then the configuration default, then the derived rule.
+func EffectivePullPolicyWithDefault(image, declared, dflt string) string {
 	if declared != "" {
 		return declared
 	}
-	colonIdx := strings.LastIndex(image, ":")
-	if colonIdx == -1 {
-		return ImagePullPolicyAlways
+	if dflt != "" {
+		return dflt
 	}
-	tag := image[colonIdx+1:]
+	if IsDigestReference(image) {
+		return ImagePullPolicyIfNotPresent
+	}
+	tag := TagOf(image)
 	if tag == "" || tag == "latest" {
 		return ImagePullPolicyAlways
 	}
 	return ImagePullPolicyIfNotPresent
+}
+
+// TagOf returns the tag of an image reference, or "" when it has none. A
+// colon separates the tag only after the last slash, so a registry port is
+// never mistaken for one; a digest suffix is cut first.
+func TagOf(ref string) string {
+	ref, _, _ = strings.Cut(ref, "@")
+	slash := strings.LastIndex(ref, "/")
+	if colon := strings.LastIndex(ref, ":"); colon > slash {
+		return ref[colon+1:]
+	}
+	return ""
+}
+
+// IsDigestReference reports whether ref names an exact version (repo@sha256:…).
+func IsDigestReference(ref string) bool {
+	return strings.Contains(ref, "@")
 }

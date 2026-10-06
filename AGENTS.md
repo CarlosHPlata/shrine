@@ -39,7 +39,7 @@ Team is now an optional --team/-t flag, not a required positional argument. Shri
 Same as status: team is now an optional --team flag, not required. Examples: shrine describe app my-api, shrine describe app my-api --team team-a
 
 ### shrine delete application <name>
-Forgets an application from state: releases its published host-port allocation (see `networking.publish`) and drops the stale deployment record. Docker-authoritative — refuses while the container exists (run teardown first). --team/-t is optional (all teams searched, ambiguity errors); supports --dry-run. `shrine delete team <name>` also releases every host port the team held.
+Forgets an application from state: releases its published host-port allocation (see `networking.publish`) and its image pin (see `imagePullPolicy: Pinned`), and drops the stale deployment record. Docker-authoritative — refuses while the container exists (run teardown first). --team/-t is optional (all teams searched, ambiguity errors); supports --dry-run. `shrine delete team <name>` also releases every host port and every image pin the team held.
 
 ## Manifest Kinds
 
@@ -245,7 +245,7 @@ shrine deploy
      └── done
 ```
 
-**Image resolution runs first and fails with zero changes.** `ResolveImage` is called for every planned step before `CreatePlatformNetwork`, so an unresolvable reference stops the deploy before any network or container exists; the result (`Ref`, `Digest`, `ImageID`) rides on `CreateContainerOp`, and `CreateContainer` resolves on its own only when `ImageID` is empty, which is the Traefik plugin's direct path. See `specs/032-preflight-image-resolve/`.
+**Image resolution runs first and fails with zero changes.** `ResolveImage` is called for every planned step before `CreatePlatformNetwork`, so an unresolvable reference stops the deploy before any network or container exists; the result (`Ref`, `Digest`, `ImageID`) rides on `CreateContainerOp`, and `CreateContainer` resolves on its own only when `ImageID` is empty, which is the Traefik plugin's direct path. See `specs/032-preflight-image-resolve/`. Under `imagePullPolicy: Pinned` the pre-pass reuses the exact version recorded in `pins.txt` (pulling it by digest only when the host lacks it) or, on the first deploy, pulls the newest version and records its digest; a resolution under `Always` or `IfNotPresent` releases any pin, so returning to `Pinned` is a first deploy again. See `specs/033-pinned-image-policy/`.
 
 **The resolver is an engine collaborator, not a pipeline stage.** The handler never calls it; `Engine` holds a `resolver.Resolver` and invokes it at two points inside `ExecuteDeploy`:
 
@@ -275,7 +275,8 @@ shrine deploy
 ├── subnets.txt                  # allocated /24 subnets (one per team)
 ├── <team>/
 │   ├── secrets.env              # generated secrets (KEY=VALUE, 0600)
-│   └── deployments.txt          # deployed resource records (<kind> <name> <container-id> <config-hash> <image> <pull-policy>; `-` for an empty value)
+│   ├── deployments.txt          # deployed resource records (<kind> <name> <container-id> <config-hash> <image> <pull-policy>; `-` for an empty value)
+│   └── pins.txt                 # image pins (<kind> <name> <requested> <pinned> <pinned-at>); survive teardown, released by delete and by a manifest-owned deploy
 └── teams/                       # synced Team manifests (JSON)
 ```
 

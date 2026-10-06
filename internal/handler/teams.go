@@ -212,7 +212,16 @@ func DeleteTeam(name string, store *state.Store) error {
 		fmt.Printf("Released %d host port(s) for team %q.\n", released, name)
 	}
 
-	// 4. Delete team from registry
+	// 4. Release image pins
+	pinsReleased, err := releaseTeamImagePins(store, name)
+	if err != nil {
+		return fmt.Errorf("releasing team image pins: %w", err)
+	}
+	if pinsReleased > 0 {
+		fmt.Printf("Released %d image pin(s) for team %q.\n", pinsReleased, name)
+	}
+
+	// 5. Delete team from registry
 	if err := store.Teams.DeleteTeam(name); err != nil {
 		return err
 	}
@@ -241,4 +250,20 @@ func releaseTeamHostPorts(store *state.Store, team string) (int, error) {
 		return 0, nil
 	}
 	return held, store.HostPorts.ReleaseTeamHostPorts(team)
+}
+
+// releaseTeamImagePins frees every image pin the team holds and returns how
+// many were released.
+func releaseTeamImagePins(store *state.Store, team string) (int, error) {
+	if store.ImagePins == nil {
+		return 0, nil
+	}
+	pins, err := store.ImagePins.List(team)
+	if err != nil {
+		return 0, err
+	}
+	if len(pins) == 0 {
+		return 0, nil
+	}
+	return len(pins), store.ImagePins.ReleaseTeam(team)
 }

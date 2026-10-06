@@ -230,7 +230,6 @@ func TestTerminalObserver_SilentKinds(t *testing.T) {
 		{"resource.deploy renders only when started", ev("resource.deploy", engine.StatusFinished, "name", "db", "type", "postgres")},
 		{"resource.teardown renders only when started", ev("resource.teardown", engine.StatusFinished, "name", "db", "team", "team-a")},
 		{"container.create renders only as info", ev("container.create", engine.StatusStarted, "team", "team-a", "name", "web")},
-		{"image.resolve finished with a pinned source has no rendering yet", ev("image.resolve", engine.StatusFinished, "team", "team-a", "name", "web", "ref", "nginx", "digest", "sha256:abc", "source", "pinned")},
 		{"image.resolve info has no rendering", ev("image.resolve", engine.StatusInfo, "team", "team-a", "name", "web", "ref", "nginx")},
 	}
 

@@ -65,7 +65,7 @@ func TestResolve(t *testing.T) {
 			},
 		}
 
-		errs := Resolve(set, store, nil)
+		errs := Resolve(set, store, nil, "")
 		if len(errs) > 0 {
 			t.Errorf("expected no errors, got %d: %v", len(errs), errs)
 		}
@@ -86,7 +86,7 @@ func TestResolve(t *testing.T) {
 			Resources: make(map[string]*manifest.ResourceManifest),
 		}
 
-		errs := Resolve(set, store, nil)
+		errs := Resolve(set, store, nil, "")
 		if len(errs) == 0 {
 			t.Error("expected missing dependency error, got none")
 		}
@@ -112,7 +112,7 @@ func TestResolve(t *testing.T) {
 			},
 		}
 
-		errs := Resolve(set, store, nil)
+		errs := Resolve(set, store, nil, "")
 		if len(errs) == 0 {
 			t.Error("expected access denied error, got none")
 		}
@@ -138,7 +138,7 @@ func TestResolve(t *testing.T) {
 			},
 		}
 
-		errs := Resolve(set, store, nil)
+		errs := Resolve(set, store, nil, "")
 		if len(errs) > 0 {
 			t.Errorf("expected no errors, got %d: %v", len(errs), errs)
 		}
@@ -163,7 +163,7 @@ func TestResolve(t *testing.T) {
 			},
 		}
 
-		errs := Resolve(set, store, nil)
+		errs := Resolve(set, store, nil, "")
 		found := false
 		for _, err := range errs {
 			if strings.Contains(err.Error(), "owned by \"team-b\", but manifest specifies owner \"team-a\"") {
@@ -185,7 +185,7 @@ func TestResolve(t *testing.T) {
 			},
 		}
 
-		errs := Resolve(set, store, nil)
+		errs := Resolve(set, store, nil, "")
 		found := false
 		for _, err := range errs {
 			if strings.Contains(err.Error(), "exceeds MaxApps quota") {
@@ -208,7 +208,7 @@ func TestResolve(t *testing.T) {
 			},
 		}
 
-		errs := Resolve(set, store, nil)
+		errs := Resolve(set, store, nil, "")
 		found := false
 		for _, err := range errs {
 			if strings.Contains(err.Error(), "not allowed by quota") {
@@ -254,7 +254,7 @@ func TestResolve(t *testing.T) {
 			},
 		}
 
-		errs := Resolve(set, store, nil)
+		errs := Resolve(set, store, nil, "")
 
 		// Absent-target cases (MISSING_RES, MISSING_APP) are no longer reported
 		// by Resolve — enrichment owns those and emits *EnrichmentError instead
@@ -305,7 +305,7 @@ func TestResolve(t *testing.T) {
 			},
 		}
 
-		errs := Resolve(set, store, nil)
+		errs := Resolve(set, store, nil, "")
 
 		expectedErrors := []string{
 			"template output \"bad\" references unknown variable \"missing\"",
@@ -355,7 +355,7 @@ func TestResolve(t *testing.T) {
 			},
 		}
 
-		errs := Resolve(set, store, nil)
+		errs := Resolve(set, store, nil, "")
 
 		expectedErrors := []string{
 			"template env \"BAD\" references unknown variable \"ghost\"",
@@ -392,7 +392,7 @@ func TestResolve(t *testing.T) {
 					},
 				},
 			}
-			errs := Resolve(set, store, nil)
+			errs := Resolve(set, store, nil, "")
 			if len(errs) > 0 {
 				t.Errorf("expected no errors, got: %v", errs)
 			}
@@ -415,7 +415,7 @@ func TestResolve(t *testing.T) {
 					},
 				},
 			}
-			errs := Resolve(set, store, nil)
+			errs := Resolve(set, store, nil, "")
 			if len(errs) > 0 {
 				t.Errorf("expected no errors, got: %v", errs)
 			}
@@ -438,7 +438,7 @@ func TestResolve(t *testing.T) {
 					},
 				},
 			}
-			errs := Resolve(set, store, nil)
+			errs := Resolve(set, store, nil, "")
 			found := false
 			for _, err := range errs {
 				if strings.Contains(err.Error(), "does not have access to application \"worker\"") {
@@ -464,7 +464,7 @@ func TestResolve(t *testing.T) {
 					},
 				},
 			}
-			errs := Resolve(set, store, nil)
+			errs := Resolve(set, store, nil, "")
 			found := false
 			for _, err := range errs {
 				if strings.Contains(err.Error(), "depends on missing application \"ghost\"") {
@@ -494,7 +494,7 @@ func TestResolve(t *testing.T) {
 					},
 				},
 			}
-			errs := Resolve(set, store, nil)
+			errs := Resolve(set, store, nil, "")
 			found := false
 			for _, err := range errs {
 				if strings.Contains(err.Error(), "application \"worker\" owned by \"team-a\", but manifest specifies owner \"team-b\"") {
@@ -524,7 +524,7 @@ func TestResolve(t *testing.T) {
 					},
 				},
 			}
-			errs := Resolve(set, store, nil)
+			errs := Resolve(set, store, nil, "")
 			found := false
 			for _, err := range errs {
 				if strings.Contains(err.Error(), "is not reachable cross-team") {
@@ -554,7 +554,7 @@ func TestResolve(t *testing.T) {
 					},
 				},
 			}
-			errs := Resolve(set, store, nil)
+			errs := Resolve(set, store, nil, "")
 			hasAccessErr := false
 			hasReachErr := false
 			for _, err := range errs {
@@ -594,7 +594,7 @@ func TestResolve(t *testing.T) {
 					},
 				},
 			}
-			errs := Resolve(set, store, nil)
+			errs := Resolve(set, store, nil, "")
 			found := false
 			for _, err := range errs {
 				if strings.Contains(err.Error(), "is not reachable cross-team") {
@@ -626,7 +626,7 @@ func TestResolve(t *testing.T) {
 					},
 				},
 			}
-			errs := Resolve(set, store, nil)
+			errs := Resolve(set, store, nil, "")
 			if len(errs) > 0 {
 				t.Errorf("expected no errors, got: %v", errs)
 			}
@@ -648,7 +648,7 @@ func TestResolve(t *testing.T) {
 			},
 		}
 
-		errs := Resolve(set, store, nil)
+		errs := Resolve(set, store, nil, "")
 		// Should succeed, no "name collision" error
 		for _, err := range errs {
 			if strings.Contains(err.Error(), "name collision") {
@@ -667,7 +667,7 @@ func TestResolve(t *testing.T) {
 			},
 		}
 
-		errs := Resolve(set, store, nil)
+		errs := Resolve(set, store, nil, "")
 		found := false
 		for _, err := range errs {
 			if strings.Contains(err.Error(), "application \"key-a\" has metadata name mismatch: \"mismatch-a\"") {
@@ -716,14 +716,14 @@ func TestResolve_ExportAllowlist(t *testing.T) {
 
 	t.Run("exported key resolves", func(t *testing.T) {
 		set := newSet([]manifest.EnvVar{{Name: "DB", ValueFrom: "resource.pg.POSTGRES_DB"}})
-		if errs := Resolve(set, store, nil); len(errs) > 0 {
+		if errs := Resolve(set, store, nil, ""); len(errs) > 0 {
 			t.Errorf("expected no errors for exported key, got: %v", errs)
 		}
 	})
 
 	t.Run("un-exported env var is rejected", func(t *testing.T) {
 		set := newSet([]manifest.EnvVar{{Name: "PW", ValueFrom: "resource.pg.POSTGRES_PASSWORD"}})
-		errs := Resolve(set, store, nil)
+		errs := Resolve(set, store, nil, "")
 		if !errorsContain(errs, `references non-existent output "POSTGRES_PASSWORD" on resource "pg"`) {
 			t.Errorf("expected allowlist rejection, got: %v", errs)
 		}

@@ -29,12 +29,14 @@ type PlanTeardownResult struct {
 //
 // Loading is the caller's job: use LoadDir for a full directory, or
 // NewManifestSet + MergeManifest to assemble a set from individual files.
-func Plan(set *ManifestSet, store state.TeamStore, registries []config.RegistryConfig, ports PortContext, filter Filter) PlanResult {
+func Plan(set *ManifestSet, store state.TeamStore, registries []config.RegistryConfig, ports PortContext, filter Filter, defaultPullPolicy string) PlanResult {
 	if err := filter.Validate(set); err != nil {
 		return PlanResult{Error: err}
 	}
 
-	if errs := Resolve(set, store, registries); len(errs) > 0 {
+	applyEffectivePullPolicy(set, defaultPullPolicy)
+
+	if errs := Resolve(set, store, registries, defaultPullPolicy); len(errs) > 0 {
 		return PlanResult{ValidationErr: errs}
 	}
 

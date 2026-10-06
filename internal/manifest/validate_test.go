@@ -79,7 +79,6 @@ func TestValidate_InvalidResource(t *testing.T) {
 		"metadata.name is required",
 		"metadata.owner is required",
 		"spec.type is required",
-		"spec.version is required",
 	}
 	for _, e := range expected {
 		if !strings.Contains(msg, e) {
@@ -543,5 +542,49 @@ func TestValidate_VolumeMountRules(t *testing.T) {
 				t.Errorf("expected error containing %q, got: %v", tc.wantErr, err)
 			}
 		})
+	}
+}
+
+func resourceManifest(spec ResourceSpec) *Manifest {
+	return &Manifest{
+		TypeMeta: TypeMeta{Kind: ResourceKind, APIVersion: "shrine/v1"},
+		Resource: &ResourceManifest{Metadata: Metadata{Name: "db", Owner: "team-a"}, Spec: spec},
+	}
+}
+
+func applicationManifest(spec ApplicationSpec) *Manifest {
+	return &Manifest{
+		TypeMeta:    TypeMeta{Kind: ApplicationKind, APIVersion: "shrine/v1"},
+		Application: &ApplicationManifest{Metadata: Metadata{Name: "web", Owner: "team-a"}, Spec: spec},
+	}
+}
+
+// The version-required rule moved to the planner, where the effective policy
+// is known (spec 033, design TD-7).
+func TestValidate_ResourceWithoutVersionPassesParseTimeValidation(t *testing.T) {
+	if err := Validate(resourceManifest(ResourceSpec{Type: "postgres"})); err != nil {
+		t.Errorf("expected no error for a resource without version, got: %v", err)
+	}
+}
+
+func TestValidate_ImagePullPolicyEnum(t *testing.T) {
+	const want = "spec.imagePullPolicy must be one of Always, IfNotPresent, Pinned"
+
+	for _, policy := range []string{"", "Always", "IfNotPresent", "Pinned"} {
+		if err := Validate(applicationManifest(ApplicationSpec{Image: "web", Port: 80, ImagePullPolicy: policy})); err != nil {
+			t.Errorf("application policy %q must be accepted, got: %v", policy, err)
+		}
+		if err := Validate(resourceManifest(ResourceSpec{Type: "postgres", ImagePullPolicy: policy})); err != nil {
+			t.Errorf("resource policy %q must be accepted, got: %v", policy, err)
+		}
+	}
+
+	err := Validate(applicationManifest(ApplicationSpec{Image: "web", Port: 80, ImagePullPolicy: "Sometimes"}))
+	if err == nil || !strings.Contains(err.Error(), want) {
+		t.Errorf("application with an unknown policy: got %v, want %q", err, want)
+	}
+	err = Validate(resourceManifest(ResourceSpec{Type: "postgres", ImagePullPolicy: "Sometimes"}))
+	if err == nil || !strings.Contains(err.Error(), want) {
+		t.Errorf("resource with an unknown policy: got %v, want %q", err, want)
 	}
 }

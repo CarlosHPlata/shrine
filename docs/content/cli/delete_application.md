@@ -1,6 +1,6 @@
 ---
 title: "application"
-description: "Delete an application from state and release its published host port"
+description: "Delete an application from state and release its host port and image pin"
 weight: 10
 ---
 
@@ -8,13 +8,14 @@ weight: 10
 
 ## shrine delete application
 
-Delete an application from state and release its published host port
+Delete an application from state and release its host port and image pin
 
 ### Synopsis
 
-Forget an application: release its published host port allocation and drop
-its stale deployment record. The application's container must already be torn
-down — Docker state is authoritative and a live container blocks the delete.
+Forget an application: release its published host port allocation and its
+image pin, and drop its stale deployment record. The application's container
+must already be torn down — Docker state is authoritative and a live container
+blocks the delete.
 
 ```
 shrine delete application [name] [flags]

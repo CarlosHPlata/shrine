@@ -27,7 +27,7 @@ func TestPlan_HostPortCollisions_CheckedForAllFilters(t *testing.T) {
 	for name, filter := range filters {
 		t.Run(name, func(t *testing.T) {
 			set, ports := conflictedPortSet()
-			result := Plan(set, stubTeamStore{}, nil, ports, filter)
+			result := Plan(set, stubTeamStore{}, nil, ports, filter, "")
 			if result.Error == nil {
 				t.Fatalf("filter %s: expected a host-port conflict error, got none", name)
 			}
@@ -43,7 +43,7 @@ func TestPlan_CleanPortsProduceNoError(t *testing.T) {
 	set.Applications["alpha"].Spec.Networking.Publish = &manifest.Publish{HostPort: 8080}
 	ports := PortContext{Reserved: []int{80}, Persisted: state.HostPortMap{"team-a/alpha": 8080}}
 
-	result := Plan(set, stubTeamStore{}, nil, ports, NoFilter())
+	result := Plan(set, stubTeamStore{}, nil, ports, NoFilter(), "")
 	if result.Error != nil {
 		t.Fatalf("self-adopting plan should succeed, got: %v", result.Error)
 	}

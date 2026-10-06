@@ -5,8 +5,10 @@ import (
 	"io"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/CarlosHPlata/shrine/internal/engine"
+	"github.com/CarlosHPlata/shrine/internal/manifest"
 	"github.com/CarlosHPlata/shrine/internal/state"
 )
 
@@ -17,6 +19,9 @@ type DryRunContainerBackend struct {
 	// HostPorts is a read-only snapshot of persisted allocations used to
 	// preview which port an automatic publish already holds.
 	HostPorts state.HostPortMap
+	// Pins is a read-only snapshot of recorded image pins, keyed team/name,
+	// used to preview whether a Pinned artifact would pin or reuse.
+	Pins map[string]state.ImagePin
 }
 
 func NewDryRunContainerBackend(out io.Writer) *DryRunContainerBackend {
@@ -92,7 +97,31 @@ func (d *DryRunContainerBackend) InspectContainer(containerID string) (engine.Co
 }
 
 func (d *DryRunContainerBackend) ResolveImage(op engine.ResolveImageOp) (engine.ResolvedImage, error) {
-	fmt.Fprintf(d.Out, "[DOCKER] ImageResolve: name=%s.%s image=%s policy=%s -> manifest-owned\n",
-		op.Team, op.Name, op.Image, op.ImagePullPolicy)
+	fmt.Fprintf(d.Out, "[DOCKER] ImageResolve: name=%s.%s image=%s policy=%s -> %s\n",
+		op.Team, op.Name, op.Image, op.ImagePullPolicy, d.imageDecision(op))
 	return engine.ResolvedImage{Ref: op.Image, Source: engine.ImageSourceManifest}, nil
+}
+
+// imageDecision previews the pinned branches from the snapshot alone: the
+// preview expands no alias, so it shows the pin on record as is.
+func (d *DryRunContainerBackend) imageDecision(op engine.ResolveImageOp) string {
+	if op.ImagePullPolicy != manifest.ImagePullPolicyPinned {
+		return "manifest-owned"
+	}
+	pin, ok := d.Pins[state.ImagePinKey(op.Team, op.Name)]
+	if !ok {
+		return "would resolve newest and pin"
+	}
+	return fmt.Sprintf("pinned %s (%s, %s)", pin.Pinned, requestedTag(pin.Requested), pin.PinnedAt.UTC().Format(time.DateOnly))
+}
+
+func requestedTag(requested string) string {
+	if manifest.IsDigestReference(requested) {
+		_, digest, _ := strings.Cut(requested, "@")
+		return digest
+	}
+	if tag := manifest.TagOf(requested); tag != "" {
+		return tag
+	}
+	return "latest"
 }
