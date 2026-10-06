@@ -59,7 +59,7 @@ metadata:
     - <team-name>   # teams allowed to consume outputs
 spec:
   type: <string>    # required — e.g. postgres
-  version: <string> # required — e.g. "16"
+  version: <string> # required unless imagePullPolicy is Pinned — e.g. "16"
   port: <int>
   image: <string>
   env:                         # runtime configuration → the container's environment
@@ -76,7 +76,7 @@ spec:
   volumes:
     - name: <string>
       mountPath: <string>
-  imagePullPolicy: <Always|IfNotPresent>
+  imagePullPolicy: <Always|IfNotPresent|Pinned>
 ```
 
 | Field | Required | Default | Description |
@@ -85,7 +85,7 @@ spec:
 | `metadata.owner` | yes | — | Team that owns this resource. |
 | `metadata.access[]` | no | — | Additional teams that may reference this resource's outputs. |
 | `spec.type` | yes | — | Resource type string (e.g. `postgres`, `redis`). |
-| `spec.version` | yes | — | Version tag passed to the resource image. |
+| `spec.version` | yes, unless `imagePullPolicy` is `Pinned` | — | Version tag passed to the resource image. Under `Pinned` it is omitted or `latest`; see [Image pull policy](#image-pull-policy). |
 | `spec.port` | no | — | Override the default port for this resource type. Required when `port` is exported. |
 | `spec.image` | no | — | Override the default image for this resource type. |
 | `spec.env[].name` | yes | — | Env var name. Must not be a reserved built-in (`host`, `port`, `team`, `name`); unique within the resource. |
@@ -99,7 +99,7 @@ spec:
 | `spec.networking.exposeToPlatform` | no | `false` | Attach the resource to the shared platform network so gateway plugins can reach it. |
 | `spec.volumes[].name` | yes (per entry) | — | Logical volume name; must be unique within the manifest. |
 | `spec.volumes[].mountPath` | yes (per entry) | — | Absolute path inside the container. |
-| `spec.imagePullPolicy` | no | `Always` for `:latest`, `IfNotPresent` otherwise | Docker image pull policy. |
+| `spec.imagePullPolicy` | no | `Always` for `:latest` or no tag, `IfNotPresent` otherwise | Image pull policy: `Always`, `IfNotPresent`, or `Pinned`. See [Image pull policy](#image-pull-policy). |
 
 † Each `env` entry must set exactly one of `value`, `valueFrom`, `template`, or `generated`.
 
@@ -144,7 +144,7 @@ spec:
   volumes:
     - name: <string>
       mountPath: <string>
-  imagePullPolicy: <Always|IfNotPresent>
+  imagePullPolicy: <Always|IfNotPresent|Pinned>
 ```
 
 ### Application top-level fields
@@ -158,7 +158,7 @@ spec:
 | `spec.replicas` | no | 1 | Number of container instances to run. |
 | `spec.networking.exposeToPlatform` | no | `false` | Attach the container to the platform network and include it in Traefik routing generation. |
 | `spec.networking.publish` | no | not published | Publish the container's `spec.port` on the host's loopback interface (`localhost:<port>`). See [`spec.networking.publish`](#specnetworkingpublish). |
-| `spec.imagePullPolicy` | no | `Always` for `:latest`, `IfNotPresent` otherwise | Docker image pull policy. |
+| `spec.imagePullPolicy` | no | `Always` for `:latest` or no tag, `IfNotPresent` otherwise | Image pull policy: `Always`, `IfNotPresent`, or `Pinned`. See [Image pull policy](#image-pull-policy). |
 
 ### `spec.routing`
 
@@ -226,6 +226,35 @@ Each env var must set exactly one of `value`, `valueFrom`, or `template`.
 | `value` | Static string value. |
 | `valueFrom` | Reference to a Resource output (`resource.<resource-name>.<output-name>`) or a vault secret (`vault:<project>/<environment>/<secret-name>` — project may be a name, slug, or UUID; see the [Secrets vault guide](/guides/secrets-vault/)). |
 | `template` | Go `text/template` expression; can reference other env vars or resource outputs by name. |
+
+### Image pull policy
+
+`spec.imagePullPolicy` decides who owns the version an artifact runs. It takes one of three values; when absent, Shrine derives one from the image reference: `Always` for `latest` or no tag, `IfNotPresent` for any other tag.
+
+| Value | Who owns the version | What deploy does |
+|-------|----------------------|------------------|
+| `Always` | the manifest | Pulls the image on every deploy, so a `latest` tag floats. |
+| `IfNotPresent` | the manifest | Reuses the local image when present and pulls only when it is absent. |
+| `Pinned` | Shrine | Resolves the newest version once and keeps that exact version until you release it. |
+
+Under `Pinned` the manifest names only the repository, never a fixed version:
+
+- an Application `spec.image` has no tag or the tag `latest`;
+- a Resource omits `spec.version` or sets it to `latest`, and a Resource `spec.image` override, when present, follows the Application rule;
+- a digest reference (`repo@sha256:…`) is a fixed version and is rejected.
+
+A violation is reported with the manifest's other validation errors, before anything is deployed:
+
+```text
+application "web": spec.image "ghcr.io/me/web:1.2" names a fixed version but the image pull policy is Pinned; use "ghcr.io/me/web" or "ghcr.io/me/web:latest"
+resource "db": spec.version "16" names a fixed version but the image pull policy is Pinned; omit it or use "latest"
+```
+
+**The pin lifecycle.** The first deploy of a `Pinned` artifact pulls the newest version of its repository, deploys it, and records a pin: the exact version (the registry digest), the readable version it was resolved from, and the date. Every later deploy runs the pinned exact version, fetching it by digest only when the host no longer has it and never consulting the tag again, across a plain redeploy, a redeploy that recreates the container, a teardown followed by a deploy, and a wiped local image cache. Deploy output says which happened: `📌 Pinned team.name at latest@3f2a9c1b4d7e` on the first deploy, `📌 Using pinned team.name latest@3f2a9c1b4d7e (since 2026-10-06)` afterwards. `shrine deploy --dry-run` previews the decision without writing anything.
+
+Only three things release a pin: `shrine delete application <name>`, `shrine delete team <name>`, and a deploy of the artifact under `Always` or `IfNotPresent`. After a release, the next `Pinned` deploy is a first deploy again and records a fresh pin.
+
+If the registry no longer serves a pinned exact version and the host does not have it either, the deploy stops before any container or network is touched and names the artifact, the exact version, and the way out.
 
 ## Templating
 
