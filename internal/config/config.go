@@ -7,6 +7,7 @@ import (
 	"os"
 	"regexp"
 
+	"github.com/CarlosHPlata/shrine/internal/manifest"
 	"gopkg.in/yaml.v3"
 )
 
@@ -14,10 +15,11 @@ var validAliasPattern = regexp.MustCompile(`^[a-zA-Z0-9_-]+$`)
 
 // Config represents the global configuration for shrine.
 type Config struct {
-	Registries []RegistryConfig `yaml:"registries,omitempty"`
-	SpecsDir   string           `yaml:"specsDir,omitempty"`
-	TeamsDir   string           `yaml:"teamsDir,omitempty"`
-	Plugins    PluginsConfig    `yaml:"plugins,omitempty"`
+	Registries      []RegistryConfig `yaml:"registries,omitempty"`
+	SpecsDir        string           `yaml:"specsDir,omitempty"`
+	TeamsDir        string           `yaml:"teamsDir,omitempty"`
+	ImagePullPolicy string           `yaml:"imagePullPolicy,omitempty"`
+	Plugins         PluginsConfig    `yaml:"plugins,omitempty"`
 }
 
 type PluginsConfig struct {
@@ -66,6 +68,9 @@ func Load(configFile string) (*Config, error) {
 	if err := cfg.validateSecretsPlugins(); err != nil {
 		return nil, err
 	}
+	if err := cfg.validateImagePullPolicy(); err != nil {
+		return nil, err
+	}
 
 	return &cfg, nil
 }
@@ -81,6 +86,15 @@ func (c *Config) validateSecretsPlugins() error {
 		return fmt.Errorf("plugins.secrets: only one secrets plugin may be active at a time; multiple providers declared")
 	}
 	return nil
+}
+
+// validateImagePullPolicy accepts an empty default or one of the manifest
+// policy values; anything else is refused before any command acts.
+func (c *Config) validateImagePullPolicy() error {
+	if c.ImagePullPolicy == "" || manifest.IsKnownPullPolicy(c.ImagePullPolicy) {
+		return nil
+	}
+	return fmt.Errorf("imagePullPolicy: must be one of Always, IfNotPresent, Pinned")
 }
 
 // ValidateRegistries checks that all registry aliases are unique and well-formed.

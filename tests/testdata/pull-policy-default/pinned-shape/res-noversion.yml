@@ -1,0 +1,8 @@
+apiVersion: shrine/v1
+kind: Resource
+metadata:
+  name: res-noversion
+  owner: shrine-deploy-test
+spec:
+  type: cache
+  image: traefik/whoami

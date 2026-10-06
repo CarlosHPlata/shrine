@@ -1,6 +1,7 @@
 package config
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 )
@@ -288,5 +289,39 @@ func TestResolveTeamsDir_FallbackNamesSpecsDirNotTeamsDir(t *testing.T) {
 	}
 	if strings.Contains(err.Error(), "teamsDir") {
 		t.Errorf("error %q must not blame teamsDir when specsDir supplied the value", err.Error())
+	}
+}
+
+func TestValidateImagePullPolicy(t *testing.T) {
+	const want = "imagePullPolicy: must be one of Always, IfNotPresent, Pinned"
+	cases := []struct {
+		value   string
+		wantErr bool
+	}{
+		{"", false},
+		{"Always", false},
+		{"IfNotPresent", false},
+		{"Pinned", false},
+		{"pinned", true},
+		{"Never", true},
+		{"Pinned ", true},
+	}
+	for _, tc := range cases {
+		t.Run(fmt.Sprintf("%q", tc.value), func(t *testing.T) {
+			cfg := &Config{ImagePullPolicy: tc.value}
+			err := cfg.validateImagePullPolicy()
+			if !tc.wantErr {
+				if err != nil {
+					t.Fatalf("expected %q to be accepted, got %v", tc.value, err)
+				}
+				return
+			}
+			if err == nil {
+				t.Fatalf("expected %q to be rejected", tc.value)
+			}
+			if err.Error() != want {
+				t.Fatalf("error = %q, want %q", err.Error(), want)
+			}
+		})
 	}
 }
