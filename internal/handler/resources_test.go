@@ -48,11 +48,11 @@ func resourceOptions(version, pullPolicy string) ResourceOptions {
 
 func TestRenderResourceSkeleton(t *testing.T) {
 	cases := []struct {
-		name        string
-		version     string
-		pullPolicy  string
-		want        string
-		wantNoVersn bool
+		name          string
+		version       string
+		pullPolicy    string
+		want          string
+		wantNoVersion bool
 	}{
 		{"no default writes version 16", "", "", "  type: postgres\n  version: \"16\"\n  networking:\n", false},
 		{"Always default writes version 16", "", "Always", "  type: postgres\n  version: \"16\"\n  networking:\n", false},
@@ -68,7 +68,7 @@ func TestRenderResourceSkeleton(t *testing.T) {
 			if !strings.Contains(got, tc.want) {
 				t.Errorf("skeleton lacks %q:\n%s", tc.want, got)
 			}
-			if tc.wantNoVersn && strings.Contains(got, "version:") {
+			if tc.wantNoVersion && strings.Contains(got, "version:") {
 				t.Errorf("skeleton must omit the version line under Pinned:\n%s", got)
 			}
 			if strings.Contains(got, "imagePullPolicy") {

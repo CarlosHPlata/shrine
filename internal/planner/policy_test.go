@@ -103,6 +103,18 @@ func TestPlan_AppliesTheConfigurationDefault(t *testing.T) {
 	}
 }
 
+func assertErrorStrings(t *testing.T, got, want []string) {
+	t.Helper()
+	if len(got) != len(want) {
+		t.Fatalf("got %d errors %v, want %d %v", len(got), got, len(want), want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("error %d:\ngot  %q\nwant %q", i, got[i], want[i])
+		}
+	}
+}
+
 func errorStrings(errs []error) []string {
 	out := make([]string, 0, len(errs))
 	for _, err := range errs {
@@ -146,14 +158,7 @@ func TestValidateImagePolicies(t *testing.T) {
 
 			got := errorStrings(validateImagePolicies(set))
 
-			if len(got) != len(tc.want) {
-				t.Fatalf("got %d errors %v, want %d %v", len(got), got, len(tc.want), tc.want)
-			}
-			for i := range tc.want {
-				if got[i] != tc.want[i] {
-					t.Errorf("error %d:\ngot  %q\nwant %q", i, got[i], tc.want[i])
-				}
-			}
+			assertErrorStrings(t, got, tc.want)
 		})
 	}
 }
@@ -217,14 +222,7 @@ func TestValidateImagePolicies_NamesTheConfigurationWhenThePolicyCameFromIt(t *t
 
 			got := errorStrings(validateImagePolicies(set))
 
-			if len(got) != len(tc.want) {
-				t.Fatalf("got %d errors %v, want %d %v", len(got), got, len(tc.want), tc.want)
-			}
-			for i := range tc.want {
-				if got[i] != tc.want[i] {
-					t.Errorf("error %d:\ngot  %q\nwant %q", i, got[i], tc.want[i])
-				}
-			}
+			assertErrorStrings(t, got, tc.want)
 		})
 	}
 }
@@ -277,14 +275,7 @@ func TestValidateImagePolicies_UnderManifestOwnedDefaults(t *testing.T) {
 
 			got := errorStrings(validateImagePolicies(set))
 
-			if len(got) != len(tc.want) {
-				t.Fatalf("got %d errors %v, want %d %v", len(got), got, len(tc.want), tc.want)
-			}
-			for i := range tc.want {
-				if got[i] != tc.want[i] {
-					t.Errorf("error %d:\ngot  %q\nwant %q", i, got[i], tc.want[i])
-				}
-			}
+			assertErrorStrings(t, got, tc.want)
 		})
 	}
 }

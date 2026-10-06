@@ -231,6 +231,20 @@ func TestPullPolicyDefaultGenerateThenDeploy(t *testing.T) {
 		}
 	})
 
+	s.Test("apply -f holds a single manifest to the configured default", func(tc *TestCase) {
+		w := worlds[tc]
+		fixed := policyFixturesPath("versioned", "app-fixed.yml")
+
+		tc.Run("apply", "-f", fixed,
+			"--path", policyFixturesPath("versioned"),
+			"--config-dir", w.cfgDir,
+			"--state-dir", tc.StateDir,
+		).
+			AssertFailure().
+			AssertStderrContains(`application "app-fixed": spec.image "traefik/whoami:v1.10.2" names a fixed version but the image pull policy is Pinned ` + configSourcedRemedy)
+		tc.AssertFileNotExists(pinsPath(tc))
+	})
+
 	s.Test("generate with no image or version flag writes the Pinned defaults", func(tc *TestCase) {
 		w := worlds[tc]
 
