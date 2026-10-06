@@ -108,7 +108,7 @@
 - [x] T018 [P] Update the `deployments.txt` line in the State Directory Layout block of AGENTS.md to `<kind> <name> <container-id> <config-hash> <image> <pull-policy>`
 - [x] T019 [P] Add the spec 031 entry to specs/progress.md in the project's usual form (title, `see specs/031-deployed-version-columns/` and issue #52, what changed, acceptance by SC, gate naming `TestGetDocker` and `TestDescribeDocker` — CI executes), placed before the spec 030 entry
 - [x] T020 Final local gates: `gofmt -l .` prints nothing; `go vet ./...`; `go build ./... && go test ./...` green; `go vet -tags integration ./tests/integration/...` green; every task above checked
-- [ ] T021 Rebase onto `origin/main` if it moved (keep both entries in specs/progress.md and .specify/feature.json), push `031-deployed-version-columns`, open the pull request against main from `.github/pull_request_template.md` with `Closes #52` in Why and the one-line Constitution Check for the `internal/engine/local/` change, run `/shrine-pr-review`, fix every real finding, push again
+- [x] T021 Rebase onto `origin/main` if it moved (keep both entries in specs/progress.md and .specify/feature.json), push `031-deployed-version-columns`, open the pull request against main from `.github/pull_request_template.md` with `Closes #52` in Why and the one-line Constitution Check for the `internal/engine/local/` change, run `/shrine-pr-review`, fix every real finding, push again
 
 Note: `graphify update .` runs on main after merge by the orchestrator, not on this branch.
 

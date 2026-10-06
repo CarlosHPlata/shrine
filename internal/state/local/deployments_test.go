@@ -12,8 +12,7 @@ import (
 // fakeDeploymentFiles is an in-memory stand-in for the per-team
 // deployments.txt files so unit tests never touch the real filesystem.
 type fakeDeploymentFiles struct {
-	files  map[string][]byte
-	writes int
+	files map[string][]byte
 }
 
 func newFakeDeploymentFiles() *fakeDeploymentFiles {
@@ -30,7 +29,6 @@ func (f *fakeDeploymentFiles) read(path string) ([]byte, error) {
 
 func (f *fakeDeploymentFiles) write(path string, data []byte) error {
 	f.files[path] = append([]byte(nil), data...)
-	f.writes++
 	return nil
 }
 

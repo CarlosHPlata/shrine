@@ -9,16 +9,6 @@ import (
 	"github.com/docker/docker/api/types/container"
 )
 
-func recordTestOp(image, policy string) engine.CreateContainerOp {
-	return engine.CreateContainerOp{
-		Team:            "demo",
-		Name:            "web",
-		Kind:            "Application",
-		Image:           image,
-		ImagePullPolicy: policy,
-	}
-}
-
 func recordTestBackend(api dockerAPI, deployments *fakeDeploymentStore) *DockerBackend {
 	return &DockerBackend{
 		client:     api,
@@ -47,7 +37,8 @@ func TestCreateContainer_RecordsManifestImageAndPolicy(t *testing.T) {
 	deployments := &fakeDeploymentStore{}
 	backend := recordTestBackend(&startCapableFakeDockerAPI{}, deployments)
 
-	if err := backend.CreateContainer(recordTestOp("reg:myregistry/traefik/whoami:latest", "IfNotPresent")); err != nil {
+	op := aliasTestOp("reg:myregistry/traefik/whoami:latest")
+	if err := backend.CreateContainer(op); err != nil {
 		t.Fatalf("CreateContainer failed: %v", err)
 	}
 
@@ -58,11 +49,11 @@ func TestCreateContainer_RecordsManifestImageAndPolicy(t *testing.T) {
 	if want := "reg:myregistry/traefik/whoami:latest"; got.Image != want {
 		t.Errorf("recorded image = %q, want the unexpanded manifest reference %q", got.Image, want)
 	}
-	if got.Policy != "IfNotPresent" {
-		t.Errorf("recorded policy = %q, want %q", got.Policy, "IfNotPresent")
+	if got.Policy != op.ImagePullPolicy {
+		t.Errorf("recorded policy = %q, want %q", got.Policy, op.ImagePullPolicy)
 	}
-	if got.Kind != "Application" || got.Name != "web" {
-		t.Errorf("recorded identity = %q/%q, want Application/web", got.Kind, got.Name)
+	if got.Kind != op.Kind || got.Name != op.Name {
+		t.Errorf("recorded identity = %q/%q, want %s/%s", got.Kind, got.Name, op.Kind, op.Name)
 	}
 	if got.ConfigHash == "" {
 		t.Error("recorded config hash must not be empty")
@@ -70,7 +61,7 @@ func TestCreateContainer_RecordsManifestImageAndPolicy(t *testing.T) {
 }
 
 func TestCreateContainer_UpToDateRedeployFillsLegacyRecord(t *testing.T) {
-	op := recordTestOp("nginx:1.27", "IfNotPresent")
+	op := aliasTestOp("nginx:1.27")
 	deployments := &fakeDeploymentStore{}
 
 	fresh := recordTestBackend(&startCapableFakeDockerAPI{}, deployments)
@@ -90,7 +81,7 @@ func TestCreateContainer_UpToDateRedeployFillsLegacyRecord(t *testing.T) {
 		t.Error("an up-to-date container must not be recreated")
 	}
 	last := deployments.records[len(deployments.records)-1]
-	if last.Image != "nginx:1.27" || last.Policy != "IfNotPresent" {
+	if last.Image != "nginx:1.27" || last.Policy != op.ImagePullPolicy {
 		t.Errorf("redeploy must fill the legacy record, got image %q policy %q", last.Image, last.Policy)
 	}
 	if last.ContainerID != "existing-id" || last.ConfigHash != hash {
