@@ -157,7 +157,7 @@ type ContainerBackend interface {
 }
 ```
 
-`CreateContainerOp` gains `ImageID string`: when set, `CreateContainer` uses it as the hash input and does not call `resolveImage`. The Traefik plugin, which calls `CreateContainer` directly, leaves it empty and keeps today's path. `ContainerInfo` gains `Image string`, the reference the container was created from, read from `ContainerInspect(...).Config.Image`.
+`CreateContainerOp` gains `ImageID string`: when set, `CreateContainer` uses it as the hash input and does not call `resolveImage`. The Traefik plugin, which calls `CreateContainer` directly, leaves it empty and keeps today's path. *Amended by T2 (spec 032):* `CreateContainerOp` also gains `ResolvedRef string`, the pullable reference the container is created from, set by the engine beside `ImageID`; `Image` is never overwritten and stays the reference as the manifest wrote it, which is what the deployment record of section 3.3 stores. On the direct path `CreateContainer` expands the alias into `ResolvedRef` and leaves `Image` untouched. `ContainerInfo` gains `Image string`, the reference the container was created from, read from `ContainerInspect(...).Config.Image`.
 
 ### 4.2 Docker backend behaviour of `ResolveImage`
 
@@ -183,7 +183,7 @@ Picking the digest: `pickRepoDigest(inspect.RepoDigests, repository)` returns th
 resolved, err := engine.resolveImages(set, steps)   // map[kind+"/"+name]ResolvedImage
 ```
 
-One `ResolveImageOp` per step, in step order, from the step's manifest. The first error aborts the deploy; nothing else has run. `deployApplication` and `deployResource` then set `op.Image = resolved.Ref` and `op.ImageID = resolved.ImageID`. Only artifacts that will be deployed are resolved, so `deploy team` resolves one team's images.
+One `ResolveImageOp` per step, in step order, from the step's manifest. The first error aborts the deploy; nothing else has run. `deployApplication` and `deployResource` then set `op.ResolvedRef = resolved.Ref` and `op.ImageID = resolved.ImageID`; `op.Image` stays the manifest reference (*amended by T2, spec 032*; the original text read `op.Image = resolved.Ref`). Only artifacts that will be deployed are resolved, so `deploy team` resolves one team's images.
 
 ### 4.4 Dry run
 
@@ -287,7 +287,7 @@ Each ticket's spec starts from these. Identifiers are `T<n>-<nn>`; the PRD requi
 
 ### T1. Deployed version in get and describe
 
-- **T1-01** [R-17] Deploy records the manifest's image reference and the effective pull policy with each deployment. Where: `state.Deployment` gains `Image` and `Policy` (section 3.3); `recordDeployment` in `docker_container.go` fills them from the op; `CreateContainer` keeps the unexpanded reference in a local before `op.Image = expanded`, because the record stores the reference as written.
+- **T1-01** [R-17] Deploy records the manifest's image reference and the effective pull policy with each deployment. Where: `state.Deployment` gains `Image` and `Policy` (section 3.3); `recordDeployment` in `docker_container.go` fills them from the op; `CreateContainer` keeps the unexpanded reference in a local before `op.Image = expanded`, because the record stores the reference as written. *After T2 (spec 032)* `op.Image` is never overwritten on either path, so the record reads it directly; the expanded form lives in `op.ResolvedRef`.
 - **T1-02** [R-17] `deployments.txt` carries the two new fields and legacy lines still load. Where: `loadTeam` and `saveTeam` in `internal/state/local/deployments.go`; the reader rule of section 3.3.
 - **T1-03** [R-17] `get deployed`, `get applications`, `get resources` print a VERSION column, state only. Where: `printDeploymentsTable`; the `cmd/get.go` commands are untouched.
 - **T1-04** [R-18] `describe app` and `describe resource` print `Image:` and `Pull policy:`. Where: `printDeploymentDetail`.

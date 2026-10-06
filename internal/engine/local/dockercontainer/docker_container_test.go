@@ -160,7 +160,8 @@ func TestCreateContainer_PlainReferencePassesThroughUnchanged(t *testing.T) {
 }
 
 // A pre-resolved op must reach ContainerCreate without a second resolution:
-// the fake's ImagePull and ImageInspect panic, and ImageList is counted.
+// the fake's ImagePull and ImageInspect panic, and ImageList is counted. The
+// container is created from ResolvedRef while Image keeps the written form.
 func TestCreateContainer_SkipsResolutionWhenImageIDIsSet(t *testing.T) {
 	fake := &fakeDockerAPI{createErr: errors.New("create rejected by fake")}
 	backend := &DockerBackend{
@@ -168,7 +169,8 @@ func TestCreateContainer_SkipsResolutionWhenImageIDIsSet(t *testing.T) {
 		registries: testRegistries,
 		observer:   engine.NoopObserver{},
 	}
-	op := aliasTestOp("docker.io/traefik/whoami:latest")
+	op := aliasTestOp("reg:myregistry/traefik/whoami:latest")
+	op.ResolvedRef = "docker.io/traefik/whoami:latest"
 	op.ImageID = "sha256:resolved-by-the-pre-pass"
 
 	if err := backend.CreateContainer(op); err == nil {
@@ -182,7 +184,7 @@ func TestCreateContainer_SkipsResolutionWhenImageIDIsSet(t *testing.T) {
 		t.Fatal("ContainerCreate was never called")
 	}
 	if got, want := fake.createdConfig.Image, "docker.io/traefik/whoami:latest"; got != want {
-		t.Errorf("container spec image = %q, want %q", got, want)
+		t.Errorf("container spec image = %q, want the pre-resolved reference %q", got, want)
 	}
 }
 

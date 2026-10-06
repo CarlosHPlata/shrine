@@ -3,6 +3,7 @@ package engine
 import (
 	"errors"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/CarlosHPlata/shrine/internal/manifest"
@@ -10,8 +11,9 @@ import (
 )
 
 // prepassContainerBackend records every container call on a shared timeline
-// and answers ResolveImage with a distinct reference and image id per op, or
-// with failErr for the artifact named failOn.
+// and answers ResolveImage with an "expanded" reference (the reg: prefix
+// swapped for a host) and a distinct image id per op, or with failErr for the
+// artifact named failOn.
 type prepassContainerBackend struct {
 	calls      *[]string
 	resolveOps []ResolveImageOp
@@ -47,14 +49,19 @@ func (p *prepassContainerBackend) ResolveImage(op ResolveImageOp) (ResolvedImage
 		return ResolvedImage{}, p.failErr
 	}
 	return ResolvedImage{
-		Ref:     "resolved/" + op.Image,
+		Ref:     expandedFake(op.Image),
 		ImageID: "sha256:" + op.Name,
 		Source:  ImageSourceManifest,
 	}, nil
 }
 
-// prepassManifestSet holds a fixed-tag resource and an untagged application so
-// both effective pull policies appear in the ops the engine builds.
+func expandedFake(image string) string {
+	return "registry.lab/" + strings.TrimPrefix(image, "reg:lab/")
+}
+
+// prepassManifestSet holds a fixed-tag resource and an untagged, alias-form
+// application so both effective pull policies and both reference forms appear
+// in the ops the engine builds.
 func prepassManifestSet() (*planner.ManifestSet, []planner.PlannedStep) {
 	set := emptyManifestSet()
 	set.Resources["db"] = &manifest.ResourceManifest{
@@ -65,7 +72,7 @@ func prepassManifestSet() (*planner.ManifestSet, []planner.PlannedStep) {
 	set.Applications["svc-b"] = &manifest.ApplicationManifest{
 		TypeMeta: manifest.TypeMeta{Kind: manifest.ApplicationKind},
 		Metadata: manifest.Metadata{Name: "svc-b", Owner: "team-a"},
-		Spec:     manifest.ApplicationSpec{Image: "img", Port: 8080},
+		Spec:     manifest.ApplicationSpec{Image: "reg:lab/img:latest", Port: 8080},
 	}
 	steps := []planner.PlannedStep{
 		{Kind: manifest.ResourceKind, Name: "db"},
@@ -112,13 +119,15 @@ func TestExecuteDeploy_BuildsResolveImageOpFromTheManifest(t *testing.T) {
 
 	want := []ResolveImageOp{
 		{Team: "team-a", Name: "db", Kind: manifest.ResourceKind, Image: "postgres:16", ImagePullPolicy: manifest.ImagePullPolicyIfNotPresent},
-		{Team: "team-a", Name: "svc-b", Kind: manifest.ApplicationKind, Image: "img", ImagePullPolicy: manifest.ImagePullPolicyAlways},
+		{Team: "team-a", Name: "svc-b", Kind: manifest.ApplicationKind, Image: "reg:lab/img:latest", ImagePullPolicy: manifest.ImagePullPolicyAlways},
 	}
 	if !slices.Equal(backend.resolveOps, want) {
 		t.Errorf("resolve ops = %+v, want %+v", backend.resolveOps, want)
 	}
 }
 
+// Image keeps the manifest form (the deployment record stores it as written);
+// ResolvedRef and ImageID carry the pre-pass result.
 func TestExecuteDeploy_HandsTheResolvedImageToCreateContainer(t *testing.T) {
 	var calls []string
 	backend := &prepassContainerBackend{calls: &calls}
@@ -130,28 +139,29 @@ func TestExecuteDeploy_HandsTheResolvedImageToCreateContainer(t *testing.T) {
 	if len(backend.createOps) != 2 {
 		t.Fatalf("got %d CreateContainer ops, want 2", len(backend.createOps))
 	}
-	cases := []struct{ name, image, imageID string }{
-		{"db", "resolved/postgres:16", "sha256:db"},
-		{"svc-b", "resolved/img", "sha256:svc-b"},
+	cases := []struct{ name, image, resolvedRef, imageID string }{
+		{"db", "postgres:16", "registry.lab/postgres:16", "sha256:db"},
+		{"svc-b", "reg:lab/img:latest", "registry.lab/img:latest", "sha256:svc-b"},
 	}
 	for i, tc := range cases {
 		op := backend.createOps[i]
-		if op.Name != tc.name || op.Image != tc.image || op.ImageID != tc.imageID {
-			t.Errorf("op[%d] = {Name:%q Image:%q ImageID:%q}, want {%q %q %q}", i, op.Name, op.Image, op.ImageID, tc.name, tc.image, tc.imageID)
+		if op.Name != tc.name || op.Image != tc.image || op.ResolvedRef != tc.resolvedRef || op.ImageID != tc.imageID {
+			t.Errorf("op[%d] = {Name:%q Image:%q ResolvedRef:%q ImageID:%q}, want {%q %q %q %q}",
+				i, op.Name, op.Image, op.ResolvedRef, op.ImageID, tc.name, tc.image, tc.resolvedRef, tc.imageID)
 		}
 	}
 }
 
 func TestExecuteDeploy_FirstResolutionFailureAbortsBeforeAnyOperation(t *testing.T) {
 	var calls []string
-	backend := &prepassContainerBackend{calls: &calls, failOn: "svc-b", failErr: errors.New(`pulling image "img": boom`)}
+	backend := &prepassContainerBackend{calls: &calls, failOn: "svc-b", failErr: errors.New(`pulling image "registry.lab/img:latest": boom`)}
 
 	err, obs := runPrepassDeploy(t, backend)
 	if err == nil {
 		t.Fatal("expected the resolution failure to abort the deploy")
 	}
 
-	if want := `application "svc-b": pulling image "img": boom`; err.Error() != want {
+	if want := `application "svc-b": pulling image "registry.lab/img:latest": boom`; err.Error() != want {
 		t.Errorf("error = %q, want %q", err.Error(), want)
 	}
 	if want := []string{"ResolveImage:db", "ResolveImage:svc-b"}; !slices.Equal(calls, want) {
@@ -168,8 +178,8 @@ func TestExecuteDeploy_FirstResolutionFailureAbortsBeforeAnyOperation(t *testing
 		t.Fatalf("got %d image.resolve error events, want 1", len(errorEvents))
 	}
 	fields := errorEvents[0].Fields
-	if fields["team"] != "team-a" || fields["name"] != "svc-b" || fields["ref"] != "img" {
-		t.Errorf("error event fields = %v, want team=team-a name=svc-b ref=img", fields)
+	if fields["team"] != "team-a" || fields["name"] != "svc-b" || fields["ref"] != "reg:lab/img:latest" {
+		t.Errorf("error event fields = %v, want team=team-a name=svc-b ref=reg:lab/img:latest (as written)", fields)
 	}
 }
 

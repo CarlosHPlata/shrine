@@ -33,7 +33,7 @@ and `ContainerBackend` gains `ResolveImage(op ResolveImageOp) (ResolvedImage, er
 
 ## R2. Where alias expansion lives
 
-**Decision**: `ResolveImage` expands `reg:<alias>` exactly once, as `CreateContainer` does today, before the pull, the credential lookup, and the inspection; `ResolvedImage.Ref` is the expanded form. `CreateContainer` expands only on its own path (`ImageID` empty, the Traefik plugin); on the engine path `op.Image` already arrives expanded.
+**Decision**: `ResolveImage` expands `reg:<alias>` exactly once, as `CreateContainer` does today, before the pull, the credential lookup, and the inspection; `ResolvedImage.Ref` is the expanded form. `CreateContainer` expands only on its own path (`ImageID` empty, the Traefik plugin), into `op.ResolvedRef`; on the engine path `op.ResolvedRef` arrives from the pre-pass. `op.Image` is never rewritten on either path, so the deployment record of T1 can store it as written (tech-lead review of PR #61).
 
 **Rationale**: issue #33's invariant: every reader of the reference sees the same fully-qualified string. Design section 4.2 step 1.
 
@@ -57,7 +57,7 @@ and `ContainerBackend` gains `ResolveImage(op ResolveImageOp) (ResolvedImage, er
 
 ## R5. Engine pre-pass
 
-**Decision**: `ExecuteDeploy` calls `engine.resolveImages(set, steps)` immediately after installing the no-op observer and before `CreatePlatformNetwork`. The method builds one `ResolveImageOp` per step via `resolveImageOpFor(set, step)` (team, name, kind, manifest image, `manifest.EffectivePullPolicy`), calls `ResolveImage`, and returns `map[string]ResolvedImage` keyed `kind + "/" + name`. The first error returns `engine.emitErr("image.resolve", {team, name, ref}, fmt.Errorf("%s %q: %w", strings.ToLower(kind), name, err))`. `deployApplication` and `deployResource` receive the map and set `op.Image = resolved.Ref`, `op.ImageID = resolved.ImageID`.
+**Decision**: `ExecuteDeploy` calls `engine.resolveImages(set, steps)` immediately after installing the no-op observer and before `CreatePlatformNetwork`. The method builds one `ResolveImageOp` per step via `resolveImageOpFor(set, step)` (team, name, kind, manifest image, `manifest.EffectivePullPolicy`), calls `ResolveImage`, and returns `map[string]ResolvedImage` keyed `kind + "/" + name`. The first error returns `engine.emitErr("image.resolve", {team, name, ref}, fmt.Errorf("%s %q: %w", strings.ToLower(kind), name, err))`. `deployApplication` and `deployResource` receive the map and set `op.ResolvedRef = resolved.Ref`, `op.ImageID = resolved.ImageID`, leaving `op.Image` as the manifest wrote it.
 
 **Rationale**: design section 4.3 verbatim. Lower-casing the kind in the error matches the `application "x": …` form every other engine error uses (spec 028).
 
@@ -115,6 +115,6 @@ and `ContainerBackend` gains `ResolveImage(op ResolveImageOp) (ResolvedImage, er
 
 ## R13. Hand-off notes for the next tickets
 
-- T1 plans to store the reference "as written" in the deployment record by reading `op.Image` inside `CreateContainer` before expansion. On the engine path, `op.Image` now arrives already expanded (`ResolvedImage.Ref`), so T1 or T3 must carry the manifest form separately (for example a field on `CreateContainerOp` set by the engine from the manifest) if the record must keep the alias form.
+- T1 stores the reference "as written" in the deployment record from `op.Image`. After the tech-lead review of PR #61, `op.Image` is never overwritten on either path: the expanded, pullable form is `op.ResolvedRef`, so T1's record reads `op.Image` directly. After #60 merges, add a unit test that an aliased op on the engine path records the unexpanded reference.
 - `pickRepoDigest` returns the digest portion; the pullable pin TD-1 describes is `repositoryOf(ref) + "@" + digest`.
 - `ResolveImage` emits no error event of its own; T3's "pin no longer served" failure should emit `image.resolve` error from the backend so the terminal prints it before the engine's line, or rely on the engine's line alone.

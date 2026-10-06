@@ -55,12 +55,13 @@ Implementations: `dockercontainer.DockerBackend`, `dryrun.DryRunContainerBackend
 
 ```go
 type CreateContainerOp struct {
-	// existing fields unchanged
-	ImageID string // NEW: when set, CreateContainer skips resolution and hashes this id
+	// existing fields unchanged; Image stays the reference as the manifest wrote it
+	ResolvedRef string // NEW: the pullable reference the container is created from
+	ImageID     string // NEW: when set, CreateContainer skips resolution and hashes this id
 }
 ```
 
-Set by the engine from `ResolvedImage.ImageID` together with `Image = ResolvedImage.Ref`. Left empty by the Traefik plugin.
+Both set by the engine from `ResolvedImage.Ref` and `ResolvedImage.ImageID`. Left empty by the Traefik plugin, whose direct path expands the alias into `ResolvedRef` itself. `Image` is never overwritten, so the deployment record can store it as written.
 
 ## 2. Docker backend internals (`internal/engine/local/dockercontainer/docker_image.go`)
 
@@ -86,7 +87,7 @@ Produced by `findLocalImage` (from `image.Summary`) and `inspectImage` (from `im
 | `pickRepoDigest` | `(repoDigests []string, repository string) string` | digest part of the entry whose normalised repository equals the normalised `repository`; `""` when none |
 | `repositoryOf` | `(ref string) string` | strips `@digest`, then a tag after the last `/` |
 | `normalizeRepository` | `(repository string) string` | trims a leading `docker.io/`, then a leading `library/` |
-| `resolveContainerImage` | `(ctx, op *engine.CreateContainerOp) (string, error)` (in `docker_container.go`) | `op.ImageID` when set; else expand alias into `op.Image` and `locateImage(...).ID` |
+| `resolveContainerImage` | `(ctx, op engine.CreateContainerOp) (ref, imageID string, err error)` (in `docker_container.go`) | `op.ResolvedRef, op.ImageID` when the id is set; else expand the alias and `locateImage`, returning the expanded reference and its id; `op.Image` is never rewritten |
 
 ## 3. Engine projection (`internal/engine/engine.go`)
 
@@ -94,7 +95,7 @@ Produced by `findLocalImage` (from `image.Summary`) and `inspectImage` (from `im
 |---|---|---|
 | `resolveImages` | `(set *planner.ManifestSet, steps []planner.PlannedStep) (map[string]ResolvedImage, error)` | one `ResolveImage` per step in order; first error aborts with the `image.resolve` error event; map keyed `resolvedImageKey(kind, name)` = `kind + "/" + name` |
 | `resolveImageOpFor` | `(set, step) ResolveImageOp` | reads owner, name, image, and effective policy from the step's manifest |
-| `deployApplication` / `deployResource` | gain the map as a parameter | set `op.Image = resolved.Ref`, `op.ImageID = resolved.ImageID` |
+| `deployApplication` / `deployResource` | gain the map as a parameter | set `op.ResolvedRef = resolved.Ref`, `op.ImageID = resolved.ImageID`; `op.Image` stays the manifest reference |
 
 `ExecuteDeploy` order after this feature: observer default → `resolveImages` → `CreatePlatformNetwork` → built-ins → `resolveResources` → step loop → `finalizeRouting`.
 

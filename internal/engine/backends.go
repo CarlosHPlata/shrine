@@ -39,10 +39,13 @@ type CreateContainerOp struct {
 	BindMounts       []BindMount
 	PortBindings     []PortBinding
 	Publish          *PublishPort
-	// ImageID is filled by the engine from the pre-pass so CreateContainer
-	// does not resolve the image a second time; the Traefik plugin leaves it
-	// empty and keeps resolving on its own.
-	ImageID string
+	// Image stays the reference as the manifest wrote it, because the
+	// deployment record keeps that form. ResolvedRef is the pullable reference
+	// the container is created from and ImageID the config-hash input; the
+	// engine fills both from the pre-pass, the Traefik plugin leaves them
+	// empty and CreateContainer resolves on its own.
+	ResolvedRef string
+	ImageID     string
 }
 
 type RemoveContainerOp struct {

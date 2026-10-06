@@ -33,12 +33,13 @@ Prints `[DOCKER] ImageResolve: name=<team>.<name> image=<op.Image> policy=<op.Im
 
 - Called once per planned step, in step order, before `CreatePlatformNetwork`, with `Team`, `Name`, `Kind` from the manifest, `Image` as written, and `ImagePullPolicy` = `manifest.EffectivePullPolicy(image, declared)`.
 - The first error aborts `ExecuteDeploy`. The engine emits `image.resolve` error with `team`, `name`, `ref` (as written), `error`, and returns `fmt.Errorf("%s %q: %w", lower(kind), name, err)`: `application "web": pulling image "ghcr.io/x/web:1.2": <cause>`.
-- On success the step's `CreateContainerOp` carries `Image = Ref` and `ImageID = ImageID`.
+- On success the step's `CreateContainerOp` carries `ResolvedRef = Ref` and `ImageID = ImageID`; `Image` stays the reference as the manifest wrote it.
 
 ## `CreateContainer` with a resolved image
 
-- `op.ImageID != ""`: no alias expansion, no image list, no pull, no inspect; `op.Image` is used as given for the container spec and `op.ImageID` as the config-hash input.
-- `op.ImageID == ""`: today's path, unchanged (the Traefik plugin).
+- `op.ImageID != ""`: no alias expansion, no image list, no pull, no inspect; `op.ResolvedRef` is the container spec image and `op.ImageID` the config-hash input.
+- `op.ImageID == ""`: today's path (the Traefik plugin): the alias is expanded into `op.ResolvedRef`, the image located per policy, and the container created from `op.ResolvedRef`.
+- On both paths `op.Image` is never rewritten; the `container.create` failure keeps naming the expanded reference.
 
 ## Test fakes
 
