@@ -9,17 +9,15 @@ import (
 	"testing"
 
 	"github.com/CarlosHPlata/shrine/internal/engine"
-	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/image"
-	"github.com/docker/docker/api/types/network"
-	"github.com/docker/docker/api/types/volume"
 	"github.com/docker/docker/client"
-	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 )
 
 // recordingDockerAPI answers the three image calls from canned results and
 // records their order, so a test can prove which calls a pull policy makes.
+// Every other call keeps fakeDockerAPI's behaviour.
 type recordingDockerAPI struct {
+	fakeDockerAPI
 	calls      []string
 	pulledRefs []string
 	listed     []image.Summary
@@ -46,42 +44,6 @@ func (r *recordingDockerAPI) ImagePull(_ context.Context, ref string, _ image.Pu
 func (r *recordingDockerAPI) ImageInspect(context.Context, string, ...client.ImageInspectOption) (image.InspectResponse, error) {
 	r.calls = append(r.calls, "ImageInspect")
 	return r.inspected, r.inspectErr
-}
-
-func (r *recordingDockerAPI) ContainerCreate(context.Context, *container.Config, *container.HostConfig, *network.NetworkingConfig, *ocispec.Platform, string) (container.CreateResponse, error) {
-	panic("unexpected ContainerCreate")
-}
-
-func (r *recordingDockerAPI) ContainerInspect(context.Context, string) (container.InspectResponse, error) {
-	panic("unexpected ContainerInspect")
-}
-
-func (r *recordingDockerAPI) ContainerRemove(context.Context, string, container.RemoveOptions) error {
-	panic("unexpected ContainerRemove")
-}
-
-func (r *recordingDockerAPI) ContainerStart(context.Context, string, container.StartOptions) error {
-	panic("unexpected ContainerStart")
-}
-
-func (r *recordingDockerAPI) NetworkCreate(context.Context, string, network.CreateOptions) (network.CreateResponse, error) {
-	panic("unexpected NetworkCreate")
-}
-
-func (r *recordingDockerAPI) NetworkInspect(context.Context, string, network.InspectOptions) (network.Inspect, error) {
-	panic("unexpected NetworkInspect")
-}
-
-func (r *recordingDockerAPI) NetworkRemove(context.Context, string) error {
-	panic("unexpected NetworkRemove")
-}
-
-func (r *recordingDockerAPI) VolumeCreate(context.Context, volume.CreateOptions) (volume.Volume, error) {
-	panic("unexpected VolumeCreate")
-}
-
-func (r *recordingDockerAPI) VolumeInspect(context.Context, string) (volume.Volume, error) {
-	panic("unexpected VolumeInspect")
 }
 
 const (
@@ -228,6 +190,21 @@ func TestResolveImage_PullFailureNamesReferenceAndEmitsNoFinished(t *testing.T) 
 	}
 	if _, ok := obs.find("image.pull", engine.StatusError); !ok {
 		t.Error("the failing operation must emit its own error event")
+	}
+}
+
+func TestResolveImage_InspectFailureNamesReference(t *testing.T) {
+	api := &recordingDockerAPI{inspectErr: errors.New("no such image")}
+	backend := &DockerBackend{client: api, registries: testRegistries, observer: engine.NoopObserver{}}
+
+	_, err := backend.ResolveImage(resolveTestOp(expandedWhoami, "Always"))
+	if err == nil {
+		t.Fatal("expected the inspect failure to surface")
+	}
+
+	want := `inspecting image "docker.io/traefik/whoami:latest": no such image`
+	if err.Error() != want {
+		t.Errorf("error = %q, want %q", err.Error(), want)
 	}
 }
 

@@ -137,8 +137,8 @@
 
 - [x] T029 Add the entry for 032 to `specs/progress.md` in the project's usual form (title, spec link, issue #53, what changed, acceptance SC-001 to SC-007 mapping, gate: `TestPreflightImageResolve` and the appended `TestDeploy` scenario, CI executes)
 - [x] T030 Final verification: `go build ./... && go test ./... && go vet -tags integration ./tests/integration/... && gofmt -l .` clean; every task above checked; `git status` clean after commit
-- [ ] T031 Rebase onto `origin/main` if it moved (expected conflicts only in `specs/progress.md` and `.specify/feature.json`; keep both entries), push `032-preflight-image-resolve`, open the pull request with `gh pr create` following `.github/pull_request_template.md` with `Closes #53` in Why, the definition-of-done list, and the hand-off notes of research.md R13
-- [ ] T032 Run `/shrine-pr-review` on the pull request, fix every real finding, push again
+- [x] T031 Rebase onto `origin/main` if it moved (expected conflicts only in `specs/progress.md` and `.specify/feature.json`; keep both entries), push `032-preflight-image-resolve`, open the pull request with `gh pr create` following `.github/pull_request_template.md` with `Closes #53` in Why, the definition-of-done list, and the hand-off notes of research.md R13
+- [x] T032 Run `/shrine-pr-review` on the pull request, fix every real finding, push again (findings DRY1, DRY2, CC1, UT1 fixed: `newResolveImageOp` extracted, `recordingDockerAPI` embeds `fakeDockerAPI`, the `resolveContainerImage` comment trimmed, inspect-failure test added)
 
 ---
 

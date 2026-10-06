@@ -322,22 +322,20 @@ func (engine *Engine) resolveImages(set *planner.ManifestSet, steps []planner.Pl
 func resolveImageOpFor(set *planner.ManifestSet, step planner.PlannedStep) ResolveImageOp {
 	if step.Kind == manifest.ResourceKind {
 		resource := set.Resources[step.Name]
-		return ResolveImageOp{
-			Team:            resource.Metadata.Owner,
-			Name:            resource.Metadata.Name,
-			Kind:            step.Kind,
-			Image:           resource.Spec.Image,
-			ImagePullPolicy: manifest.EffectivePullPolicy(resource.Spec.Image, resource.Spec.ImagePullPolicy),
-		}
+		return newResolveImageOp(step.Kind, resource.Metadata, resource.Spec.Image, resource.Spec.ImagePullPolicy)
 	}
 
 	application := set.Applications[step.Name]
+	return newResolveImageOp(step.Kind, application.Metadata, application.Spec.Image, application.Spec.ImagePullPolicy)
+}
+
+func newResolveImageOp(kind string, meta manifest.Metadata, image, declaredPolicy string) ResolveImageOp {
 	return ResolveImageOp{
-		Team:            application.Metadata.Owner,
-		Name:            application.Metadata.Name,
-		Kind:            step.Kind,
-		Image:           application.Spec.Image,
-		ImagePullPolicy: manifest.EffectivePullPolicy(application.Spec.Image, application.Spec.ImagePullPolicy),
+		Team:            meta.Owner,
+		Name:            meta.Name,
+		Kind:            kind,
+		Image:           image,
+		ImagePullPolicy: manifest.EffectivePullPolicy(image, declaredPolicy),
 	}
 }
 

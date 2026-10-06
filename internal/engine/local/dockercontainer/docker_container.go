@@ -67,11 +67,8 @@ func newDeploymentRecord(op engine.CreateContainerOp) state.Deployment {
 	}
 }
 
-// resolveContainerImage returns the local image id the config hash keys on.
-// An op from the engine already carries it from the pre-pass. A direct caller
-// such as the Traefik plugin leaves it empty and resolves here, expanding the
-// reg:<alias> form exactly once so the pull, the credential lookup, the hash,
-// and the container spec all see the same fully-qualified reference (#33).
+// A direct caller such as the Traefik plugin carries no pre-pass result, so
+// the alias is expanded here, once, before anything reads op.Image (#33).
 func (backend *DockerBackend) resolveContainerImage(ctx context.Context, op *engine.CreateContainerOp) (string, error) {
 	if op.ImageID != "" {
 		return op.ImageID, nil
