@@ -7,4 +7,5 @@ type Store struct {
 	Secrets     SecretStore
 	Deployments DeploymentStore
 	HostPorts   HostPortStore
+	ImagePins   ImagePinStore
 }

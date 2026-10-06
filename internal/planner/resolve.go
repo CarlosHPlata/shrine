@@ -12,7 +12,7 @@ import (
 
 // Resolve performs dependency resolution, access control checks, quota enforcement,
 // and registry alias validation for a set of manifests. It returns all errors found.
-func Resolve(set *ManifestSet, store state.TeamStore, registries []config.RegistryConfig) []error {
+func Resolve(set *ManifestSet, store state.TeamStore, registries []config.RegistryConfig, defaultPullPolicy string) []error {
 	var errs []error
 
 	// 0. Name collision check
@@ -48,6 +48,9 @@ func Resolve(set *ManifestSet, store state.TeamStore, registries []config.Regist
 
 	// 5. Validate registry aliases in image references
 	errs = append(errs, validateRegistryImages(set, registries)...)
+
+	// 6. Version rules that depend on the effective pull policy
+	errs = append(errs, validateImagePolicies(set, defaultPullPolicy)...)
 
 	return errs
 }

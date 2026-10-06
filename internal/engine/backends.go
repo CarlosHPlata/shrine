@@ -1,5 +1,7 @@
 package engine
 
+import "time"
+
 type VolumeMount struct {
 	Name      string
 	MountPath string
@@ -70,14 +72,22 @@ type ResolveImageOp struct {
 // ResolvedImage keeps the pullable reference and the local image id apart:
 // Ref is what a container is created from and what a later pin can pull;
 // ImageID is the config-hash input and is not pullable from any registry.
+// Requested is the tag reference a pin was resolved from, kept because Ref
+// is a digest reference under Pinned and the readable tag would be lost.
 type ResolvedImage struct {
-	Ref     string
-	Digest  string
-	ImageID string
-	Source  string
+	Ref       string
+	Digest    string
+	ImageID   string
+	Source    string
+	Requested string
+	PinnedAt  time.Time
 }
 
-const ImageSourceManifest = "manifest"
+const (
+	ImageSourceManifest = "manifest"
+	ImageSourceResolved = "resolved"
+	ImageSourcePinned   = "pinned"
+)
 
 type ContainerBackend interface {
 	CreateNetwork(name string) error

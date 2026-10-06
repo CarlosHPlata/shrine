@@ -79,7 +79,6 @@ func TestValidate_InvalidResource(t *testing.T) {
 		"metadata.name is required",
 		"metadata.owner is required",
 		"spec.type is required",
-		"spec.version is required",
 	}
 	for _, e := range expected {
 		if !strings.Contains(msg, e) {
@@ -543,5 +542,27 @@ func TestValidate_VolumeMountRules(t *testing.T) {
 				t.Errorf("expected error containing %q, got: %v", tc.wantErr, err)
 			}
 		})
+	}
+}
+
+func resourceManifest(spec ResourceSpec) *Manifest {
+	return &Manifest{
+		TypeMeta: TypeMeta{Kind: ResourceKind, APIVersion: "shrine/v1"},
+		Resource: &ResourceManifest{Metadata: Metadata{Name: "db", Owner: "team-a"}, Spec: spec},
+	}
+}
+
+func applicationManifest(spec ApplicationSpec) *Manifest {
+	return &Manifest{
+		TypeMeta:    TypeMeta{Kind: ApplicationKind, APIVersion: "shrine/v1"},
+		Application: &ApplicationManifest{Metadata: Metadata{Name: "web", Owner: "team-a"}, Spec: spec},
+	}
+}
+
+// The version-required rule moved to the planner, where the effective policy
+// is known (spec 033, design TD-7).
+func TestValidate_ResourceWithoutVersionPassesParseTimeValidation(t *testing.T) {
+	if err := Validate(resourceManifest(ResourceSpec{Type: "postgres"})); err != nil {
+		t.Errorf("expected no error for a resource without version, got: %v", err)
 	}
 }

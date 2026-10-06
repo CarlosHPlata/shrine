@@ -1,0 +1,9 @@
+apiVersion: shrine/v1
+kind: Application
+metadata:
+  name: whoami-fixed
+  owner: shrine-deploy-test
+spec:
+  image: 127.0.0.1:5000/shrine/whoami:v1.10.2
+  port: 80
+  imagePullPolicy: Pinned

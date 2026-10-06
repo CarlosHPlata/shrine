@@ -376,3 +376,37 @@ func TestParseApplication_Routing_TLS_RejectsTopLevelField(t *testing.T) {
 		t.Errorf("error message must name the offending application; got: %v", err)
 	}
 }
+
+func parseInline(t *testing.T, yaml string) *Manifest {
+	t.Helper()
+	meta, err := probeKind([]byte(yaml))
+	if err != nil {
+		t.Fatalf("probeKind failed: %v", err)
+	}
+	m, err := parseManifest(meta, []byte(yaml))
+	if err != nil {
+		t.Fatalf("parseManifest failed: %v", err)
+	}
+	return m
+}
+
+func TestParse_ResourceImageDefaultsToTypeWithoutVersion(t *testing.T) {
+	cases := []struct {
+		name string
+		spec string
+		want string
+	}{
+		{"no version", "type: postgres", "postgres"},
+		{"with version", "type: postgres\n  version: \"16\"", "postgres:16"},
+		{"override without version", "type: postgres\n  image: mirror.local/pg", "mirror.local/pg"},
+		{"override with version", "type: postgres\n  version: \"16\"\n  image: mirror.local/pg", "mirror.local/pg"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			m := parseInline(t, "apiVersion: shrine/v1\nkind: Resource\nmetadata:\n  name: db\n  owner: team-a\nspec:\n  "+tc.spec+"\n")
+			if m.Resource.Spec.Image != tc.want {
+				t.Errorf("Spec.Image = %q, want %q", m.Resource.Spec.Image, tc.want)
+			}
+		})
+	}
+}

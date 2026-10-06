@@ -131,9 +131,8 @@ func validateResourceSpec(spec ResourceSpec) []string {
 	if spec.Type == "" {
 		errs = append(errs, "spec.type is required")
 	}
-	if spec.Version == "" {
-		errs = append(errs, "spec.version is required")
-	}
+	// spec.version is validated by the planner once the effective pull
+	// policy is known: Pinned makes it optional (spec 033).
 
 	if spec.Networking.Publish != nil {
 		errs = append(errs, "spec.networking.publish is only valid on Application manifests")

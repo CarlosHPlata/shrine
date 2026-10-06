@@ -33,11 +33,17 @@ func NewLocalStore(baseDir string, reservedHostPorts []int) (*state.Store, error
 		return nil, err
 	}
 
+	imagePins, err := NewImagePinStore(baseDir)
+	if err != nil {
+		return nil, err
+	}
+
 	return &state.Store{
 		Teams:       teams,
 		Subnets:     subnets,
 		Secrets:     secrets,
 		Deployments: deployments,
 		HostPorts:   hostPorts,
+		ImagePins:   imagePins,
 	}, nil
 }
