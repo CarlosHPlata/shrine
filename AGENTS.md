@@ -232,17 +232,20 @@ shrine deploy
      │     ├── Detect*Collisions()   → host-port and routing collision checks
      │     └── Order()               → topo-sorted []PlannedStep (Kahn's algorithm)
      ├── engine.ExecuteDeploy(steps, set)
+     │     ├── Container.ResolveImage(op)   ← pre-pass over every planned step, in step order: expand alias, pull per policy, learn the registry digest and local image id
      │     ├── Container.CreatePlatformNetwork()
      │     ├── Resolver.ResolveResource()  ← pre-pass over every Resource in the set, in resource-dependency order
      │     ├── for each step (topo order):
      │     │     ├── Resolver.ResolveApplication()   ← Application steps only: env from static values + valueFrom
      │     │     ├── Container.CreateNetwork(team)
-     │     │     ├── Container.CreateContainer(op)   ← image pull, reconcile-by-name, multi-network attach
+     │     │     ├── Container.CreateContainer(op)   ← uses the pre-resolved image; reconcile-by-name, multi-network attach
      │     │     ├── Routing.WriteRoute(op)           ← Traefik dynamic config via SSH
      │     │     └── DNS.WriteRecord(op)              ← AdGuard API call
      │     └── Routing.Finalize()
      └── done
 ```
+
+**Image resolution runs first and fails with zero changes.** `ResolveImage` is called for every planned step before `CreatePlatformNetwork`, so an unresolvable reference stops the deploy before any network or container exists; the result (`Ref`, `Digest`, `ImageID`) rides on `CreateContainerOp`, and `CreateContainer` resolves on its own only when `ImageID` is empty, which is the Traefik plugin's direct path. See `specs/032-preflight-image-resolve/`.
 
 **The resolver is an engine collaborator, not a pipeline stage.** The handler never calls it; `Engine` holds a `resolver.Resolver` and invokes it at two points inside `ExecuteDeploy`:
 

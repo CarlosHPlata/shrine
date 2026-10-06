@@ -9,6 +9,7 @@ import (
 
 	"github.com/CarlosHPlata/shrine/internal/config"
 	"github.com/CarlosHPlata/shrine/internal/engine"
+	"github.com/CarlosHPlata/shrine/internal/state"
 	"github.com/containerd/errdefs"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/image"
@@ -182,6 +183,29 @@ func TestCreateContainer_SkipsResolutionWhenImageIDIsSet(t *testing.T) {
 	}
 	if got, want := fake.createdConfig.Image, "docker.io/traefik/whoami:latest"; got != want {
 		t.Errorf("container spec image = %q, want %q", got, want)
+	}
+}
+
+// TD-2: the hash keys on the local image id, never on the registry digest, so
+// an upgrade to the pre-pass recreates nothing.
+func TestConfigHash_KeysOnTheLocalImageID(t *testing.T) {
+	op := engine.CreateContainerOp{
+		Team:             "team-a",
+		Name:             "web",
+		Image:            "docker.io/traefik/whoami:latest",
+		ImageID:          "sha256:local",
+		Env:              []string{"A=1"},
+		Volumes:          []engine.VolumeMount{{Name: "data", MountPath: "/data"}},
+		PortBindings:     []engine.PortBinding{{HostIP: "127.0.0.1", HostPort: "30000", ContainerPort: "80", Protocol: "tcp"}},
+		ExposeToPlatform: true,
+	}
+
+	want := state.ConfigHash("sha256:local", []string{"A=1"}, []string{"data:/data"}, []string{"127.0.0.1:30000:80/tcp"}, true)
+	if got := configHash(op, op.ImageID); got != want {
+		t.Errorf("configHash = %q, want the pre-feature hash %q", got, want)
+	}
+	if configHash(op, "sha256:other") == want {
+		t.Error("a different local image id must change the hash")
 	}
 }
 
