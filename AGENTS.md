@@ -272,7 +272,7 @@ shrine deploy
 ├── subnets.txt                  # allocated /24 subnets (one per team)
 ├── <team>/
 │   ├── secrets.env              # generated secrets (KEY=VALUE, 0600)
-│   └── deployments.txt          # deployed resource records (<kind> <name> <container-id>)
+│   └── deployments.txt          # deployed resource records (<kind> <name> <container-id> <config-hash> <image> <pull-policy>)
 └── teams/                       # synced Team manifests (JSON)
 ```
 
