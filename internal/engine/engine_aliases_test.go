@@ -10,38 +10,38 @@ func boolPtr(b bool) *bool { return &b }
 
 func TestResolveAliasRoutes(t *testing.T) {
 	tests := []struct {
-		name        string
-		input       manifest.RoutingAlias
-		wantPrefix  string
-		wantStrip   bool
+		name       string
+		input      manifest.RoutingAlias
+		wantPrefix string
+		wantStrip  bool
 	}{
 		{
-			name:      "nil StripPrefix, empty PathPrefix",
-			input:     manifest.RoutingAlias{Host: "h", PathPrefix: "", StripPrefix: nil},
+			name:       "nil StripPrefix, empty PathPrefix",
+			input:      manifest.RoutingAlias{Host: "h", PathPrefix: "", StripPrefix: nil},
 			wantPrefix: "",
 			wantStrip:  false,
 		},
 		{
-			name:      "nil StripPrefix, non-empty PathPrefix",
-			input:     manifest.RoutingAlias{Host: "h", PathPrefix: "/x", StripPrefix: nil},
+			name:       "nil StripPrefix, non-empty PathPrefix",
+			input:      manifest.RoutingAlias{Host: "h", PathPrefix: "/x", StripPrefix: nil},
 			wantPrefix: "/x",
 			wantStrip:  true,
 		},
 		{
-			name:      "explicit true StripPrefix",
-			input:     manifest.RoutingAlias{Host: "h", PathPrefix: "/x", StripPrefix: boolPtr(true)},
+			name:       "explicit true StripPrefix",
+			input:      manifest.RoutingAlias{Host: "h", PathPrefix: "/x", StripPrefix: boolPtr(true)},
 			wantPrefix: "/x",
 			wantStrip:  true,
 		},
 		{
-			name:      "explicit false StripPrefix",
-			input:     manifest.RoutingAlias{Host: "h", PathPrefix: "/x", StripPrefix: boolPtr(false)},
+			name:       "explicit false StripPrefix",
+			input:      manifest.RoutingAlias{Host: "h", PathPrefix: "/x", StripPrefix: boolPtr(false)},
 			wantPrefix: "/x",
 			wantStrip:  false,
 		},
 		{
-			name:      "trailing slash normalization",
-			input:     manifest.RoutingAlias{Host: "h", PathPrefix: "/x/", StripPrefix: nil},
+			name:       "trailing slash normalization",
+			input:      manifest.RoutingAlias{Host: "h", PathPrefix: "/x/", StripPrefix: nil},
 			wantPrefix: "/x",
 			wantStrip:  true,
 		},

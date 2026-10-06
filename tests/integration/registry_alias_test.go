@@ -17,7 +17,6 @@ func registryAliasFixturesPath(parts ...string) string {
 	return filepath.Join(append([]string{base}, parts...)...)
 }
 
-
 func TestRegistryAliasConfig(t *testing.T) {
 	s := NewSuite(t)
 

@@ -67,7 +67,7 @@ func (v *fakeVault) GetSecret(path string) (string, error) {
 // nilVault simulates an unconfigured vault (IsActive returns false).
 type nilVault struct{}
 
-func (nilVault) IsActive() bool              { return false }
+func (nilVault) IsActive() bool                     { return false }
 func (nilVault) GetSecret(_ string) (string, error) { return "", errors.New("inactive") }
 
 func TestResolveResource_EnvAndExports(t *testing.T) {

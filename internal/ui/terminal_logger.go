@@ -3,6 +3,7 @@ package ui
 import (
 	"fmt"
 	"io"
+	"strings"
 	"sync"
 	"time"
 
@@ -150,7 +151,34 @@ func (t *TerminalObserver) OnEvent(e engine.Event) {
 
 	case "image.pull":
 		t.handleStep(e, engine.StatusStarted, "    ", "📥 Pulling image %s...", "ref", "✅ Pulled image %s", "ref")
+
+	case "image.resolve":
+		// A plain line, not an indicator: image.pull opens its own indicator
+		// inside this step and the renderer holds one at a time.
+		if e.Status == engine.StatusStarted {
+			fmt.Fprintf(t.out, "🔎 Resolving image for %s.%s (%s)\n", e.Fields["team"], e.Fields["name"], e.Fields["ref"])
+		}
+		if e.Status == engine.StatusFinished && e.Fields["source"] == engine.ImageSourceManifest {
+			fmt.Fprintf(t.out, "  🔎 Resolved %s.%s %s\n", e.Fields["team"], e.Fields["name"], exactVersion(e.Fields["ref"], e.Fields["digest"]))
+		}
 	}
+}
+
+func exactVersion(ref, digest string) string {
+	if digest == "" {
+		return ref
+	}
+	return ref + "@" + shortDigest(digest)
+}
+
+// shortDigest keeps twelve hex characters, the length container ids are
+// shortened to elsewhere (design TD-11).
+func shortDigest(digest string) string {
+	digest = strings.TrimPrefix(digest, "sha256:")
+	if len(digest) <= 12 {
+		return digest
+	}
+	return digest[:12]
 }
 
 func (t *TerminalObserver) handleStep(e engine.Event, startStatus engine.EventStatus, prefix string, startFmt string, startFields string, finishFmt string, finishFields ...string) {
@@ -178,7 +206,6 @@ func (t *TerminalObserver) handleStep(e engine.Event, startStatus engine.EventSt
 		}
 	}
 }
-
 
 // spinner runs a simple terminal animation in a goroutine.
 type spinner struct {

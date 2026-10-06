@@ -14,8 +14,8 @@ type EngineOptions struct {
 	Store      *state.Store
 	Registries []config.RegistryConfig
 	Observer   engine.Observer
-	Routing    engine.RoutingBackend  // nil disables routing
-	Vault      secrets.SecretsPlugin  // nil disables vault resolution
+	Routing    engine.RoutingBackend // nil disables routing
+	Vault      secrets.SecretsPlugin // nil disables vault resolution
 }
 
 func NewLocalEngine(opts EngineOptions) (*engine.Engine, error) {

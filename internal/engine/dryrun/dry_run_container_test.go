@@ -63,3 +63,28 @@ func TestDryRunContainer_NoPublishLineWithoutPublish(t *testing.T) {
 		t.Errorf("expected no publish line, got:\n%s", out)
 	}
 }
+
+func TestDryRunContainer_ResolveImagePrintsManifestOwnedLine(t *testing.T) {
+	var sb strings.Builder
+	backend := NewDryRunContainerBackend(&sb)
+
+	resolved, err := backend.ResolveImage(engine.ResolveImageOp{
+		Team:            "demo",
+		Name:            "web",
+		Kind:            "Application",
+		Image:           "reg:lab/web:1.2",
+		ImagePullPolicy: "IfNotPresent",
+	})
+	if err != nil {
+		t.Fatalf("ResolveImage failed: %v", err)
+	}
+
+	want := "[DOCKER] ImageResolve: name=demo.web image=reg:lab/web:1.2 policy=IfNotPresent -> manifest-owned\n"
+	if got := sb.String(); got != want {
+		t.Errorf("dry-run line:\ngot  %q\nwant %q", got, want)
+	}
+	wantResolved := engine.ResolvedImage{Ref: "reg:lab/web:1.2", Source: engine.ImageSourceManifest}
+	if resolved != wantResolved {
+		t.Errorf("resolved = %+v, want %+v (the manifest form, no image id, no digest)", resolved, wantResolved)
+	}
+}

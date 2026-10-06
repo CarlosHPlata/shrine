@@ -39,6 +39,13 @@ type CreateContainerOp struct {
 	BindMounts       []BindMount
 	PortBindings     []PortBinding
 	Publish          *PublishPort
+	// Image stays the reference as the manifest wrote it, because the
+	// deployment record keeps that form. ResolvedRef is the pullable reference
+	// the container is created from and ImageID the config-hash input; the
+	// engine fills both from the pre-pass, the Traefik plugin leaves them
+	// empty and CreateContainer resolves on its own.
+	ResolvedRef string
+	ImageID     string
 }
 
 type RemoveContainerOp struct {
@@ -52,6 +59,26 @@ type ContainerInfo struct {
 	ImageID string
 }
 
+type ResolveImageOp struct {
+	Team            string
+	Name            string
+	Kind            string
+	Image           string
+	ImagePullPolicy string
+}
+
+// ResolvedImage keeps the pullable reference and the local image id apart:
+// Ref is what a container is created from and what a later pin can pull;
+// ImageID is the config-hash input and is not pullable from any registry.
+type ResolvedImage struct {
+	Ref     string
+	Digest  string
+	ImageID string
+	Source  string
+}
+
+const ImageSourceManifest = "manifest"
+
 type ContainerBackend interface {
 	CreateNetwork(name string) error
 	RemoveNetwork(name string) error
@@ -59,6 +86,7 @@ type ContainerBackend interface {
 	RemoveContainer(op RemoveContainerOp) error
 	CreatePlatformNetwork() error
 	InspectContainer(containerID string) (ContainerInfo, error)
+	ResolveImage(op ResolveImageOp) (ResolvedImage, error)
 }
 
 type AliasRoute struct {

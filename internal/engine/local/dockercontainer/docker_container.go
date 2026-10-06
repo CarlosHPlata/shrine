@@ -20,25 +20,17 @@ func (backend *DockerBackend) CreateContainer(op engine.CreateContainerOp) error
 	netName := networkName(op.Team)
 	record := newDeploymentRecord(op)
 
-	// Expand the reg:<alias> form exactly once, before anything reads
-	// op.Image — the pull, the credential lookup, the config hash, and the
-	// container spec must all see the same fully-qualified reference (#33).
-	expanded, err := expandRegistryAlias(op.Image, backend.registries)
-	if err != nil {
-		return backend.emitErr("registry.alias", map[string]string{"ref": op.Image}, err)
-	}
-	op.Image = expanded
-
-	digest, err := backend.resolveImage(ctx, op.Image, op.ImagePullPolicy)
+	resolvedRef, imageID, err := backend.resolveContainerImage(ctx, op)
 	if err != nil {
 		return err
 	}
+	op.ResolvedRef = resolvedRef
 
 	if err := backend.resolvePublishBinding(&op); err != nil {
 		return err
 	}
 
-	record.ConfigHash = configHash(op, digest)
+	record.ConfigHash = configHash(op, imageID)
 
 	existing, err := backend.client.ContainerInspect(ctx, cName)
 	switch {
@@ -74,6 +66,27 @@ func newDeploymentRecord(op engine.CreateContainerOp) state.Deployment {
 		Image:  op.Image,
 		Policy: op.ImagePullPolicy,
 	}
+}
+
+// resolveContainerImage returns the reference the container is created from
+// and the image id the config hash keys on; op.Image is never rewritten. A
+// direct caller such as the Traefik plugin carries no pre-pass result, so the
+// alias is expanded here, once, before anything reads the reference (#33).
+func (backend *DockerBackend) resolveContainerImage(ctx context.Context, op engine.CreateContainerOp) (string, string, error) {
+	if op.ImageID != "" {
+		return op.ResolvedRef, op.ImageID, nil
+	}
+
+	expanded, err := expandRegistryAlias(op.Image, backend.registries)
+	if err != nil {
+		return "", "", backend.emitErr("registry.alias", map[string]string{"ref": op.Image}, err)
+	}
+
+	located, err := backend.locateImage(ctx, expanded, op.ImagePullPolicy)
+	if err != nil {
+		return "", "", err
+	}
+	return expanded, located.ID, nil
 }
 
 func (backend *DockerBackend) ensureRunning(ctx context.Context, cName string, existing container.InspectResponse, op engine.CreateContainerOp, record state.Deployment) error {
@@ -115,7 +128,7 @@ func (backend *DockerBackend) createFreshContainer(ctx context.Context, op engin
 
 	created, err := backend.client.ContainerCreate(ctx,
 		&container.Config{
-			Image:        op.Image,
+			Image:        op.ResolvedRef,
 			Env:          op.Env,
 			Labels:       labels,
 			ExposedPorts: exposedPorts,
@@ -130,8 +143,8 @@ func (backend *DockerBackend) createFreshContainer(ctx context.Context, op engin
 		cName,
 	)
 	if err != nil {
-		return backend.emitErr("container.create", map[string]string{"name": cName, "image": op.Image},
-			fmt.Errorf("creating container %q (image %q): %w", cName, op.Image, err))
+		return backend.emitErr("container.create", map[string]string{"name": cName, "image": op.ResolvedRef},
+			fmt.Errorf("creating container %q (image %q): %w", cName, op.ResolvedRef, err))
 	}
 
 	if err := backend.client.ContainerStart(ctx, created.ID, container.StartOptions{}); err != nil {

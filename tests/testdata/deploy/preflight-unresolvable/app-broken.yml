@@ -1,0 +1,18 @@
+apiVersion: shrine/v1
+kind: Application
+metadata:
+  name: zz-broken
+  owner: shrine-deploy-test
+spec:
+  image: localhost:1/shrine/unresolvable:1.0.0
+  port: 80
+  replicas: 1
+  dependencies:
+    - kind: Resource
+      name: cache-ok
+      owner: shrine-deploy-test
+    - kind: Application
+      name: web-ok
+      owner: shrine-deploy-test
+  networking:
+    exposeToPlatform: false

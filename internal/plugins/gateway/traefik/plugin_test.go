@@ -20,6 +20,9 @@ func (fakeBackend) CreatePlatformNetwork() error                   { return nil 
 func (fakeBackend) InspectContainer(string) (engine.ContainerInfo, error) {
 	return engine.ContainerInfo{}, nil
 }
+func (fakeBackend) ResolveImage(op engine.ResolveImageOp) (engine.ResolvedImage, error) {
+	return engine.ResolvedImage{Ref: op.Image, Source: engine.ImageSourceManifest}, nil
+}
 
 // TestPlugin_Validate_AcceptsValidTLSPort asserts that a config with a valid
 // TLSPort (443) alongside Port 80 passes validation without error.
@@ -110,4 +113,3 @@ func TestPlugin_Validate_RejectsTLSPortCollidesWithDashboardPort(t *testing.T) {
 		t.Errorf("error message %q does not contain %q", msg, "dashboard.port")
 	}
 }
-

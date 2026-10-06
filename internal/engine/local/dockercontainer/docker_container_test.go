@@ -9,6 +9,7 @@ import (
 
 	"github.com/CarlosHPlata/shrine/internal/config"
 	"github.com/CarlosHPlata/shrine/internal/engine"
+	"github.com/CarlosHPlata/shrine/internal/state"
 	"github.com/containerd/errdefs"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/image"
@@ -24,9 +25,10 @@ import (
 // the container spec then fails — so the flow never reaches recordDeployment
 // and the test needs no state store and touches no filesystem.
 type fakeDockerAPI struct {
-	createdConfig *container.Config
-	createdHost   *container.HostConfig
-	createErr     error
+	createdConfig  *container.Config
+	createdHost    *container.HostConfig
+	createErr      error
+	imageListCalls int
 }
 
 func (f *fakeDockerAPI) ContainerCreate(_ context.Context, cfg *container.Config, host *container.HostConfig, _ *network.NetworkingConfig, _ *ocispec.Platform, _ string) (container.CreateResponse, error) {
@@ -40,6 +42,7 @@ func (f *fakeDockerAPI) ContainerInspect(context.Context, string) (container.Ins
 }
 
 func (f *fakeDockerAPI) ImageList(context.Context, image.ListOptions) ([]image.Summary, error) {
+	f.imageListCalls++
 	return []image.Summary{{ID: "sha256:test-digest"}}, nil
 }
 
@@ -153,6 +156,58 @@ func TestCreateContainer_PlainReferencePassesThroughUnchanged(t *testing.T) {
 
 	if want := "nginx:latest"; got != want {
 		t.Errorf("container spec image = %q, want %q", got, want)
+	}
+}
+
+// A pre-resolved op must reach ContainerCreate without a second resolution:
+// the fake's ImagePull and ImageInspect panic, and ImageList is counted. The
+// container is created from ResolvedRef while Image keeps the written form.
+func TestCreateContainer_SkipsResolutionWhenImageIDIsSet(t *testing.T) {
+	fake := &fakeDockerAPI{createErr: errors.New("create rejected by fake")}
+	backend := &DockerBackend{
+		client:     fake,
+		registries: testRegistries,
+		observer:   engine.NoopObserver{},
+	}
+	op := aliasTestOp("reg:myregistry/traefik/whoami:latest")
+	op.ResolvedRef = "docker.io/traefik/whoami:latest"
+	op.ImageID = "sha256:resolved-by-the-pre-pass"
+
+	if err := backend.CreateContainer(op); err == nil {
+		t.Fatal("expected CreateContainer to surface the fake's creation error")
+	}
+
+	if fake.imageListCalls != 0 {
+		t.Errorf("ImageList called %d times; a pre-resolved op must not resolve again", fake.imageListCalls)
+	}
+	if fake.createdConfig == nil {
+		t.Fatal("ContainerCreate was never called")
+	}
+	if got, want := fake.createdConfig.Image, "docker.io/traefik/whoami:latest"; got != want {
+		t.Errorf("container spec image = %q, want the pre-resolved reference %q", got, want)
+	}
+}
+
+// TD-2: the hash keys on the local image id, never on the registry digest, so
+// an upgrade to the pre-pass recreates nothing.
+func TestConfigHash_KeysOnTheLocalImageID(t *testing.T) {
+	op := engine.CreateContainerOp{
+		Team:             "team-a",
+		Name:             "web",
+		Image:            "docker.io/traefik/whoami:latest",
+		ImageID:          "sha256:local",
+		Env:              []string{"A=1"},
+		Volumes:          []engine.VolumeMount{{Name: "data", MountPath: "/data"}},
+		PortBindings:     []engine.PortBinding{{HostIP: "127.0.0.1", HostPort: "30000", ContainerPort: "80", Protocol: "tcp"}},
+		ExposeToPlatform: true,
+	}
+
+	want := state.ConfigHash("sha256:local", []string{"A=1"}, []string{"data:/data"}, []string{"127.0.0.1:30000:80/tcp"}, true)
+	if got := configHash(op, op.ImageID); got != want {
+		t.Errorf("configHash = %q, want the pre-feature hash %q", got, want)
+	}
+	if configHash(op, "sha256:other") == want {
+		t.Error("a different local image id must change the hash")
 	}
 }
 

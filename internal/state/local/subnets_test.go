@@ -60,13 +60,13 @@ team-c=not-a-cidr
 
 func TestSubnetStore_Persistence(t *testing.T) {
 	tmpDir := t.TempDir()
-	
+
 	// 1. Create store and add some data
 	store, err := NewSubnetStore(tmpDir)
 	if err != nil {
 		t.Fatalf("NewSubnetStore failed: %v", err)
 	}
-	
+
 	s := store.(*SubnetStore)
 	s.subnets["team-x"] = "10.100.10.0/24"
 	s.taken[10] = struct{}{}

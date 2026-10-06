@@ -94,16 +94,19 @@ func (memSubnetStore) ListSubnets() (state.SubnetMap, error) { return state.Subn
 // stubContainerBackend reports a container as present or absent by name.
 type stubContainerBackend struct{ existing map[string]bool }
 
-func (s *stubContainerBackend) CreateNetwork(string) error                { return nil }
-func (s *stubContainerBackend) RemoveNetwork(string) error                { return nil }
+func (s *stubContainerBackend) CreateNetwork(string) error                     { return nil }
+func (s *stubContainerBackend) RemoveNetwork(string) error                     { return nil }
 func (s *stubContainerBackend) CreateContainer(engine.CreateContainerOp) error { return nil }
 func (s *stubContainerBackend) RemoveContainer(engine.RemoveContainerOp) error { return nil }
-func (s *stubContainerBackend) CreatePlatformNetwork() error              { return nil }
+func (s *stubContainerBackend) CreatePlatformNetwork() error                   { return nil }
 func (s *stubContainerBackend) InspectContainer(name string) (engine.ContainerInfo, error) {
 	if s.existing[name] {
 		return engine.ContainerInfo{Running: true, Status: "running"}, nil
 	}
 	return engine.ContainerInfo{}, errors.New("no such container")
+}
+func (s *stubContainerBackend) ResolveImage(op engine.ResolveImageOp) (engine.ResolvedImage, error) {
+	return engine.ResolvedImage{Ref: op.Image, Source: engine.ImageSourceManifest}, nil
 }
 
 func deleteTestStore(teams []string, ports state.HostPortMap, deployments map[string][]state.Deployment) *state.Store {

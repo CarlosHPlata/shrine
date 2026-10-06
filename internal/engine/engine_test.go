@@ -16,16 +16,19 @@ type fakeContainerBackend struct {
 	calls *[]string
 }
 
-func (f *fakeContainerBackend) CreateNetwork(string) error               { return nil }
-func (f *fakeContainerBackend) RemoveNetwork(string) error               { return nil }
-func (f *fakeContainerBackend) CreateContainer(CreateContainerOp) error  { return nil }
-func (f *fakeContainerBackend) CreatePlatformNetwork() error             { return nil }
+func (f *fakeContainerBackend) CreateNetwork(string) error              { return nil }
+func (f *fakeContainerBackend) RemoveNetwork(string) error              { return nil }
+func (f *fakeContainerBackend) CreateContainer(CreateContainerOp) error { return nil }
+func (f *fakeContainerBackend) CreatePlatformNetwork() error            { return nil }
 func (f *fakeContainerBackend) InspectContainer(string) (ContainerInfo, error) {
 	return ContainerInfo{}, nil
 }
 func (f *fakeContainerBackend) RemoveContainer(op RemoveContainerOp) error {
 	*f.calls = append(*f.calls, "RemoveContainer:"+op.Team+"/"+op.Name)
 	return nil
+}
+func (f *fakeContainerBackend) ResolveImage(op ResolveImageOp) (ResolvedImage, error) {
+	return ResolvedImage{Ref: op.Image, Source: ImageSourceManifest}, nil
 }
 
 // fakeRoutingBackend records WriteRoute, RemoveRoute and Finalize calls via a
@@ -444,4 +447,7 @@ func (f *teardownFailingContainerBackend) InspectContainer(string) (ContainerInf
 }
 func (f *teardownFailingContainerBackend) RemoveContainer(RemoveContainerOp) error {
 	return errors.New("remove container failed")
+}
+func (f *teardownFailingContainerBackend) ResolveImage(op ResolveImageOp) (ResolvedImage, error) {
+	return ResolvedImage{Ref: op.Image, Source: ImageSourceManifest}, nil
 }

@@ -182,6 +182,11 @@ func TestTerminalObserver_RendersEachKind(t *testing.T) {
 			"    📡 Published team-a/web on 127.0.0.1:30000 -> 8080/tcp\n"},
 		{ev("container.remove", engine.StatusInfo, "name", "team-a.web", "reason", "not found"),
 			"    ℹ️  Container team-a.web not found, skipping removal\n"},
+		{ev("image.resolve", engine.StatusStarted, "team", "team-a", "name", "web", "ref", "nginx:1.27"),
+			"🔎 Resolving image for team-a.web (nginx:1.27)\n"},
+		{ev("image.resolve", engine.StatusFinished, "team", "team-a", "name", "web", "ref", "nginx:1.27",
+			"digest", "sha256:a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2", "source", "manifest"),
+			"  🔎 Resolved team-a.web nginx:1.27@a1b2c3d4e5f6\n"},
 	}
 
 	for _, tc := range cases {
@@ -192,6 +197,50 @@ func TestTerminalObserver_RendersEachKind(t *testing.T) {
 
 			if got := buf.String(); got != tc.want {
 				t.Errorf("rendered line changed:\ngot  %q\nwant %q", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestTerminalObserver_ImageResolveFinishedWithoutDigestShowsTheReferenceAlone(t *testing.T) {
+	obs, buf := newObserverWithBuffer(t)
+
+	obs.OnEvent(ev("image.resolve", engine.StatusFinished, "team", "team-a", "name", "web", "ref", "nginx:1.27", "digest", "", "source", "manifest"))
+
+	want := "  🔎 Resolved team-a.web nginx:1.27\n"
+	if got := buf.String(); got != want {
+		t.Errorf("got  %q\nwant %q", got, want)
+	}
+}
+
+// The resolving line is a plain line: image.pull opens its own indicator
+// inside the step, and the renderer holds one indicator at a time.
+func TestTerminalObserver_ImageResolveStartsNoIndicatorAndErrorsGenerically(t *testing.T) {
+	obs, buf := newObserverWithBuffer(t)
+
+	obs.OnEvent(ev("image.resolve", engine.StatusStarted, "team", "team-a", "name", "web", "ref", "nginx:1.27"))
+	if obs.spinner != nil {
+		t.Fatal("the resolving line must not start an indicator")
+	}
+	obs.OnEvent(ev("image.resolve", engine.StatusError, "team", "team-a", "name", "web", "ref", "nginx:1.27", "error", "boom"))
+
+	want := "🔎 Resolving image for team-a.web (nginx:1.27)\n  ❌ Error [image.resolve]: boom\n"
+	if got := buf.String(); got != want {
+		t.Errorf("got  %q\nwant %q", got, want)
+	}
+}
+
+func TestShortDigest(t *testing.T) {
+	cases := map[string]string{
+		"sha256:a1b2c3d4e5f6a7b8c9d0": "a1b2c3d4e5f6",
+		"a1b2c3d4e5f6a7b8":            "a1b2c3d4e5f6",
+		"sha256:abc":                  "abc",
+		"":                            "",
+	}
+	for digest, want := range cases {
+		t.Run(digest, func(t *testing.T) {
+			if got := shortDigest(digest); got != want {
+				t.Errorf("shortDigest(%q) = %q, want %q", digest, got, want)
 			}
 		})
 	}

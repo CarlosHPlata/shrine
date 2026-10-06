@@ -90,3 +90,9 @@ func (d *DryRunContainerBackend) CreatePlatformNetwork() error {
 func (d *DryRunContainerBackend) InspectContainer(containerID string) (engine.ContainerInfo, error) {
 	return engine.ContainerInfo{}, nil
 }
+
+func (d *DryRunContainerBackend) ResolveImage(op engine.ResolveImageOp) (engine.ResolvedImage, error) {
+	fmt.Fprintf(d.Out, "[DOCKER] ImageResolve: name=%s.%s image=%s policy=%s -> manifest-owned\n",
+		op.Team, op.Name, op.Image, op.ImagePullPolicy)
+	return engine.ResolvedImage{Ref: op.Image, Source: engine.ImageSourceManifest}, nil
+}
