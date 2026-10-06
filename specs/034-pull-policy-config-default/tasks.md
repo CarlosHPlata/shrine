@@ -53,10 +53,10 @@
 
 ### Tests for User Story 1 (write FIRST; must fail before T012)
 
-- [ ] T011 [P] [US1] Unit tests in `internal/planner/policy_test.go`: extend `TestPlan_NormalisesThePolicyIntoTheReturnedSet` (or add `TestPlan_AppliesTheConfigurationDefault`) so that `Plan(set, …, "Pinned")` over `policySet("web", "", "cache", "", "traefik/whoami", "")` returns a set whose Application and Resource both carry `Pinned`, and over `policySet("web:1.2", "IfNotPresent", …)` leaves the Application's `IfNotPresent` alone; `Plan(set, …, "")` over an untagged image still yields `Always` (T3 behaviour unchanged)
-- [ ] T012 [US1] Thread the default in the three handlers: `internal/handler/deploy.go` passes `cfg.ImagePullPolicy` in `DryRun` and `b.Cfg.ImagePullPolicy` in `Deploy`; `internal/handler/apply.go` passes `b.Cfg.ImagePullPolicy` in `ApplySingle`; no other call site exists (`grep -rn 'planner.Plan(' internal cmd` shows three). T011 passes because `Plan` already applies the default
-- [ ] T013 [US1] Build the binary into the scratchpad (`go build -o /tmp/claude-0/…/shrine .`), run quickstart step 3 against `tests/testdata/pull-policy-default/pinned-shape` with `imagePullPolicy: Pinned` and confirm the three `policy=Pinned -> would resolve newest and pin` lines and no `pins.txt`; run quickstart step 1 with no config file and confirm the derived-rule lines are unchanged from `main`
-- [ ] T014 [US1] `go test ./...` green; `gofmt -l .` clean; commit
+- [x] T011 [P] [US1] Unit tests in `internal/planner/policy_test.go`: extend `TestPlan_NormalisesThePolicyIntoTheReturnedSet` (or add `TestPlan_AppliesTheConfigurationDefault`) so that `Plan(set, …, "Pinned")` over `policySet("web", "", "cache", "", "traefik/whoami", "")` returns a set whose Application and Resource both carry `Pinned`, and over `policySet("web:1.2", "IfNotPresent", …)` leaves the Application's `IfNotPresent` alone; `Plan(set, …, "")` over an untagged image still yields `Always` (T3 behaviour unchanged)
+- [x] T012 [US1] Thread the default in the three handlers: `internal/handler/deploy.go` passes `cfg.ImagePullPolicy` in `DryRun` and `b.Cfg.ImagePullPolicy` in `Deploy`; `internal/handler/apply.go` passes `b.Cfg.ImagePullPolicy` in `ApplySingle`; no other call site exists (`grep -rn 'planner.Plan(' internal cmd` shows three). T011 passes because `Plan` already applies the default
+- [x] T013 [US1] Build the binary into the scratchpad (`go build -o /tmp/claude-0/…/shrine .`), run quickstart step 3 against `tests/testdata/pull-policy-default/pinned-shape` with `imagePullPolicy: Pinned` and confirm the three `policy=Pinned -> would resolve newest and pin` lines and no `pins.txt`; run quickstart step 1 with no config file and confirm the derived-rule lines are unchanged from `main`
+- [x] T014 [US1] `go test ./...` green; `gofmt -l .` clean; commit
 
 **Checkpoint**: one line of configuration pins every manifest that names no policy; the manifest field still wins
 

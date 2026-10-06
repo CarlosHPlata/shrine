@@ -66,7 +66,7 @@ func DryRun(out, errOut io.Writer, manifestDir string, store *state.Store, cfg *
 	if err != nil {
 		return err
 	}
-	result := planner.Plan(set, store.Teams, cfg.Registries, ports, filter, "")
+	result := planner.Plan(set, store.Teams, cfg.Registries, ports, filter, cfg.ImagePullPolicy)
 
 	if result.Error != nil {
 		return result.Error
@@ -109,7 +109,7 @@ func Deploy(b *app.DeployBundle, manifestDir string, filter planner.Filter) erro
 	if err != nil {
 		return err
 	}
-	result := planner.Plan(set, b.Store.Teams, b.Cfg.Registries, ports, filter, "")
+	result := planner.Plan(set, b.Store.Teams, b.Cfg.Registries, ports, filter, b.Cfg.ImagePullPolicy)
 
 	if result.Error != nil {
 		return result.Error

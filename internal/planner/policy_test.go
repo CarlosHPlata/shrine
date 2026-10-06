@@ -68,6 +68,41 @@ func TestPlan_NormalisesThePolicyIntoTheReturnedSet(t *testing.T) {
 	}
 }
 
+func TestPlan_AppliesTheConfigurationDefault(t *testing.T) {
+	cases := []struct {
+		name             string
+		appImage, appIn  string
+		resImage, resIn  string
+		dflt             string
+		wantApp, wantRes string
+	}{
+		{"a Pinned default fills manifests that name no policy", "web", "", "traefik/whoami", "", "Pinned", "Pinned", "Pinned"},
+		{"the manifest field wins over the default", "web:1.2", "IfNotPresent", "postgres:16", "Always", "Pinned", "IfNotPresent", "Always"},
+		{"no default keeps the derived rule", "web", "", "postgres:16", "", "", "Always", "IfNotPresent"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			resVersion := ""
+			if tc.resImage == "postgres:16" {
+				resVersion = "16"
+			}
+			set := policySet(tc.appImage, tc.appIn, "postgres", resVersion, tc.resImage, tc.resIn)
+
+			result := Plan(set, stubTeamStore{}, nil, PortContext{}, NoFilter(), tc.dflt)
+
+			if result.Error != nil || len(result.ValidationErr) > 0 {
+				t.Fatalf("Plan failed: %v %v", result.Error, result.ValidationErr)
+			}
+			if got := result.ManifestSet.Applications["web"].Spec.ImagePullPolicy; got != tc.wantApp {
+				t.Errorf("application policy = %q, want %q", got, tc.wantApp)
+			}
+			if got := result.ManifestSet.Resources["db"].Spec.ImagePullPolicy; got != tc.wantRes {
+				t.Errorf("resource policy = %q, want %q", got, tc.wantRes)
+			}
+		})
+	}
+}
+
 func errorStrings(errs []error) []string {
 	out := make([]string, 0, len(errs))
 	for _, err := range errs {

@@ -20,7 +20,7 @@ export STATE=$(mktemp -d) CFG=$(mktemp -d) SPECS=$(mktemp -d)
 ./shrine deploy --dry-run --config-dir "$CFG" --path tests/testdata/pull-policy-default/versioned --state-dir "$STATE"
 ```
 
-Expect success and, in the `[DOCKER] ImageResolve:` lines, `policy=Always` for `app-latest`, `policy=IfNotPresent` for `app-fixed` and `res-fixed`, and `policy=IfNotPresent` for `app-own-ifnotpresent`, every one `-> manifest-owned`.
+Expect success and, in the `[DOCKER] ImageResolve:` lines, `policy=Always` for `app-latest` and for `res-fixed` (its image override `traefik/whoami` carries no tag), `policy=IfNotPresent` for `app-fixed` and `app-own-ifnotpresent`, every one `-> manifest-owned`.
 
 ## 2. An invalid value stops every command before it acts
 

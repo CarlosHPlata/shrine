@@ -69,7 +69,7 @@ func TestPullPolicyDefaultPrecedence(t *testing.T) {
 			AssertSuccess().
 			AssertOutputContains(resolveLine("app-latest", "traefik/whoami:latest", "Always", "manifest-owned")).
 			AssertOutputContains(resolveLine("app-fixed", "traefik/whoami:v1.10.2", "IfNotPresent", "manifest-owned")).
-			AssertOutputContains(resolveLine("res-fixed", "traefik/whoami", "IfNotPresent", "manifest-owned")).
+			AssertOutputContains(resolveLine("res-fixed", "traefik/whoami", "Always", "manifest-owned")).
 			AssertOutputContains(resolveLine("app-own-ifnotpresent", "traefik/whoami:v1.10.1", "IfNotPresent", "manifest-owned"))
 	})
 
