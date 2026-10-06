@@ -90,7 +90,7 @@ Application hello-api 9f1c…e2 3a7b…c9 reg:lab/hello-api:latest Pinned
 Resource    hello-db  5d0a…11 b2e4…77 postgres:16              IfNotPresent
 ```
 
-Reader rule: split on spaces; fields five and six are optional and read as empty when absent. Image references never contain spaces. The writer always writes six fields.
+Reader rule: split on spaces; fields five and six are optional and read as empty when absent. Image references never contain spaces. The writer always writes six fields. An empty optional value is written as `-` and read back as empty, so later fields keep their position (T1 review, #60).
 
 ### 3.4 Pin record, new
 

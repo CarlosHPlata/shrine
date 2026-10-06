@@ -76,7 +76,7 @@ An operator upgrades Shrine on a host that already has deployments recorded by a
 ### Functional Requirements
 
 - **FR-001** [T1-01, R-17]: Every successful deploy of an application or resource MUST record, alongside that artifact's existing deployment record, the image reference exactly as its manifest named it (a registry alias stays unexpanded) and the image pull policy that was effective for that deploy.
-- **FR-002** [T1-02, R-17]: The recorded deployment MUST carry the two values as a fifth and sixth value after the four it holds today, and MUST read records that lack them (written by earlier releases) as having an unknown image and an unknown policy. When a record is written, all six values MUST be written, even when some are empty.
+- **FR-002** [T1-02, R-17]: The recorded deployment MUST carry the two values as a fifth and sixth value after the four it holds today, and MUST read records that lack them (written by earlier releases) as having an unknown image and an unknown policy. When a record is written, all six values MUST be written, even when some are empty; an empty optional value is written as a placeholder and read back as empty, so values never shift position.
 - **FR-003** [T1-03, R-17]: `shrine get deployed`, `shrine get applications`, and `shrine get resources` MUST print a VERSION column immediately after KIND and before CONTAINER ID, with and without `--team`, from recorded state alone, without contacting the container runtime.
 - **FR-004** [T1-03, R-17]: The VERSION column MUST show the recorded image reference in full, as the manifest wrote it, and `-` when the record has none.
 - **FR-005** [T1-03]: The existing TEAM, NAME, KIND, and CONTAINER ID columns MUST keep their headers, their relative order, and their values.

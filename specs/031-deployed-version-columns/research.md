@@ -31,22 +31,28 @@ container spec) sees the same fully-qualified reference is untouched.
 ## R2. Line format and the reader rule
 
 **Decision**: `saveTeam` writes `Kind Name ContainerID ConfigHash Image Policy`,
-six fields joined by single spaces, always, even when some are empty. `loadTeam`
-splits each line with `strings.Fields` and reads fields four, five, and six as
-optional: present when the index exists, empty otherwise.
+six fields joined by single spaces, always; an empty optional value
+(`ConfigHash`, `Image`, `Policy`) is written as `-`. `loadTeam` splits each line
+with `strings.Fields` and reads fields four, five, and six as optional: empty
+when the index does not exist or holds `-`. The placeholder never reaches the
+in-memory record, so the handler's display rule is unchanged.
 
 **Rationale**: Design section 3.3 fixes the order and the optional-trailing rule.
-`strings.Fields` also parses the aligned example in the design and tolerates the
-trailing spaces an empty optional field leaves. Image references never contain
-spaces, so the split is unambiguous. The three-field tolerance the loader has
-today (records from before config hashes) is kept by the same rule.
+`strings.Fields` also parses the aligned example in the design. Image references
+never contain spaces, so the split is unambiguous. The three-field tolerance the
+loader has today (records from before config hashes) is kept by the same rule.
+The placeholder was added at review (#60): with empty values written blank, an
+empty middle value (an empty `ConfigHash` with a set `Image`) would vanish under
+`strings.Fields` and shift every later field left on the next read, breaking the
+"six fields" invariant T5 relies on to read field six as `Policy`.
+`DeploymentStore.Record` is a public interface, so the store, not its callers,
+has to guarantee positional integrity.
 
 **Alternatives considered**:
 - `strings.SplitN(line, " ", 6)`, the current reader's style. Rejected: a
   hand-aligned or doubly spaced line would produce empty fields in the middle.
-- Writing a `-` placeholder for an empty optional field. Rejected: the design's
-  reader rule is "absent reads as empty", and a placeholder would need to be
-  translated back on every read and would collide with the display rule.
+- Writing empty optional fields blank (the first version of this change).
+  Rejected in review for the shift described above.
 
 ## R3. Keeping the store's unit tests off the filesystem
 

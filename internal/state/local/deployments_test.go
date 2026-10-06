@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 	"testing"
 
 	"github.com/CarlosHPlata/shrine/internal/state"
@@ -153,6 +154,29 @@ func TestDeploymentStore_RecordWritesSixFields(t *testing.T) {
 	}
 }
 
+func TestDeploymentStore_EmptyHashKeepsLaterFieldsInPosition(t *testing.T) {
+	files := newFakeDeploymentFiles()
+	s := newTestDeploymentStore(files)
+
+	dep := state.Deployment{Kind: "Application", Name: "api", ContainerID: "cid123", Image: "reg:lab/api:1.2.0", Policy: "IfNotPresent"}
+	if err := s.Record("team-a", dep); err != nil {
+		t.Fatalf("Record failed: %v", err)
+	}
+
+	want := "Application api cid123 - reg:lab/api:1.2.0 IfNotPresent\n"
+	if got := files.content("team-a"); got != want {
+		t.Errorf("written file:\ngot  %q\nwant %q", got, want)
+	}
+
+	got, err := s.List("team-a")
+	if err != nil {
+		t.Fatalf("List failed: %v", err)
+	}
+	if len(got) != 1 || got[0] != dep {
+		t.Errorf("round trip with an empty hash: got %+v, want [%+v]", got, dep)
+	}
+}
+
 func TestDeploymentStore_LegacyLineSurvivesAnotherRecord(t *testing.T) {
 	files := newFakeDeploymentFiles()
 	files.seed("team-a", "Application legacy cid000 hash000\n")
@@ -179,6 +203,9 @@ func TestDeploymentStore_LegacyLineSurvivesAnotherRecord(t *testing.T) {
 		if got[i] != want[i] {
 			t.Errorf("List[%d]: got %+v, want %+v", i, got[i], want[i])
 		}
+	}
+	if legacyLine := "Application legacy cid000 hash000 - -\n"; !strings.Contains(files.content("team-a"), legacyLine) {
+		t.Errorf("re-saved legacy line should carry placeholders, file:\n%s", files.content("team-a"))
 	}
 }
 

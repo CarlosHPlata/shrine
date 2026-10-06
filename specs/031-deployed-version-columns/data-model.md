@@ -42,18 +42,19 @@ Resource hello-db 5d0a…11 b2e4…77 postgres:16 IfNotPresent
 ```
 
 **Writer rule** (`saveTeam`): always six fields, sorted by name, written whole by
-atomic temp-and-rename. An empty optional field is written empty, which leaves
-trailing spaces on that line.
+atomic temp-and-rename. An empty optional value (`ConfigHash`, `Image`,
+`Policy`) is written as `-` so the later fields keep their position.
 
 **Reader rule** (`loadTeam`): a `#` starts a comment; blank lines are skipped; the
 line is split on whitespace; fewer than three fields is ignored; fields four
 (`ConfigHash`), five (`Image`), and six (`Policy`) are optional and read as empty
-when absent. Lines from earlier releases therefore load as:
+when absent or `-`. Lines therefore load as:
 
 | Line shape | Loads as |
 |---|---|
 | `Kind Name ContainerID` | hash, image, policy empty |
 | `Kind Name ContainerID ConfigHash` | image, policy empty |
+| `Kind Name ContainerID - Image Policy` | hash empty, image and policy set |
 | `Kind Name ContainerID ConfigHash Image Policy` | fully populated |
 
 ## 3. Lifecycle

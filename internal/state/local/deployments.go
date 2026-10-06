@@ -121,13 +121,24 @@ func (s *DeploymentStore) loadTeam(team string) (map[string]state.Deployment, er
 	return deployments, nil
 }
 
-// fieldAt reads an optional trailing field as empty when the line predates it,
-// so records written by earlier releases keep loading.
+// emptyFieldPlaceholder keeps later fields in position on disk when an
+// optional value is empty; it never reaches the in-memory record.
+const emptyFieldPlaceholder = "-"
+
+// fieldAt reads an optional field as empty when the line predates it or
+// holds the placeholder, so records written by earlier releases keep loading.
 func fieldAt(fields []string, index int) string {
-	if index < len(fields) {
-		return fields[index]
+	if index >= len(fields) || fields[index] == emptyFieldPlaceholder {
+		return ""
 	}
-	return ""
+	return fields[index]
+}
+
+func fieldOrPlaceholder(value string) string {
+	if value == "" {
+		return emptyFieldPlaceholder
+	}
+	return value
 }
 
 func (s *DeploymentStore) saveTeam(team string, deployments map[string]state.Deployment) error {
@@ -140,7 +151,9 @@ func (s *DeploymentStore) saveTeam(team string, deployments map[string]state.Dep
 	var b strings.Builder
 	for _, name := range names {
 		d := deployments[name]
-		fmt.Fprintf(&b, "%s %s %s %s %s %s\n", d.Kind, d.Name, d.ContainerID, d.ConfigHash, d.Image, d.Policy)
+		fmt.Fprintf(&b, "%s %s %s %s %s %s\n",
+			d.Kind, d.Name, d.ContainerID,
+			fieldOrPlaceholder(d.ConfigHash), fieldOrPlaceholder(d.Image), fieldOrPlaceholder(d.Policy))
 	}
 
 	if err := s.writeFile(s.teamPath(team), []byte(b.String())); err != nil {

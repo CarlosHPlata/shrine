@@ -88,7 +88,7 @@ tests/integration/
 ├── describe_test.go                    # + Image: and Pull policy: for app and resource; legacy shows `-`
 └── testutils/
     ├── assert_general.go               # + AssertOutputLineContains (line-scoped stdout assertion)
-    └── assert_state.go                 # + SeedLegacyDeploymentRecords (rewrites deployments.txt to four fields)
+    └── seed_state.go                   # NEW: SeedLegacyDeploymentRecords (rewrites deployments.txt to four fields)
 
 AGENTS.md                               # State Directory Layout: the deployments.txt line
 specs/progress.md                       # one entry for spec 031
