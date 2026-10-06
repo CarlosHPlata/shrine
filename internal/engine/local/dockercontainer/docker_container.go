@@ -20,16 +20,7 @@ func (backend *DockerBackend) CreateContainer(op engine.CreateContainerOp) error
 	netName := networkName(op.Team)
 	record := newDeploymentRecord(op)
 
-	// Expand the reg:<alias> form exactly once, before anything reads
-	// op.Image — the pull, the credential lookup, the config hash, and the
-	// container spec must all see the same fully-qualified reference (#33).
-	expanded, err := expandRegistryAlias(op.Image, backend.registries)
-	if err != nil {
-		return backend.emitErr("registry.alias", map[string]string{"ref": op.Image}, err)
-	}
-	op.Image = expanded
-
-	located, err := backend.locateImage(ctx, op.Image, op.ImagePullPolicy)
+	imageID, err := backend.resolveContainerImage(ctx, &op)
 	if err != nil {
 		return err
 	}
@@ -38,7 +29,7 @@ func (backend *DockerBackend) CreateContainer(op engine.CreateContainerOp) error
 		return err
 	}
 
-	record.ConfigHash = configHash(op, located.ID)
+	record.ConfigHash = configHash(op, imageID)
 
 	existing, err := backend.client.ContainerInspect(ctx, cName)
 	switch {
@@ -75,6 +66,30 @@ func newDeploymentRecord(op engine.CreateContainerOp) state.Deployment {
 		Policy: op.ImagePullPolicy,
 	}
 }
+
+// resolveContainerImage returns the local image id the config hash keys on.
+// An op from the engine already carries it from the pre-pass. A direct caller
+// such as the Traefik plugin leaves it empty and resolves here, expanding the
+// reg:<alias> form exactly once so the pull, the credential lookup, the hash,
+// and the container spec all see the same fully-qualified reference (#33).
+func (backend *DockerBackend) resolveContainerImage(ctx context.Context, op *engine.CreateContainerOp) (string, error) {
+	if op.ImageID != "" {
+		return op.ImageID, nil
+	}
+
+	expanded, err := expandRegistryAlias(op.Image, backend.registries)
+	if err != nil {
+		return "", backend.emitErr("registry.alias", map[string]string{"ref": op.Image}, err)
+	}
+	op.Image = expanded
+
+	located, err := backend.locateImage(ctx, op.Image, op.ImagePullPolicy)
+	if err != nil {
+		return "", err
+	}
+	return located.ID, nil
+}
+
 
 func (backend *DockerBackend) ensureRunning(ctx context.Context, cName string, existing container.InspectResponse, op engine.CreateContainerOp, record state.Deployment) error {
 	if !existing.State.Running {

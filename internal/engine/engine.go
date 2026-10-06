@@ -34,6 +34,13 @@ func (engine *Engine) ExecuteDeploy(steps []planner.PlannedStep, set *planner.Ma
 		engine.Observer = NoopObserver{}
 	}
 
+	// Resolved before the platform network so an unresolvable reference
+	// changes nothing (spec 032).
+	images, err := engine.resolveImages(set, steps)
+	if err != nil {
+		return err
+	}
+
 	// 1. Pre-resolve every resource up-front so applications can reference their
 	// exports via valueFrom regardless of deploy order.
 	deps := resolver.ResolvedDependencies{
@@ -64,15 +71,17 @@ func (engine *Engine) ExecuteDeploy(steps []planner.PlannedStep, set *planner.Ma
 	}
 
 	for _, step := range steps {
+		image := images[resolvedImageKey(step.Kind, step.Name)]
+
 		if step.Kind == manifest.ResourceKind {
-			err := engine.deployResource(set, step, resourceEnv[step.Name])
+			err := engine.deployResource(set, step, resourceEnv[step.Name], image)
 			if err != nil {
 				return err
 			}
 		}
 
 		if step.Kind == manifest.ApplicationKind {
-			err := engine.deployApplication(set, step, deps)
+			err := engine.deployApplication(set, step, deps, image)
 			if err != nil {
 				return err
 			}
@@ -125,6 +134,7 @@ func (engine *Engine) deployApplication(
 	set *planner.ManifestSet,
 	step planner.PlannedStep,
 	deps resolver.ResolvedDependencies,
+	image ResolvedImage,
 ) error {
 	application := set.Applications[step.Name]
 
@@ -171,7 +181,8 @@ func (engine *Engine) deployApplication(
 		Team:             application.Metadata.Owner,
 		Name:             application.Metadata.Name,
 		Kind:             manifest.ApplicationKind,
-		Image:            application.Spec.Image,
+		Image:            image.Ref,
+		ImageID:          image.ImageID,
 		Network:          application.Metadata.Owner,
 		Env:              env,
 		Volumes:          volumes,
@@ -292,6 +303,48 @@ func (engine *Engine) resolveResources(set *planner.ManifestSet, deps resolver.R
 	return envByName, nil
 }
 
+// resolveImages asks the backend for every step's image, in step order, and
+// stops at the first failure so nothing downstream runs.
+func (engine *Engine) resolveImages(set *planner.ManifestSet, steps []planner.PlannedStep) (map[string]ResolvedImage, error) {
+	images := make(map[string]ResolvedImage, len(steps))
+	for _, step := range steps {
+		op := resolveImageOpFor(set, step)
+		image, err := engine.Container.ResolveImage(op)
+		if err != nil {
+			return nil, engine.emitErr("image.resolve", map[string]string{"team": op.Team, "name": op.Name, "ref": op.Image},
+				fmt.Errorf("%s %q: %w", strings.ToLower(step.Kind), step.Name, err))
+		}
+		images[resolvedImageKey(step.Kind, step.Name)] = image
+	}
+	return images, nil
+}
+
+func resolveImageOpFor(set *planner.ManifestSet, step planner.PlannedStep) ResolveImageOp {
+	if step.Kind == manifest.ResourceKind {
+		resource := set.Resources[step.Name]
+		return ResolveImageOp{
+			Team:            resource.Metadata.Owner,
+			Name:            resource.Metadata.Name,
+			Kind:            step.Kind,
+			Image:           resource.Spec.Image,
+			ImagePullPolicy: manifest.EffectivePullPolicy(resource.Spec.Image, resource.Spec.ImagePullPolicy),
+		}
+	}
+
+	application := set.Applications[step.Name]
+	return ResolveImageOp{
+		Team:            application.Metadata.Owner,
+		Name:            application.Metadata.Name,
+		Kind:            step.Kind,
+		Image:           application.Spec.Image,
+		ImagePullPolicy: manifest.EffectivePullPolicy(application.Spec.Image, application.Spec.ImagePullPolicy),
+	}
+}
+
+func resolvedImageKey(kind, name string) string {
+	return kind + "/" + name
+}
+
 // resourceResolutionOrder topologically orders resources by their
 // resource-kind dependencies so a consuming resource resolves after its target.
 func resourceResolutionOrder(set *planner.ManifestSet) ([]string, error) {
@@ -311,7 +364,7 @@ func resourceResolutionOrder(set *planner.ManifestSet) ([]string, error) {
 	return topo.Sort(graph)
 }
 
-func (engine *Engine) deployResource(set *planner.ManifestSet, step planner.PlannedStep, envMap map[string]string) error {
+func (engine *Engine) deployResource(set *planner.ManifestSet, step planner.PlannedStep, envMap map[string]string, image ResolvedImage) error {
 	resource := set.Resources[step.Name]
 
 	engine.Observer.OnEvent(Event{
@@ -352,7 +405,8 @@ func (engine *Engine) deployResource(set *planner.ManifestSet, step planner.Plan
 		Team:             resource.Metadata.Owner,
 		Name:             resource.Metadata.Name,
 		Kind:             manifest.ResourceKind,
-		Image:            resource.Spec.Image,
+		Image:            image.Ref,
+		ImageID:          image.ImageID,
 		Network:          resource.Metadata.Owner,
 		Env:              env,
 		Volumes:          volumes,
@@ -418,4 +472,3 @@ func formatAliasesForLog(routes []AliasRoute) string {
 	sort.Strings(entries)
 	return strings.Join(entries, ",")
 }
-

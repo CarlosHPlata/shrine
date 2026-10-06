@@ -24,9 +24,10 @@ import (
 // the container spec then fails — so the flow never reaches recordDeployment
 // and the test needs no state store and touches no filesystem.
 type fakeDockerAPI struct {
-	createdConfig *container.Config
-	createdHost   *container.HostConfig
-	createErr     error
+	createdConfig  *container.Config
+	createdHost    *container.HostConfig
+	createErr      error
+	imageListCalls int
 }
 
 func (f *fakeDockerAPI) ContainerCreate(_ context.Context, cfg *container.Config, host *container.HostConfig, _ *network.NetworkingConfig, _ *ocispec.Platform, _ string) (container.CreateResponse, error) {
@@ -40,6 +41,7 @@ func (f *fakeDockerAPI) ContainerInspect(context.Context, string) (container.Ins
 }
 
 func (f *fakeDockerAPI) ImageList(context.Context, image.ListOptions) ([]image.Summary, error) {
+	f.imageListCalls++
 	return []image.Summary{{ID: "sha256:test-digest"}}, nil
 }
 
@@ -152,6 +154,33 @@ func TestCreateContainer_PlainReferencePassesThroughUnchanged(t *testing.T) {
 	got := captureCreatedImage(t, "nginx:latest")
 
 	if want := "nginx:latest"; got != want {
+		t.Errorf("container spec image = %q, want %q", got, want)
+	}
+}
+
+// A pre-resolved op must reach ContainerCreate without a second resolution:
+// the fake's ImagePull and ImageInspect panic, and ImageList is counted.
+func TestCreateContainer_SkipsResolutionWhenImageIDIsSet(t *testing.T) {
+	fake := &fakeDockerAPI{createErr: errors.New("create rejected by fake")}
+	backend := &DockerBackend{
+		client:     fake,
+		registries: testRegistries,
+		observer:   engine.NoopObserver{},
+	}
+	op := aliasTestOp("docker.io/traefik/whoami:latest")
+	op.ImageID = "sha256:resolved-by-the-pre-pass"
+
+	if err := backend.CreateContainer(op); err == nil {
+		t.Fatal("expected CreateContainer to surface the fake's creation error")
+	}
+
+	if fake.imageListCalls != 0 {
+		t.Errorf("ImageList called %d times; a pre-resolved op must not resolve again", fake.imageListCalls)
+	}
+	if fake.createdConfig == nil {
+		t.Fatal("ContainerCreate was never called")
+	}
+	if got, want := fake.createdConfig.Image, "docker.io/traefik/whoami:latest"; got != want {
 		t.Errorf("container spec image = %q, want %q", got, want)
 	}
 }
