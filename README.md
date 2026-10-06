@@ -81,6 +81,7 @@ Override the search entirely with `--config-dir <dir>` (loads `<dir>/config.yml`
 ```yaml
 specsDir: ~/projects/myapp/manifests
 teamsDir: ~/projects/myapp/teams
+imagePullPolicy: Pinned   # optional default for manifests that name no policy
 registries:
   - host: ghcr.io
     username: myuser
@@ -91,9 +92,12 @@ registries:
 |---|---|
 | `specsDir` | Default directory for manifest files. Used by `shrine deploy`, `shrine apply`, and `shrine generate` when `--path` is not provided. |
 | `teamsDir` | Optional dedicated directory for team manifests. When set, `shrine apply teams` scans this path instead of `specsDir`. Falls back to `specsDir` if not set. |
+| `imagePullPolicy` | Default image pull policy for manifests that name no `spec.imagePullPolicy`: `Always`, `IfNotPresent`, or `Pinned`. When absent, Shrine derives one per image: `Always` for `latest` or no tag, `IfNotPresent` otherwise. The manifest's own field always wins. Any other value is refused before any command runs. |
 | `registries` | List of container registry credentials used when pulling or resolving images. |
 
 `specsDir` is the most convenient way to avoid repeating `--path` on every command. Set `teamsDir` only when your team manifests live in a separate directory from the rest of your specs.
+
+**Making pinning the house rule.** Setting `imagePullPolicy: Pinned` pins every manifest that names no policy: its first deploy resolves the newest version of its repository and records it, and every later deploy runs that exact version. The next deploy after you set it rejects, before any change, every such manifest that still names a fixed version (an Application image with a tag other than `latest`, or a Resource with a `version`), with a message that names this setting and the two ways out: set `spec.imagePullPolicy` on that manifest, or change the default. `shrine generate application` and `shrine generate resource` follow the default, writing the bare repository and no `version` line, so a generated manifest deploys as is. Changing the default later is as consequential as editing every manifest that names no policy: artifacts it pinned are released on their next deploy, and a Resource that relied on `Pinned` to omit its version must name one again. The values and the pin lifecycle are described in the [manifest reference](https://carloshplata.github.io/shrine/reference/manifest-schema/#image-pull-policy).
 
 ---
 
