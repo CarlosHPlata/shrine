@@ -357,9 +357,9 @@ func TestWriteRoute_ThreeAliases_SparseStrip(t *testing.T) {
 	rb := newTestBackend()
 	op := baseOp()
 	op.AdditionalRoutes = []engine.AliasRoute{
-		{Host: "a", PathPrefix: "", StripPrefix: false},            // index 0: host-only
-		{Host: "b", PathPrefix: "/p1", StripPrefix: true},          // index 1: strip
-		{Host: "c", PathPrefix: "/p2", StripPrefix: false},         // index 2: no strip
+		{Host: "a", PathPrefix: "", StripPrefix: false},    // index 0: host-only
+		{Host: "b", PathPrefix: "/p1", StripPrefix: true},  // index 1: strip
+		{Host: "c", PathPrefix: "/p2", StripPrefix: false}, // index 2: no strip
 	}
 
 	if err := rb.WriteRoute(op); err != nil {
@@ -926,6 +926,9 @@ func (r *recordingContainerBackend) RemoveContainer(engine.RemoveContainerOp) er
 func (r *recordingContainerBackend) CreatePlatformNetwork() error                   { return nil }
 func (r *recordingContainerBackend) InspectContainer(string) (engine.ContainerInfo, error) {
 	return engine.ContainerInfo{}, nil
+}
+func (r *recordingContainerBackend) ResolveImage(op engine.ResolveImageOp) (engine.ResolvedImage, error) {
+	return engine.ResolvedImage{Ref: op.Image, Source: engine.ImageSourceManifest}, nil
 }
 
 // T013: Finalize must ensure the routing dirs exist, generate static config +

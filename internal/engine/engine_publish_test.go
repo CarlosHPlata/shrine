@@ -13,8 +13,8 @@ type capturingContainerBackend struct {
 	ops []CreateContainerOp
 }
 
-func (c *capturingContainerBackend) CreateNetwork(string) error  { return nil }
-func (c *capturingContainerBackend) RemoveNetwork(string) error  { return nil }
+func (c *capturingContainerBackend) CreateNetwork(string) error   { return nil }
+func (c *capturingContainerBackend) RemoveNetwork(string) error   { return nil }
 func (c *capturingContainerBackend) CreatePlatformNetwork() error { return nil }
 func (c *capturingContainerBackend) InspectContainer(string) (ContainerInfo, error) {
 	return ContainerInfo{}, nil
@@ -23,6 +23,9 @@ func (c *capturingContainerBackend) RemoveContainer(RemoveContainerOp) error { r
 func (c *capturingContainerBackend) CreateContainer(op CreateContainerOp) error {
 	c.ops = append(c.ops, op)
 	return nil
+}
+func (c *capturingContainerBackend) ResolveImage(op ResolveImageOp) (ResolvedImage, error) {
+	return ResolvedImage{Ref: op.Image, Source: ImageSourceManifest}, nil
 }
 
 func deployAppWithNetworking(t *testing.T, networking manifest.Networking) CreateContainerOp {

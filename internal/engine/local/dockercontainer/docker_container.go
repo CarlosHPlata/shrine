@@ -29,7 +29,7 @@ func (backend *DockerBackend) CreateContainer(op engine.CreateContainerOp) error
 	}
 	op.Image = expanded
 
-	digest, err := backend.resolveImage(ctx, op.Image, op.ImagePullPolicy)
+	located, err := backend.locateImage(ctx, op.Image, op.ImagePullPolicy)
 	if err != nil {
 		return err
 	}
@@ -38,7 +38,7 @@ func (backend *DockerBackend) CreateContainer(op engine.CreateContainerOp) error
 		return err
 	}
 
-	record.ConfigHash = configHash(op, digest)
+	record.ConfigHash = configHash(op, located.ID)
 
 	existing, err := backend.client.ContainerInspect(ctx, cName)
 	switch {
