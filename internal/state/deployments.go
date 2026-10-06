@@ -12,6 +12,8 @@ type Deployment struct {
 	Name        string
 	ContainerID string
 	ConfigHash  string
+	Image       string // the reference the manifest named, as written, e.g. reg:lab/hello-api:1.2.0
+	Policy      string // effective image pull policy at deploy time
 }
 
 type DeploymentStore interface {

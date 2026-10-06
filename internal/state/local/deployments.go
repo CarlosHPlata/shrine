@@ -1,8 +1,9 @@
 package local
 
 import (
-	"bufio"
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"sort"
@@ -13,20 +14,34 @@ import (
 )
 
 type DeploymentStore struct {
-	mu      sync.Mutex
-	baseDir string
+	mu        sync.Mutex
+	baseDir   string
+	readFile  readFileFn
+	writeFile writeFileFn
 }
 
 func NewDeploymentStore(baseDir string) (state.DeploymentStore, error) {
 	if err := os.MkdirAll(baseDir, 0755); err != nil {
 		return nil, fmt.Errorf("creating state directory: %w", err)
 	}
+	return newDeploymentStoreWithFileOps(baseDir, os.ReadFile, writeTeamFile), nil
+}
 
-	s := &DeploymentStore{
-		baseDir: baseDir,
+// newDeploymentStoreWithFileOps is the injectable-file-ops constructor unit
+// tests use to keep the filesystem out of the picture.
+func newDeploymentStoreWithFileOps(baseDir string, read readFileFn, write writeFileFn) *DeploymentStore {
+	return &DeploymentStore{
+		baseDir:   baseDir,
+		readFile:  read,
+		writeFile: write,
 	}
+}
 
-	return s, nil
+func writeTeamFile(path string, data []byte) error {
+	if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
+		return fmt.Errorf("creating team directory: %w", err)
+	}
+	return atomicWriteFile(path, data)
 }
 
 func (s *DeploymentStore) Record(team string, deployment state.Deployment) error {
@@ -65,7 +80,6 @@ func (s *DeploymentStore) List(team string) ([]state.Deployment, error) {
 		return nil, err
 	}
 
-	// convert map to slice
 	deploymentsSlice := make([]state.Deployment, 0, len(deployments))
 	for _, deployment := range deployments {
 		deploymentsSlice = append(deploymentsSlice, deployment)
@@ -74,83 +88,76 @@ func (s *DeploymentStore) List(team string) ([]state.Deployment, error) {
 	return deploymentsSlice, nil
 }
 
+func (s *DeploymentStore) teamPath(team string) string {
+	return filepath.Join(s.baseDir, team, "deployments.txt")
+}
+
 func (s *DeploymentStore) loadTeam(team string) (map[string]state.Deployment, error) {
-	path := filepath.Join(s.baseDir, team, "deployments.txt")
-	f, err := os.Open(path)
+	data, err := s.readFile(s.teamPath(team))
 	if err != nil {
-		if os.IsNotExist(err) {
+		if errors.Is(err, fs.ErrNotExist) {
 			return make(map[string]state.Deployment), nil
 		}
-		return nil, fmt.Errorf("opening deployments for team %q: %w", team, err)
+		return nil, fmt.Errorf("reading deployments for team %q: %w", team, err)
 	}
-	defer f.Close()
 
 	deployments := make(map[string]state.Deployment)
-	scanner := bufio.NewScanner(f)
-	for scanner.Scan() {
-		line, _, _ := strings.Cut(scanner.Text(), "#")
-		line = strings.TrimSpace(line)
-
-		if line == "" {
+	for _, raw := range strings.Split(string(data), "\n") {
+		line, _, _ := strings.Cut(raw, "#")
+		fields := strings.Fields(line)
+		if len(fields) < 3 {
 			continue
 		}
-
-		parts := strings.SplitN(line, " ", 4)
-		if len(parts) >= 3 {
-			d := state.Deployment{
-				Kind:        parts[0],
-				Name:        parts[1],
-				ContainerID: parts[2],
-			}
-			if len(parts) == 4 {
-				d.ConfigHash = parts[3]
-			}
-			deployments[parts[1]] = d
+		deployments[fields[1]] = state.Deployment{
+			Kind:        fields[0],
+			Name:        fields[1],
+			ContainerID: fields[2],
+			ConfigHash:  fieldAt(fields, 3),
+			Image:       fieldAt(fields, 4),
+			Policy:      fieldAt(fields, 5),
 		}
-	}
-
-	if err := scanner.Err(); err != nil {
-		return nil, fmt.Errorf("reading deployments for team %q: %w", team, err)
 	}
 
 	return deployments, nil
 }
 
+// emptyFieldPlaceholder keeps later fields in position on disk when an
+// optional value is empty; it never reaches the in-memory record.
+const emptyFieldPlaceholder = "-"
+
+// fieldAt reads an optional field as empty when the line predates it or
+// holds the placeholder, so records written by earlier releases keep loading.
+func fieldAt(fields []string, index int) string {
+	if index >= len(fields) || fields[index] == emptyFieldPlaceholder {
+		return ""
+	}
+	return fields[index]
+}
+
+func fieldOrPlaceholder(value string) string {
+	if value == "" {
+		return emptyFieldPlaceholder
+	}
+	return value
+}
+
 func (s *DeploymentStore) saveTeam(team string, deployments map[string]state.Deployment) error {
-	teamDir := filepath.Join(s.baseDir, team)
-	if err := os.MkdirAll(teamDir, 0700); err != nil {
-		return fmt.Errorf("creating team directory for %q: %w", team, err)
+	names := make([]string, 0, len(deployments))
+	for name := range deployments {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+
+	var b strings.Builder
+	for _, name := range names {
+		d := deployments[name]
+		fmt.Fprintf(&b, "%s %s %s %s %s %s\n",
+			d.Kind, d.Name, d.ContainerID,
+			fieldOrPlaceholder(d.ConfigHash), fieldOrPlaceholder(d.Image), fieldOrPlaceholder(d.Policy))
 	}
 
-	// creating temp file
-	tmp, err := os.CreateTemp(teamDir, "deployments-*.txt.tmp")
-	if err != nil {
-		return fmt.Errorf("creating temporary deployments file: %w", err)
+	if err := s.writeFile(s.teamPath(team), []byte(b.String())); err != nil {
+		return fmt.Errorf("writing deployments for team %q: %w", team, err)
 	}
-	defer os.Remove(tmp.Name())
-	defer tmp.Close()
-
-	// Sort deployment by name
-	keys := make([]string, 0, len(deployments))
-	for k := range deployments {
-		keys = append(keys, k)
-	}
-	sort.Strings(keys)
-
-	for _, k := range keys {
-		if _, err := fmt.Fprintf(tmp, "%s %s %s %s\n", deployments[k].Kind, deployments[k].Name, deployments[k].ContainerID, deployments[k].ConfigHash); err != nil {
-			return fmt.Errorf("writing to temporary deployments file: %w", err)
-		}
-	}
-
-	if err := tmp.Close(); err != nil {
-		return fmt.Errorf("closing temporary deployments file: %w", err)
-	}
-
-	destPath := filepath.Join(teamDir, "deployments.txt")
-	if err := os.Rename(tmp.Name(), destPath); err != nil {
-		return fmt.Errorf("finalizing deployments file for %q: %w", team, err)
-	}
-
 	return nil
 }
