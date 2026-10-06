@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 
 	. "github.com/CarlosHPlata/shrine/tests/integration/testutils"
@@ -242,6 +243,26 @@ func TestDeploy(t *testing.T) {
 			AssertStderrContains("routing collision").
 			AssertStderrContains("shrine-deploy-test/app-a").
 			AssertStderrContains("shrine-deploy-test/app-b")
+	})
+
+	// Spec 032 US2 (FR-007; PRD R-15): the exact version of every artifact is
+	// stated before its deploy header.
+	s.Test("should state the resolved image version of every artifact before deploying it", func(tc *TestCase) {
+		tc.Run("deploy",
+			"--path", fixturesPath("resources"),
+			"--state-dir", tc.StateDir,
+		).AssertSuccess().
+			AssertOutputContains("🔎 Resolving image for " + testTeam + ".test-cache (traefik/whoami)").
+			AssertOutputContains("🔎 Resolved " + testTeam + ".test-cache traefik/whoami@").
+			AssertOutputContains("🔎 Resolving image for " + testTeam + ".whoami-res (traefik/whoami)").
+			AssertOutputContains("🔎 Resolved " + testTeam + ".whoami-res traefik/whoami@")
+
+		out := tc.RunResult().Stdout
+		resolved := strings.Index(out, "🔎 Resolved "+testTeam+".test-cache")
+		header := strings.Index(out, "Deploying Resource: test-cache")
+		if resolved < 0 || header < 0 || resolved > header {
+			tc.Fatalf("expected the resolved version line before the deploy header:\n%s", out)
+		}
 	})
 }
 

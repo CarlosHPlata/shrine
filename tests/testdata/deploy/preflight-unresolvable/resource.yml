@@ -1,0 +1,16 @@
+apiVersion: shrine/v1
+kind: Resource
+metadata:
+  name: cache-ok
+  owner: shrine-deploy-test
+spec:
+  type: cache
+  version: "1"
+  image: traefik/whoami
+  env:
+    - name: endpoint
+      value: "http://cache-ok:80"
+  outputs:
+    - name: endpoint
+  networking:
+    exposeToPlatform: false
