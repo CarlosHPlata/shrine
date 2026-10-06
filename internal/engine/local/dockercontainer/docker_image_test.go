@@ -600,3 +600,66 @@ func TestResolveImage_ManifestOwnedWithoutAPinStoreReleasesNothing(t *testing.T)
 		t.Fatalf("ResolveImage must tolerate a nil store, got %v", err)
 	}
 }
+
+func TestResolveImage_PinnedNoLongerServedNamesTheWayOut(t *testing.T) {
+	api := newScriptedDockerAPI()
+	api.inspectErrs[appPinned] = errdefs.ErrNotFound
+	cause := errors.New("manifest unknown")
+	api.pullErrs[appPinned] = cause
+	pins := newFakePinStore(existingPin())
+	backend, obs := pinnedBackend(api, pins)
+
+	_, err := backend.ResolveImage(resolveTestOp(pinnedTag, "Pinned"))
+	if err == nil {
+		t.Fatal("a pin the registry no longer serves must fail the resolution")
+	}
+
+	want := `pinned exact version "ghcr.io/me/app@` + appDigest + `" for team-a/web is no longer served by the registry; ` +
+		`deploy the application under Always or IfNotPresent to release the pin, then return to Pinned: ` +
+		`pulling image "ghcr.io/me/app@` + appDigest + `": manifest unknown`
+	if err.Error() != want {
+		t.Errorf("error:\ngot  %q\nwant %q", err.Error(), want)
+	}
+	if !errors.Is(err, cause) {
+		t.Error("the pull cause must stay reachable through errors.Is")
+	}
+	resolveErr, ok := obs.find("image.resolve", engine.StatusError)
+	if !ok {
+		t.Fatal("the backend must emit an image.resolve error for a pin no longer served")
+	}
+	assertFields(t, resolveErr.Fields, map[string]string{"team": "team-a", "name": "web", "ref": appPinned})
+	if _, ok := obs.find("image.resolve", engine.StatusFinished); ok {
+		t.Error("a failed resolution must not emit image.resolve finished")
+	}
+	if len(pins.puts) != 0 || len(pins.releases) != 0 {
+		t.Errorf("the pin must be left untouched on failure, puts=%v releases=%v", pins.puts, pins.releases)
+	}
+}
+
+func TestResolveImage_PinnedNoDigestEmitsAResolveError(t *testing.T) {
+	api := newScriptedDockerAPI()
+	api.inspected[pinnedTag] = image.InspectResponse{ID: pulledImageID, RepoDigests: []string{"other/repo@" + appDigest}}
+	backend, obs := pinnedBackend(api, newFakePinStore())
+
+	if _, err := backend.ResolveImage(resolveTestOp(pinnedTag, "Pinned")); err == nil {
+		t.Fatal("expected the no-digest failure")
+	}
+
+	resolveErr, ok := obs.find("image.resolve", engine.StatusError)
+	if !ok {
+		t.Fatal("the backend must emit an image.resolve error when the image cannot be pinned")
+	}
+	assertFields(t, resolveErr.Fields, map[string]string{"team": "team-a", "name": "web", "ref": pinnedTag})
+}
+
+func TestResolveImage_ManifestOwnedFailuresEmitNoResolveError(t *testing.T) {
+	api := &recordingDockerAPI{pullErr: errors.New("connection refused")}
+	backend, obs := pinnedBackend(api, newFakePinStore())
+
+	if _, err := backend.ResolveImage(resolveTestOp(expandedWhoami, "Always")); err == nil {
+		t.Fatal("expected the pull failure")
+	}
+	if _, ok := obs.find("image.resolve", engine.StatusError); ok {
+		t.Error("manifest-owned failures keep T2's behaviour: no backend image.resolve error event")
+	}
+}

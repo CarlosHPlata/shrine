@@ -116,7 +116,7 @@ func (backend *DockerBackend) reusePin(ctx context.Context, op engine.ResolveIma
 	}
 	if !present {
 		if err := backend.pullImage(ctx, pin.Pinned); err != nil {
-			return engine.ResolvedImage{}, err
+			return engine.ResolvedImage{}, backend.notServedError(op, pin, err)
 		}
 		if local, err = backend.inspectImage(ctx, pin.Pinned); err != nil {
 			return engine.ResolvedImage{}, err
@@ -145,7 +145,8 @@ func (backend *DockerBackend) pinNewest(ctx context.Context, op engine.ResolveIm
 	}
 	digest := pickRepoDigest(local.RepoDigests, repositoryOf(ref))
 	if digest == "" {
-		return engine.ResolvedImage{}, fmt.Errorf("image %q carries no registry digest and cannot be pinned", ref)
+		return engine.ResolvedImage{}, backend.emitErr("image.resolve", resolveErrorFields(op, ref),
+			fmt.Errorf("image %q carries no registry digest and cannot be pinned", ref))
 	}
 
 	pin := state.ImagePin{
@@ -182,6 +183,20 @@ func (backend *DockerBackend) releasePin(op engine.ResolveImageOp) error {
 		return fmt.Errorf("releasing image pin for %s/%s: %w", op.Team, op.Name, err)
 	}
 	return nil
+}
+
+// notServedError is the pinned failure of R-14: the registry no longer has
+// the exact version and the host does not either. Until bump exists (T6) the
+// way out is the manifest's policy.
+func (backend *DockerBackend) notServedError(op engine.ResolveImageOp, pin state.ImagePin, cause error) error {
+	return backend.emitErr("image.resolve", resolveErrorFields(op, pin.Pinned),
+		fmt.Errorf("pinned exact version %q for %s/%s is no longer served by the registry; deploy the %s under %s or %s to release the pin, then return to %s: %w",
+			pin.Pinned, op.Team, op.Name, strings.ToLower(op.Kind),
+			manifest.ImagePullPolicyAlways, manifest.ImagePullPolicyIfNotPresent, manifest.ImagePullPolicyPinned, cause))
+}
+
+func resolveErrorFields(op engine.ResolveImageOp, ref string) map[string]string {
+	return map[string]string{"team": op.Team, "name": op.Name, "ref": ref}
 }
 
 func (backend *DockerBackend) pinStore() (state.ImagePinStore, bool) {
