@@ -88,3 +88,45 @@ func TestCreateContainer_UpToDateRedeployFillsLegacyRecord(t *testing.T) {
 		t.Errorf("redeploy must keep the container id and hash, got %+v", last)
 	}
 }
+
+// Spec 032 on top of spec 031: an op from the engine pre-pass is created from
+// ResolvedRef without a second resolution (the fake's ImagePull and
+// ImageInspect panic, ImageList is counted), while the record keeps Image as
+// the manifest wrote it.
+func TestCreateContainer_PreResolvedOpRecordsManifestImageAndCreatesFromResolvedRef(t *testing.T) {
+	deployments := &fakeDeploymentStore{}
+	fake := &startCapableFakeDockerAPI{}
+	backend := recordTestBackend(fake, deployments)
+
+	op := aliasTestOp("reg:myregistry/traefik/whoami:latest")
+	op.ResolvedRef = "docker.io/traefik/whoami:latest"
+	op.ImageID = "sha256:resolved-by-the-pre-pass"
+
+	if err := backend.CreateContainer(op); err != nil {
+		t.Fatalf("CreateContainer failed: %v", err)
+	}
+
+	if fake.imageListCalls != 0 {
+		t.Errorf("ImageList called %d times; a pre-resolved op must not resolve again", fake.imageListCalls)
+	}
+	if fake.createdConfig == nil {
+		t.Fatal("ContainerCreate was never called")
+	}
+	if got := fake.createdConfig.Image; got != op.ResolvedRef {
+		t.Errorf("container spec image = %q, want the pre-resolved reference %q", got, op.ResolvedRef)
+	}
+
+	if len(deployments.records) != 1 {
+		t.Fatalf("expected one deployment record, got %d", len(deployments.records))
+	}
+	got := deployments.records[0]
+	if want := "reg:myregistry/traefik/whoami:latest"; got.Image != want {
+		t.Errorf("recorded image = %q, want the unexpanded manifest reference %q", got.Image, want)
+	}
+	if got.Policy != op.ImagePullPolicy {
+		t.Errorf("recorded policy = %q, want %q", got.Policy, op.ImagePullPolicy)
+	}
+	if want := configHash(op, op.ImageID); got.ConfigHash != want {
+		t.Errorf("recorded hash = %q, want the hash keyed on the pre-pass image id %q", got.ConfigHash, want)
+	}
+}

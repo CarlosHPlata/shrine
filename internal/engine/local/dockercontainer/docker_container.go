@@ -89,7 +89,6 @@ func (backend *DockerBackend) resolveContainerImage(ctx context.Context, op engi
 	return expanded, located.ID, nil
 }
 
-
 func (backend *DockerBackend) ensureRunning(ctx context.Context, cName string, existing container.InspectResponse, op engine.CreateContainerOp, record state.Deployment) error {
 	if !existing.State.Running {
 		backend.emitInfo("container.start", map[string]string{"name": cName})
