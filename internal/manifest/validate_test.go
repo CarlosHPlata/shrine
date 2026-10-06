@@ -566,3 +566,25 @@ func TestValidate_ResourceWithoutVersionPassesParseTimeValidation(t *testing.T) 
 		t.Errorf("expected no error for a resource without version, got: %v", err)
 	}
 }
+
+func TestValidate_ImagePullPolicyEnum(t *testing.T) {
+	const want = "spec.imagePullPolicy must be one of Always, IfNotPresent, Pinned"
+
+	for _, policy := range []string{"", "Always", "IfNotPresent", "Pinned"} {
+		if err := Validate(applicationManifest(ApplicationSpec{Image: "web", Port: 80, ImagePullPolicy: policy})); err != nil {
+			t.Errorf("application policy %q must be accepted, got: %v", policy, err)
+		}
+		if err := Validate(resourceManifest(ResourceSpec{Type: "postgres", ImagePullPolicy: policy})); err != nil {
+			t.Errorf("resource policy %q must be accepted, got: %v", policy, err)
+		}
+	}
+
+	err := Validate(applicationManifest(ApplicationSpec{Image: "web", Port: 80, ImagePullPolicy: "Sometimes"}))
+	if err == nil || !strings.Contains(err.Error(), want) {
+		t.Errorf("application with an unknown policy: got %v, want %q", err, want)
+	}
+	err = Validate(resourceManifest(ResourceSpec{Type: "postgres", ImagePullPolicy: "Sometimes"}))
+	if err == nil || !strings.Contains(err.Error(), want) {
+		t.Errorf("resource with an unknown policy: got %v, want %q", err, want)
+	}
+}

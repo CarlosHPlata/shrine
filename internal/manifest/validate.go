@@ -95,6 +95,7 @@ func validateApplicationSpec(spec ApplicationSpec) []string {
 
 	errs = append(errs, validateRoutingAliases(spec.Routing)...)
 	errs = append(errs, validatePublish(spec.Networking.Publish)...)
+	errs = append(errs, validatePullPolicy(spec.ImagePullPolicy)...)
 
 	// validate volumes
 	if spec.Volumes != nil {
@@ -137,6 +138,8 @@ func validateResourceSpec(spec ResourceSpec) []string {
 	if spec.Networking.Publish != nil {
 		errs = append(errs, "spec.networking.publish is only valid on Application manifests")
 	}
+
+	errs = append(errs, validatePullPolicy(spec.ImagePullPolicy)...)
 
 	envNames := make(map[string]bool, len(spec.Env))
 	errs = append(errs, validateResourceEnv(spec.Env, envNames)...)
@@ -324,4 +327,12 @@ func validateExclusiveFields(path string, index int, name string, labels string,
 		errs = append(errs, fmt.Sprintf("%s[%d] %q: %s are mutually exclusive", path, index, name, labels))
 	}
 	return errs
+}
+
+func validatePullPolicy(policy string) []string {
+	if policy == "" || IsKnownPullPolicy(policy) {
+		return nil
+	}
+	return []string{fmt.Sprintf("spec.imagePullPolicy must be one of %s, %s, %s",
+		ImagePullPolicyAlways, ImagePullPolicyIfNotPresent, ImagePullPolicyPinned)}
 }
