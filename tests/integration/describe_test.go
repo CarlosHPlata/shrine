@@ -75,4 +75,38 @@ func TestDescribeDocker(t *testing.T) {
 			AssertSuccess().
 			AssertOutputContains("whoami")
 	})
+
+	s.Test("should show the image reference and the pull policy of a deployed app", func(tc *TestCase) {
+		tc.Run("describe", "app", "whoami", "--team", testTeam, "--state-dir", tc.StateDir).
+			AssertSuccess().
+			AssertOutputLineContains("Image:", "traefik/whoami").
+			AssertOutputLineContains("Pull policy:", "Always")
+
+		tc.Run("describe", "app", "whoami", "--state-dir", tc.StateDir).
+			AssertSuccess().
+			AssertOutputLineContains("Image:", "traefik/whoami").
+			AssertOutputLineContains("Pull policy:", "Always")
+	})
+
+	s.Test("should show the image reference and the pull policy of a deployed resource", func(tc *TestCase) {
+		tc.Run("deploy",
+			"--path", fixturesPath("resources"),
+			"--state-dir", tc.StateDir,
+		).AssertSuccess()
+
+		tc.Run("describe", "resource", "test-cache", "--state-dir", tc.StateDir).
+			AssertSuccess().
+			AssertOutputLineContains("Image:", "traefik/whoami").
+			AssertOutputLineContains("Pull policy:", "Always")
+	})
+
+	s.Test("should describe a record from a previous release with an unknown image and policy", func(tc *TestCase) {
+		SeedLegacyDeploymentRecords(tc, testTeam)
+
+		tc.Run("describe", "app", "whoami", "--team", testTeam, "--state-dir", tc.StateDir).
+			AssertSuccess().
+			AssertOutputLineContains("Image:", "-").
+			AssertOutputLineContains("Pull policy:", "-").
+			AssertOutputNotContains("traefik/whoami")
+	})
 }

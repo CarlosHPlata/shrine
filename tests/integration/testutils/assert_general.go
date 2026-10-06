@@ -82,6 +82,25 @@ func (tc *TestCase) AssertFileContains(path, want string) *TestCase {
 	return tc
 }
 
+// AssertOutputLineContains scopes the assertion to the first stdout line that
+// contains anchor, which is how a table row or a "Label: value" line is checked
+// without matching the same value elsewhere in the output.
+func (tc *TestCase) AssertOutputLineContains(anchor, want string) *TestCase {
+	tc.t.Helper()
+	for _, line := range strings.Split(tc.result.Stdout, "\n") {
+		if !strings.Contains(line, anchor) {
+			continue
+		}
+		if !strings.Contains(line, want) {
+			tc.t.Fatalf("expected the stdout line containing %q to contain %q\nline: %s\nstdout: %s",
+				anchor, want, line, tc.result.Stdout)
+		}
+		return tc
+	}
+	tc.t.Fatalf("expected a stdout line containing %q\nstdout: %s", anchor, tc.result.Stdout)
+	return tc
+}
+
 func (tc *TestCase) AssertOutputNotContains(s string) *TestCase {
 	tc.t.Helper()
 	if strings.Contains(tc.result.Stdout, s) {
