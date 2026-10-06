@@ -74,7 +74,8 @@ internal/
 │   ├── deployments.go                  # + Image, Policy on Deployment (design 3.3)
 │   └── local/
 │       ├── deployments.go              # injectable read/write file ops; loadTeam reads fields 5–6 as optional; saveTeam writes six fields (T1-02)
-│       └── deployments_test.go         # rewritten on in-memory file ops; legacy and six-field cases
+│       ├── deployments_test.go         # rewritten on in-memory file ops; legacy and six-field cases
+│       └── hostports.go                # atomicWriteFile: temp-file prefix derived from the target name so both stores share it
 ├── engine/local/dockercontainer/
 │   ├── docker_container.go             # CreateContainer captures the record before op.Image = expanded; recordDeployment fills Image + Policy (T1-01)
 │   └── docker_container_record_test.go # NEW: unexpanded alias + policy recorded; up-to-date path refreshes a legacy record (T1-05)
