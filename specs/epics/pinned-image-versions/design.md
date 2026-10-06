@@ -173,6 +173,8 @@ In `internal/engine/local/dockercontainer/docker_image.go`, replacing the privat
 
 Picking the digest: `pickRepoDigest(inspect.RepoDigests, repository)` returns the entry whose part before `@` equals the repository of the pulled reference. An empty result is an error for `Pinned` and a warning-free empty `Digest` for manifest-owned artifacts.
 
+*Amended by T2 (spec 032), as shipped:* `pickRepoDigest` returns the `sha256:…` part after `@` of the matching entry, which is what `ResolvedImage.Digest` holds; the pullable pin of TD-1 is therefore `repositoryOf(ref) + "@" + digest`. Repositories are compared after both sides drop a leading `docker.io/` and then a leading `library/` (`normalizeRepository`), because the daemon records Docker Hub repositories without them while an expanded alias carries them. The Docker backend emits no `image.resolve` error event of its own: the failing operation's event (`registry.alias`, `image.list`, `registry.auth`, `image.pull`, `image.inspect`) and the engine's `image.resolve` error carry the message. T3 may emit an `image.resolve` error from the backend for the "pin no longer served" case.
+
 ### 4.3 Engine pre-pass
 
 `internal/engine/engine.go`, at the top of `ExecuteDeploy`, before `CreatePlatformNetwork`:
@@ -273,7 +275,7 @@ The fixtures under `tests/testdata/pinned/` are manifests with `imagePullPolicy:
 
 ## 7. Open technical points to settle inside T3's spec
 
-- The repository form Docker writes into `RepoDigests` for official Docker Hub images, `postgres@sha256:…` versus `docker.io/library/postgres@sha256:…`, decides how `pickRepoDigest` compares repositories. Verify against the daemon in the suite.
+- The repository form Docker writes into `RepoDigests` for official Docker Hub images, `postgres@sha256:…` versus `docker.io/library/postgres@sha256:…`, decides how `pickRepoDigest` compares repositories. Verify against the daemon in the suite. *Settled by T2:* both forms match, because `normalizeRepository` strips `docker.io/` and `library/` from both sides before comparing; T2's integration suite asserts a digest on Docker Hub images.
 - Whether `RepoDigests` after a tag pull of a multi-architecture image carries the index digest or the platform manifest digest. Either pins correctly on the same host; the PRD's architecture-move note depends on the former.
 - Whether `ImageInspect` accepts a digest reference for the local presence check on every daemon version the project supports, or whether `ImageList` with a `reference` filter is needed.
 

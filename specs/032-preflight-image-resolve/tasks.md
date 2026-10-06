@@ -115,7 +115,7 @@
 ### Implementation for User Story 4
 
 - [x] T026 [US4] Confirm by reading `CreateContainer` that `configHash` receives the id from `resolveContainerImage` on both paths and that no other hash input changed; adjust only if T025 fails
-- [ ] T027 [US4] `go test ./...` green; `git diff --stat main -- tests/integration/` shows only `preflight_image_resolve_test.go` added and `deploy_test.go` appended; commit
+- [x] T027 [US4] `go test ./...` green; `git diff --stat main -- tests/integration/` shows only `preflight_image_resolve_test.go` added and `deploy_test.go` appended; commit
 
 **Checkpoint**: nothing changes for manifests that do not opt in
 
@@ -136,7 +136,7 @@
 ## Phase 8: Polish & Cross-Cutting Concerns
 
 - [x] T029 Add the entry for 032 to `specs/progress.md` in the project's usual form (title, spec link, issue #53, what changed, acceptance SC-001 to SC-007 mapping, gate: `TestPreflightImageResolve` and the appended `TestDeploy` scenario, CI executes)
-- [ ] T030 Final verification: `go build ./... && go test ./... && go vet -tags integration ./tests/integration/... && gofmt -l .` clean; every task above checked; `git status` clean after commit
+- [x] T030 Final verification: `go build ./... && go test ./... && go vet -tags integration ./tests/integration/... && gofmt -l .` clean; every task above checked; `git status` clean after commit
 - [ ] T031 Rebase onto `origin/main` if it moved (expected conflicts only in `specs/progress.md` and `.specify/feature.json`; keep both entries), push `032-preflight-image-resolve`, open the pull request with `gh pr create` following `.github/pull_request_template.md` with `Closes #53` in Why, the definition-of-done list, and the hand-off notes of research.md R13
 - [ ] T032 Run `/shrine-pr-review` on the pull request, fix every real finding, push again
 
