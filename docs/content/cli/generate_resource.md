@@ -25,7 +25,7 @@ shrine generate resource [name] [flags]
   -h, --help             help for resource
   -t, --team string      Team that owns the resource (default "default-team")
       --type string      Type of resource (default "postgres")
-      --version string   Version of the resource (default "16")
+      --version string   Version of the resource (defaults to 16; omitted when imagePullPolicy in config.yml is Pinned)
 ```
 
 ### Options inherited from parent commands

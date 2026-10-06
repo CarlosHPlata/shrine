@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+
+	"github.com/CarlosHPlata/shrine/internal/manifest"
 )
 
 type AppOptions struct {
@@ -15,7 +17,8 @@ type AppOptions struct {
 	Domain           string
 	PathPrefix       string
 	ExposeToPlatform bool
-	Image            string
+	Image            string // as typed; empty means the default for PullPolicy
+	PullPolicy       string // the configuration's imagePullPolicy, empty when unset
 }
 
 const appSkeleton = `apiVersion: shrine/v1
@@ -45,20 +48,36 @@ func GenerateApp(opts AppOptions) error {
 		return fmt.Errorf("application manifest already exists at %q", path)
 	}
 
-	content := fmt.Sprintf(appSkeleton,
+	if err := os.WriteFile(path, []byte(renderAppSkeleton(opts)), 0644); err != nil {
+		return fmt.Errorf("writing application manifest: %w", err)
+	}
+
+	fmt.Printf("Created application manifest: %s\n", path)
+	return nil
+}
+
+func renderAppSkeleton(opts AppOptions) string {
+	image := opts.Image
+	if image == "" {
+		image = defaultAppImage(opts.Name, opts.PullPolicy)
+	}
+	return fmt.Sprintf(appSkeleton,
 		opts.Name,
 		opts.Team,
-		opts.Image,
+		image,
 		opts.Port,
 		opts.Replicas,
 		opts.Domain,
 		opts.PathPrefix,
 		opts.ExposeToPlatform,
 	)
-	if err := os.WriteFile(path, []byte(content), 0644); err != nil {
-		return fmt.Errorf("writing application manifest: %w", err)
-	}
+}
 
-	fmt.Printf("Created application manifest: %s\n", path)
-	return nil
+// defaultAppImage names only the repository under Pinned, where a tag would
+// be a fixed version the next deploy rejects (R-08).
+func defaultAppImage(name, pullPolicy string) string {
+	if pullPolicy == manifest.ImagePullPolicyPinned {
+		return name
+	}
+	return name + ":latest"
 }
