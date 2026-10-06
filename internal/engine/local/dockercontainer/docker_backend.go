@@ -2,6 +2,7 @@ package dockercontainer
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/CarlosHPlata/shrine/internal/config"
 	"github.com/CarlosHPlata/shrine/internal/engine"
@@ -14,6 +15,7 @@ type DockerBackend struct {
 	state      *state.Store
 	registries []config.RegistryConfig
 	observer   engine.Observer
+	now        func() time.Time
 }
 
 func NewDockerBackend(s *state.Store, registries []config.RegistryConfig, observer engine.Observer) (*DockerBackend, error) {
@@ -27,7 +29,21 @@ func NewDockerBackend(s *state.Store, registries []config.RegistryConfig, observ
 		state:      s,
 		registries: registries,
 		observer:   observer,
+		now:        utcNow,
 	}, nil
+}
+
+func utcNow() time.Time {
+	return time.Now().UTC()
+}
+
+// clock tolerates a backend built without a clock, as unit tests of the
+// manifest-owned path are.
+func (b *DockerBackend) clock() time.Time {
+	if b.now == nil {
+		return utcNow()
+	}
+	return b.now()
 }
 
 func (b *DockerBackend) emitErr(name string, fields map[string]string, err error) error {
