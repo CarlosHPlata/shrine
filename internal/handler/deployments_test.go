@@ -224,3 +224,106 @@ func TestDeleteTeam_ReleasesTeamHostPorts(t *testing.T) {
 		t.Errorf("only the other team's allocation should remain, got %v", ports)
 	}
 }
+
+type memImagePinStore struct{ pins map[string]state.ImagePin }
+
+func newMemImagePinStore(pins ...state.ImagePin) *memImagePinStore {
+	m := &memImagePinStore{pins: map[string]state.ImagePin{}}
+	for _, pin := range pins {
+		m.pins[state.ImagePinKey("demo", pin.Name)] = pin
+	}
+	return m
+}
+
+func (m *memImagePinStore) Get(team, name string) (state.ImagePin, error) {
+	pin, ok := m.pins[state.ImagePinKey(team, name)]
+	if !ok {
+		return state.ImagePin{}, state.ErrImagePinNotFound
+	}
+	return pin, nil
+}
+func (m *memImagePinStore) Put(team string, pin state.ImagePin) error {
+	m.pins[state.ImagePinKey(team, pin.Name)] = pin
+	return nil
+}
+func (m *memImagePinStore) Release(team, name string) error {
+	delete(m.pins, state.ImagePinKey(team, name))
+	return nil
+}
+func (m *memImagePinStore) ReleaseTeam(team string) error {
+	for key := range m.pins {
+		if strings.HasPrefix(key, team+"/") {
+			delete(m.pins, key)
+		}
+	}
+	return nil
+}
+func (m *memImagePinStore) List(team string) ([]state.ImagePin, error) {
+	var pins []state.ImagePin
+	for key, pin := range m.pins {
+		if strings.HasPrefix(key, team+"/") {
+			pins = append(pins, pin)
+		}
+	}
+	return pins, nil
+}
+func (m *memImagePinStore) ListAll() (map[string]state.ImagePin, error) { return m.pins, nil }
+
+func apiPin() state.ImagePin {
+	return state.ImagePin{Kind: manifest.ApplicationKind, Name: "api", Requested: "ghcr.io/me/api:latest", Pinned: "ghcr.io/me/api@sha256:abc"}
+}
+
+func TestDeleteApplication_ReleasesThePin(t *testing.T) {
+	store := deleteTestStore([]string{"demo"}, state.HostPortMap{},
+		map[string][]state.Deployment{"demo": {{Kind: manifest.ApplicationKind, Name: "api"}}})
+	store.ImagePins = newMemImagePinStore(apiPin())
+	backend := &stubContainerBackend{existing: map[string]bool{}}
+
+	if err := DeleteApplication(store, backend, DeleteApplicationOptions{Name: "api"}); err != nil {
+		t.Fatalf("DeleteApplication failed: %v", err)
+	}
+
+	if _, err := store.ImagePins.Get("demo", "api"); !errors.Is(err, state.ErrImagePinNotFound) {
+		t.Errorf("the pin should be released, got %v", err)
+	}
+}
+
+func TestDeleteApplication_DryRunKeepsThePin(t *testing.T) {
+	store := deleteTestStore([]string{"demo"}, state.HostPortMap{},
+		map[string][]state.Deployment{"demo": {{Kind: manifest.ApplicationKind, Name: "api"}}})
+	store.ImagePins = newMemImagePinStore(apiPin())
+	backend := &stubContainerBackend{existing: map[string]bool{}}
+
+	if err := DeleteApplication(store, backend, DeleteApplicationOptions{Name: "api", DryRun: true}); err != nil {
+		t.Fatalf("dry-run DeleteApplication failed: %v", err)
+	}
+
+	if _, err := store.ImagePins.Get("demo", "api"); err != nil {
+		t.Error("dry-run must not release the pin")
+	}
+}
+
+// A pin alone, with no port and no record, still locates the team and is
+// released: a torn-down pinned application keeps only its pin.
+func TestDeleteApplication_PinAloneIsFoundAndReleased(t *testing.T) {
+	store := deleteTestStore([]string{"demo"}, state.HostPortMap{}, nil)
+	store.ImagePins = newMemImagePinStore(apiPin())
+	backend := &stubContainerBackend{existing: map[string]bool{}}
+
+	if err := DeleteApplication(store, backend, DeleteApplicationOptions{Name: "api"}); err != nil {
+		t.Fatalf("DeleteApplication failed: %v", err)
+	}
+
+	if _, err := store.ImagePins.Get("demo", "api"); !errors.Is(err, state.ErrImagePinNotFound) {
+		t.Errorf("the pin should be released, got %v", err)
+	}
+}
+
+func TestDeleteApplication_ToleratesAStoreWithoutPins(t *testing.T) {
+	store := deleteTestStore([]string{"demo"}, state.HostPortMap{"demo/api": 30000}, nil)
+	backend := &stubContainerBackend{existing: map[string]bool{}}
+
+	if err := DeleteApplication(store, backend, DeleteApplicationOptions{Name: "api"}); err != nil {
+		t.Fatalf("DeleteApplication must tolerate a nil ImagePins store, got %v", err)
+	}
+}

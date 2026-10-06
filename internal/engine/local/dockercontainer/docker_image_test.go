@@ -544,3 +544,59 @@ func TestResolveImage_PinnedRecordsTheExpandedAliasAsRequested(t *testing.T) {
 		t.Errorf("Requested = %q, want the expanded reference", resolved.Requested)
 	}
 }
+
+func TestResolveImage_ManifestOwnedReleasesAnExistingPin(t *testing.T) {
+	api := &recordingDockerAPI{inspected: inspectedWhoami()}
+	pins := newFakePinStore(existingPin())
+	backend, _ := pinnedBackend(api, pins)
+
+	resolved, err := backend.ResolveImage(resolveTestOp(expandedWhoami, "Always"))
+	if err != nil {
+		t.Fatalf("ResolveImage failed: %v", err)
+	}
+
+	if !slices.Equal(pins.releases, []string{"team-a/web"}) {
+		t.Errorf("releases = %v, want the artifact's pin released once", pins.releases)
+	}
+	if resolved.Source != engine.ImageSourceManifest {
+		t.Errorf("Source = %q, want manifest", resolved.Source)
+	}
+}
+
+func TestResolveImage_ManifestOwnedReleaseIsIdempotentWithoutAPin(t *testing.T) {
+	api := &recordingDockerAPI{listed: []image.Summary{{ID: localImageID}}}
+	pins := newFakePinStore()
+	backend, _ := pinnedBackend(api, pins)
+
+	if _, err := backend.ResolveImage(resolveTestOp(expandedWhoami, "IfNotPresent")); err != nil {
+		t.Fatalf("ResolveImage failed: %v", err)
+	}
+	if !slices.Equal(pins.releases, []string{"team-a/web"}) {
+		t.Errorf("releases = %v, want one idempotent release", pins.releases)
+	}
+}
+
+func TestResolveImage_ManifestOwnedReleaseFailureSurfaces(t *testing.T) {
+	api := &recordingDockerAPI{inspected: inspectedWhoami()}
+	pins := newFakePinStore(existingPin())
+	pins.releaseErr = errors.New("disk full")
+	backend, _ := pinnedBackend(api, pins)
+
+	_, err := backend.ResolveImage(resolveTestOp(expandedWhoami, "Always"))
+	if err == nil {
+		t.Fatal("a failed release must surface")
+	}
+	want := "releasing image pin for team-a/web: disk full"
+	if err.Error() != want {
+		t.Errorf("error = %q, want %q", err.Error(), want)
+	}
+}
+
+func TestResolveImage_ManifestOwnedWithoutAPinStoreReleasesNothing(t *testing.T) {
+	api := &recordingDockerAPI{inspected: inspectedWhoami()}
+	backend := &DockerBackend{client: api, registries: testRegistries, observer: engine.NoopObserver{}}
+
+	if _, err := backend.ResolveImage(resolveTestOp(expandedWhoami, "Always")); err != nil {
+		t.Fatalf("ResolveImage must tolerate a nil store, got %v", err)
+	}
+}

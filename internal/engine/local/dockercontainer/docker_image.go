@@ -67,6 +67,9 @@ func (backend *DockerBackend) resolveManifestOwned(ctx context.Context, op engin
 	if err != nil {
 		return engine.ResolvedImage{}, err
 	}
+	if err := backend.releasePin(op); err != nil {
+		return engine.ResolvedImage{}, err
+	}
 	return engine.ResolvedImage{
 		Ref:     ref,
 		Digest:  pickRepoDigest(located.RepoDigests, repositoryOf(ref)),
@@ -166,6 +169,19 @@ func (backend *DockerBackend) pinNewest(ctx context.Context, op engine.ResolveIm
 		Source:    engine.ImageSourceResolved,
 		Requested: ref,
 	}, nil
+}
+
+// releasePin makes the artifact manifest-owned again: a pin belongs to the
+// pinned policy, and a stale one would surprise on return (design TD-6).
+func (backend *DockerBackend) releasePin(op engine.ResolveImageOp) error {
+	pins, ok := backend.pinStore()
+	if !ok {
+		return nil
+	}
+	if err := pins.Release(op.Team, op.Name); err != nil {
+		return fmt.Errorf("releasing image pin for %s/%s: %w", op.Team, op.Name, err)
+	}
+	return nil
 }
 
 func (backend *DockerBackend) pinStore() (state.ImagePinStore, bool) {
