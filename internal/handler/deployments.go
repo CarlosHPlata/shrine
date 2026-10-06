@@ -69,17 +69,35 @@ func shortContainerID(id string) string {
 	return id[:12]
 }
 
-func printDeploymentsTable(deployments []teamedDeployment) {
-	fmt.Printf("%-20s %-30s %-15s %-15s\n", "TEAM", "NAME", "KIND", "CONTAINER ID")
-	fmt.Println(strings.Repeat("-", 83))
+const deploymentRowFormat = "%-20s %-30s %-15s %-40s %-15s\n"
+
+func valueOrUnknown(value string) string {
+	if value == "" {
+		return "-"
+	}
+	return value
+}
+
+func formatDeploymentsTable(deployments []teamedDeployment) string {
+	var b strings.Builder
+	header := fmt.Sprintf(deploymentRowFormat, "TEAM", "NAME", "KIND", "VERSION", "CONTAINER ID")
+	b.WriteString(header)
+	b.WriteString(strings.Repeat("-", len(strings.TrimSuffix(header, "\n"))))
+	b.WriteString("\n")
 	for _, td := range deployments {
-		fmt.Printf("%-20s %-30s %-15s %-15s\n",
+		fmt.Fprintf(&b, deploymentRowFormat,
 			td.Team,
 			td.Deployment.Name,
 			td.Deployment.Kind,
+			valueOrUnknown(td.Deployment.Image),
 			shortContainerID(td.Deployment.ContainerID),
 		)
 	}
+	return b.String()
+}
+
+func printDeploymentsTable(deployments []teamedDeployment) {
+	fmt.Print(formatDeploymentsTable(deployments))
 }
 
 func ListApplications(team string, store *state.Store) error {
@@ -302,14 +320,22 @@ func findApplicationRecord(store *state.Store, team, name string) bool {
 	return false
 }
 
-func printDeploymentDetail(team string, d state.Deployment) {
+func formatDeploymentDetail(team string, d state.Deployment) string {
 	hashPreview := d.ConfigHash
 	if len(hashPreview) > 16 {
 		hashPreview = hashPreview[:16] + "..."
 	}
-	fmt.Printf("Name:         %s\n", d.Name)
-	fmt.Printf("Team:         %s\n", team)
-	fmt.Printf("Kind:         %s\n", d.Kind)
-	fmt.Printf("Container ID: %s\n", d.ContainerID)
-	fmt.Printf("Config Hash:  %s\n", hashPreview)
+	var b strings.Builder
+	fmt.Fprintf(&b, "Name:         %s\n", d.Name)
+	fmt.Fprintf(&b, "Team:         %s\n", team)
+	fmt.Fprintf(&b, "Kind:         %s\n", d.Kind)
+	fmt.Fprintf(&b, "Image:        %s\n", valueOrUnknown(d.Image))
+	fmt.Fprintf(&b, "Pull policy:  %s\n", valueOrUnknown(d.Policy))
+	fmt.Fprintf(&b, "Container ID: %s\n", d.ContainerID)
+	fmt.Fprintf(&b, "Config Hash:  %s\n", hashPreview)
+	return b.String()
+}
+
+func printDeploymentDetail(team string, d state.Deployment) {
+	fmt.Print(formatDeploymentDetail(team, d))
 }

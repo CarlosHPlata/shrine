@@ -18,6 +18,7 @@ func (backend *DockerBackend) CreateContainer(op engine.CreateContainerOp) error
 	ctx := context.Background()
 	cName := containerName(op.Team, op.Name)
 	netName := networkName(op.Team)
+	record := newDeploymentRecord(op)
 
 	// Expand the reg:<alias> form exactly once, before anything reads
 	// op.Image — the pull, the credential lookup, the config hash, and the
@@ -37,7 +38,7 @@ func (backend *DockerBackend) CreateContainer(op engine.CreateContainerOp) error
 		return err
 	}
 
-	wantHash := configHash(op, digest)
+	record.ConfigHash = configHash(op, digest)
 
 	existing, err := backend.client.ContainerInspect(ctx, cName)
 	switch {
@@ -48,8 +49,8 @@ func (backend *DockerBackend) CreateContainer(op engine.CreateContainerOp) error
 				fmt.Errorf("listing deployments for team %q: %w", op.Team, stateErr))
 		}
 
-		if isContainerUpToDate(deployments, op.Name, wantHash) {
-			return backend.ensureRunning(ctx, cName, existing, op, wantHash)
+		if isContainerUpToDate(deployments, op.Name, record.ConfigHash) {
+			return backend.ensureRunning(ctx, cName, existing, op, record)
 		}
 
 		if err := backend.removeStaleContainer(ctx, cName, existing.ID); err != nil {
@@ -61,10 +62,21 @@ func (backend *DockerBackend) CreateContainer(op engine.CreateContainerOp) error
 			fmt.Errorf("inspecting container %q: %w", cName, err))
 	}
 
-	return backend.createFreshContainer(ctx, op, cName, netName, wantHash)
+	return backend.createFreshContainer(ctx, op, cName, netName, record)
 }
 
-func (backend *DockerBackend) ensureRunning(ctx context.Context, cName string, existing container.InspectResponse, op engine.CreateContainerOp, wantHash string) error {
+// newDeploymentRecord is built before the registry alias is expanded because
+// get and describe show the reference as the manifest wrote it.
+func newDeploymentRecord(op engine.CreateContainerOp) state.Deployment {
+	return state.Deployment{
+		Kind:   op.Kind,
+		Name:   op.Name,
+		Image:  op.Image,
+		Policy: op.ImagePullPolicy,
+	}
+}
+
+func (backend *DockerBackend) ensureRunning(ctx context.Context, cName string, existing container.InspectResponse, op engine.CreateContainerOp, record state.Deployment) error {
 	if !existing.State.Running {
 		backend.emitInfo("container.start", map[string]string{"name": cName})
 		if err := backend.client.ContainerStart(ctx, existing.ID, container.StartOptions{}); err != nil {
@@ -73,7 +85,7 @@ func (backend *DockerBackend) ensureRunning(ctx context.Context, cName string, e
 		}
 	}
 	backend.emitPublished(op)
-	return backend.recordDeployment(op, existing.ID, wantHash)
+	return backend.recordDeployment(op.Team, record, existing.ID)
 }
 
 func (backend *DockerBackend) removeStaleContainer(ctx context.Context, cName, existingID string) error {
@@ -85,7 +97,7 @@ func (backend *DockerBackend) removeStaleContainer(ctx context.Context, cName, e
 	return nil
 }
 
-func (backend *DockerBackend) createFreshContainer(ctx context.Context, op engine.CreateContainerOp, cName, netName, wantHash string) error {
+func (backend *DockerBackend) createFreshContainer(ctx context.Context, op engine.CreateContainerOp, cName, netName string, record state.Deployment) error {
 	backend.emitInfo("container.fresh", map[string]string{"name": cName})
 
 	labels := map[string]string{
@@ -129,7 +141,7 @@ func (backend *DockerBackend) createFreshContainer(ctx context.Context, op engin
 
 	backend.emitFinished("container.created", map[string]string{"name": cName})
 	backend.emitPublished(op)
-	return backend.recordDeployment(op, created.ID, wantHash)
+	return backend.recordDeployment(op.Team, record, created.ID)
 }
 
 // emitPublished announces the resolved host-port mapping after the container
@@ -297,13 +309,9 @@ func (backend *DockerBackend) RemoveContainer(op engine.RemoveContainerOp) error
 	return nil
 }
 
-func (backend *DockerBackend) recordDeployment(op engine.CreateContainerOp, ID string, hash string) error {
-	return backend.state.Deployments.Record(op.Team, state.Deployment{
-		Kind:        op.Kind,
-		Name:        op.Name,
-		ContainerID: ID,
-		ConfigHash:  hash,
-	})
+func (backend *DockerBackend) recordDeployment(team string, record state.Deployment, containerID string) error {
+	record.ContainerID = containerID
+	return backend.state.Deployments.Record(team, record)
 }
 
 func configHash(op engine.CreateContainerOp, digest string) string {
