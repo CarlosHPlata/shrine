@@ -19,10 +19,11 @@ name is found in more than one team you will be prompted to disambiguate with
 --team.
 
 The record shows the image the manifest named and the effective pull policy.
-Under the Pinned policy it also shows the pin (exact version, readable version,
-and date) and, when the container runtime can be reached, the image the running
-container was started from; a pin that differs from the running image has been
-recorded but not yet deployed.
+Under the Pinned policy it also shows the pin: the exact version, the readable
+version it was resolved from, and the date. Every record shows the image the
+running container was started from, or "unavailable" with the reason when the
+container runtime cannot be reached. A pin that differs from the running image
+has been recorded but not yet deployed.
 
 ```
 shrine describe app [name] [flags]

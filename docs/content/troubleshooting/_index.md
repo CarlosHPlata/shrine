@@ -34,6 +34,22 @@ A `~`-prefixed path in `config.yml` (`specsDir`, `teamsDir`, or the Traefik `rou
 
 You changed `routing.domain`, an alias, `stripPrefix`, `tls`, or one of the gateway's ports, redeployed, and Traefik still serves the old route. The deploy output shows `Preserving operator-owned route file` or `Preserving operator-owned traefik.yml`: Shrine writes generated gateway files once and never rewrites them. Delete the file named in that line and redeploy, or edit it by hand. See [Generated gateway files are written once](/guides/traefik/#generated-gateway-files-are-written-once).
 
+## A deploy stops because a pinned version is no longer served
+
+The deploy fails before it creates, changes, or removes anything, with a message like this:
+
+```text
+Error: application "api": pinned exact version "traefik/whoami@sha256:3f2a9c1b4d7ebacb024fcc9cc3ba71306a98135816442f1b7d6817ed226ae2e2" for shop/api is no longer served by the registry; run "shrine bump application api" to choose another version: pulling image "traefik/whoami@sha256:3f2a9c1b4d7ebacb024fcc9cc3ba71306a98135816442f1b7d6817ed226ae2e2": Error response from daemon: manifest for traefik/whoami@sha256:3f2a9c1b4d7ebacb024fcc9cc3ba71306a98135816442f1b7d6817ed226ae2e2 not found: manifest unknown: manifest unknown
+```
+
+The artifact is pinned (`imagePullPolicy: Pinned`), the host no longer has its pinned exact version, and the registry did not serve it either. Registries that delete images no tag points at any more are the usual cause. No container or network was touched, so there is nothing to clean up.
+
+Run the command the message names. `shrine bump application api -v <version>` moves the pin to a version you choose; `shrine bump application api` without `-v` moves it to the newest. Then deploy again. For a resource the command is `shrine bump resource <name>`.
+
+Read the text after the last colon first. If it is an authentication or connection error rather than `manifest unknown`, Shrine could not reach the registry with the configured credentials, and the pinned version may still be there. Fix the `registries` entry in `config.yml` or the network, and deploy again before you bump.
+
+See [Managing image versions](/guides/image-versions/) for how pins work and how to keep them.
+
 ## See also
 
 - [`shrine apply`](/cli/apply/) — Deploy manifests

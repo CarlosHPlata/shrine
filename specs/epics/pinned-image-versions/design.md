@@ -358,5 +358,5 @@ Each ticket's spec starts from these. Identifiers are `T<n>-<nn>`; the PRD requi
 
 ### T8. Operator guide
 
-- **T8-01** [R-31] `docs/content/guides/image-versions.md` from captured output, linked from the guides index, the manifest reference, and troubleshooting.
+- **T8-01** [R-31] `docs/content/guides/image-versions.md` from captured output, linked from the guides index, the manifest reference, and troubleshooting. *Amended by T8 (spec 038):* the guide was written without a container runtime. Output the binary prints without a daemon (validation errors, dry runs, `generate`, `get` and `describe` over seeded state, bump refusals, `delete`) is captured from real runs by `specs/038-image-versions-guide/capture.sh`. Output that needs a daemon or a registry (deploy, bump, `status`, the running image) is assembled from the format strings in the code and checked against the integration suites' assertions, with placeholder exact versions shared with the manifest reference.
 - **T8-02** [R-28, R-29] Vocabulary pass over the pages T3 to T7 wrote, against section 5 of the PRD.

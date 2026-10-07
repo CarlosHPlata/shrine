@@ -14,8 +14,9 @@ var statusCmd = &cobra.Command{
 	Short: "Show live deployment status",
 	Long: `Show the live container status for all teams, or for a specific team if provided.
 
-The IMAGE column shows the image each container was started from: the exact
-version for a Pinned artifact, the tag reference otherwise.`,
+The IMAGE column shows the image each container was started from: for a
+Pinned artifact, its repository and the first twelve characters of its exact
+version; for any other artifact, the image reference it was created from.`,
 	Args: cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		backend, err := dockercontainer.NewDockerBackend(store, cfg.Registries, engine.NoopObserver{})
@@ -46,8 +47,9 @@ var statusAppCmd = &cobra.Command{
 	Short:   "Show live status for an application",
 	Long: `Show the live container status for a specific deployed application.
 
-The IMAGE column shows the image each container was started from: the exact
-version for a Pinned artifact, the tag reference otherwise.`,
+The IMAGE column shows the image each container was started from: for a
+Pinned artifact, its repository and the first twelve characters of its exact
+version; for any other artifact, the image reference it was created from.`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		backend, err := dockercontainer.NewDockerBackend(store, cfg.Registries, engine.NoopObserver{})
@@ -64,8 +66,9 @@ var statusResourceCmd = &cobra.Command{
 	Short:   "Show live status for a resource",
 	Long: `Show the live container status for a specific deployed resource.
 
-The IMAGE column shows the image each container was started from: the exact
-version for a Pinned artifact, the tag reference otherwise.`,
+The IMAGE column shows the image each container was started from: for a
+Pinned artifact, its repository and the first twelve characters of its exact
+version; for any other artifact, the image reference it was created from.`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		backend, err := dockercontainer.NewDockerBackend(store, cfg.Registries, engine.NoopObserver{})

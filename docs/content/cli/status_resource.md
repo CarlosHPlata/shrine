@@ -14,8 +14,9 @@ Show live status for a resource
 
 Show the live container status for a specific deployed resource.
 
-The IMAGE column shows the image each container was started from: the exact
-version for a Pinned artifact, the tag reference otherwise.
+The IMAGE column shows the image each container was started from: for a
+Pinned artifact, its repository and the first twelve characters of its exact
+version; for any other artifact, the image reference it was created from.
 
 ```
 shrine status resource [name] [flags]

@@ -50,8 +50,14 @@ var getApplicationsCmd = &cobra.Command{
 	Use:     "applications",
 	Aliases: []string{"apps"},
 	Short:   "List deployed applications",
-	Long:    `Display all deployed applications, optionally filtered by team.`,
-	Args:    cobra.NoArgs,
+	Long: `Display all deployed applications, optionally filtered by team.
+
+The VERSION column shows the version each artifact was deployed with: for a
+Pinned artifact, the readable version its pin was resolved from and the first
+twelve characters of its exact version, such as latest@3f2a9c1b4d7e; for any
+other artifact, the image reference its manifest named. The table is read from
+state, so it needs no container runtime.`,
+	Args: cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return handler.ListApplications(getTeamFlag, store)
 	},
@@ -61,8 +67,14 @@ var getResourcesCmd = &cobra.Command{
 	Use:     "resources",
 	Aliases: []string{"res"},
 	Short:   "List deployed resources",
-	Long:    `Display all deployed resources, optionally filtered by team.`,
-	Args:    cobra.NoArgs,
+	Long: `Display all deployed resources, optionally filtered by team.
+
+The VERSION column shows the version each artifact was deployed with: for a
+Pinned artifact, the readable version its pin was resolved from and the first
+twelve characters of its exact version, such as latest@3f2a9c1b4d7e; for any
+other artifact, the image reference its manifest named. The table is read from
+state, so it needs no container runtime.`,
+	Args: cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return handler.ListResources(getTeamFlag, store)
 	},
@@ -71,8 +83,14 @@ var getResourcesCmd = &cobra.Command{
 var getDeployedCmd = &cobra.Command{
 	Use:   "deployed",
 	Short: "List all deployed workloads",
-	Long:  `Display all deployed applications and resources, optionally filtered by team.`,
-	Args:  cobra.NoArgs,
+	Long: `Display all deployed applications and resources, optionally filtered by team.
+
+The VERSION column shows the version each artifact was deployed with: for a
+Pinned artifact, the readable version its pin was resolved from and the first
+twelve characters of its exact version, such as latest@3f2a9c1b4d7e; for any
+other artifact, the image reference its manifest named. The table is read from
+state, so it needs no container runtime.`,
+	Args: cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return handler.ListDeployed(getTeamFlag, store)
 	},

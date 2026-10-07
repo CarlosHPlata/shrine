@@ -14,6 +14,12 @@ List deployed resources
 
 Display all deployed resources, optionally filtered by team.
 
+The VERSION column shows the version each artifact was deployed with: for a
+Pinned artifact, the readable version its pin was resolved from and the first
+twelve characters of its exact version, such as latest@3f2a9c1b4d7e; for any
+other artifact, the image reference its manifest named. The table is read from
+state, so it needs no container runtime.
+
 ```
 shrine get resources [flags]
 ```
