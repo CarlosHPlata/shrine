@@ -44,8 +44,8 @@ Shows `Image:` (the reference the manifest named) and `Pull policy:`; under `Pin
 ### shrine bump application/resource <name>
 Aliases `app` and `res`. Moves a `Pinned` artifact to another version: `-v` takes a readable version (a tag such as `17` or `v1.4.0`) or an exact version (`sha256:…`); without `-v` the newest version is pinned. The repository always comes from the manifest. Resolves and verifies the version in the registry immediately, records the pin in `pins.txt`, prints the previous and the new version, and touches no container; the next `shrine deploy` applies it. Refuses a manifest-owned artifact (the message names the policy, `Always` or `IfNotPresent`) and an unknown name (the message names the manifest directory). Works for an artifact that was never deployed: its first deploy runs the bumped version. --team/-t verifies the manifest's owner (a name is unique per manifest directory); --path/-p as deploy; --dry-run prints the reference that would be resolved and writes nothing. Examples: shrine bump app my-api -v 1.4.0, shrine bump resource my-db -v 17, shrine bump app my-api --dry-run
 
-### shrine delete application <name>
-Forgets an application from state: releases its published host-port allocation (see `networking.publish`) and its image pin (see `imagePullPolicy: Pinned`), and drops the stale deployment record. Docker-authoritative — refuses while the container exists (run teardown first). --team/-t is optional (all teams searched, ambiguity errors); supports --dry-run. `shrine delete team <name>` also releases every host port and every image pin the team held.
+### shrine delete application/resource <name>
+Forgets an application from state: releases its published host-port allocation (see `networking.publish`) and its image pin (see `imagePullPolicy: Pinned`), and drops the stale deployment record. Docker-authoritative — refuses while the container exists (run teardown first). --team/-t is optional (all teams searched, ambiguity errors); supports --dry-run. `shrine delete resource <name>` is the same verb for a resource: it releases the image pin and drops the deployment record (a resource holds no host port), refuses while the container exists, and takes the same `--team` and `--dry-run`. Both verbs release only a pin of their own kind. `shrine delete team <name>` also releases every host port and every image pin the team held.
 
 ## Manifest Kinds
 
@@ -172,6 +172,7 @@ shrine/
 │   ├── deploy.go               # shrine deploy [--path] [--dry-run] + `team <name>` subcommand
 │   ├── bump.go                 # shrine bump application|resource <name> [-v] [--dry-run]
 │   ├── teardown.go             # shrine teardown <team>
+│   ├── delete.go               # shrine delete team|application|resource <name> [--team] [--dry-run]
 │   ├── generate.go             # shrine generate team|app|resource <name>
 │   └── ...
 ├── internal/
