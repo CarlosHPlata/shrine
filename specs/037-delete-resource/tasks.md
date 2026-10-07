@@ -127,7 +127,7 @@
 - [X] T019 [P] In `specs/epics/pinned-image-versions/design.md` record the two refinements of [contracts/docs-and-deviations.md](contracts/docs-and-deviations.md): under section 4.8 the kind guard on the pin read and why `Remove` stays by name; under the T7 list (T7-02) the test level of the ambiguity case and the home of the three-verb assertion. Keep TD-1 to TD-13 untouched
 - [X] T020 Run `graphify update .` and commit the regenerated `graphify-out/`
 - [X] T021 Final gates: `gofmt -l . | grep -v '^docs/tools' ` empty; `go vet ./...`; `go build ./... && go test ./... && go vet -tags integration ./tests/integration/...` green; `git diff --stat main -- tests/integration/ internal/ cmd/` shows only the files the plan's Source Code tree names; mark every task in this file `[X]`; walk quickstart steps 1 and 2 (no daemon) and confirm the output lines
-- [ ] T022 Pull request through `/speckit-git-pr`: Why section with `Closes #58`, the definition-of-done items listed, the two design refinements named; then a `/shrine-pr-review` pass with no open finding and green CI (which runs `TestDeleteResource`)
+- [X] T022 Pull request through `/speckit-git-pr`: Why section with `Closes #58`, the definition-of-done items listed, the two design refinements named; then a `/shrine-pr-review` pass with no open finding and green CI (which runs `TestDeleteResource`)
 
 ---
 

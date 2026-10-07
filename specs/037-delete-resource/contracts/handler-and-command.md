@@ -50,17 +50,17 @@ Unit tests touch no filesystem.
 var (deleteAppTeam, deleteResTeam string; deleteAppDryRun, deleteResDryRun bool)
 
 var deleteApplicationCmd = &cobra.Command{Use: "application [name]", Short: …unchanged…, Long: …unchanged…, Args: cobra.ExactArgs(1),
-	RunE: runDelete(manifest.ApplicationKind, &deleteAppTeam, &deleteAppDryRun)}
+	RunE: runDelete(handler.DeleteApplication, &deleteAppTeam, &deleteAppDryRun)}
 var deleteResourceCmd = &cobra.Command{Use: "resource [name]", Short: "Delete a resource from state and release its image pin", Long: …operator-output.md…, Args: cobra.ExactArgs(1),
-	RunE: runDelete(manifest.ResourceKind, &deleteResTeam, &deleteResDryRun)}
+	RunE: runDelete(handler.DeleteResource, &deleteResTeam, &deleteResDryRun)}
+
+type deleteHandler func(*state.Store, engine.ContainerBackend, handler.DeleteOptions) error
 
 func runDelete(del deleteHandler, team *string, dryRun *bool) func(*cobra.Command, []string) error {
 	return func(cmd *cobra.Command, args []string) error {
 		backend, err := app.NewQueryContainerBackend(cfg, store)
 		if err != nil { return err }
-		opts := handler.DeleteOptions{Name: args[0], Team: *team, DryRun: *dryRun}
-		if kind == manifest.ResourceKind { return handler.DeleteResource(store, backend, opts) }
-		return handler.DeleteApplication(store, backend, opts)
+		return del(store, backend, handler.DeleteOptions{Name: args[0], Team: *team, DryRun: *dryRun})
 	}
 }
 ```

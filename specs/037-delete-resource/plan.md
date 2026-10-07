@@ -78,7 +78,8 @@ specs/037-delete-resource/
 ```text
 cmd/
 ├── delete.go                    # + deleteResourceCmd, deleteResTeam/deleteResDryRun, runDelete(kind, team, dryRun); application RunE through runDelete
-└── delete_test.go               # NEW: TestDeleteResource_RequiresArg
+├── delete_test.go               # NEW: TestDeleteResource_RequiresArg
+└── args_test.go                 # NEW: assertRequiresOneArg shared by the delete, bump, and deploy arg-count tests
 
 internal/handler/
 ├── deployments.go               # DeleteApplicationOptions → DeleteOptions; DeleteApplication/DeleteResource wrappers; deleteArtifact; kind on resolveDeleteTeam, findImagePin, hasDeploymentRecord; hasHostPortStep
@@ -104,6 +105,8 @@ graphify-out/                               # graphify update .
 |---|---|---|
 | `findImagePin` reads a pin as the artifact's only when `pin.Kind` equals the requested kind; `Deployments.Remove` stays by name | the candidate search and the queries already apply the guard; one record, one pin, and one container exist per `team/name`, so a kind on `Remove` would change a store method for an unreachable case | research R3; `design.md` 4.8 with the PR |
 | The ambiguity-across-teams case for `delete resource` is unit-tested, not an integration scenario; the integration suite covers `--team` given and omitted and the three-verb release | the pinned world has one team; a second team holding a resource of the same name would need hand-written state files; `delete application`'s ambiguity is unit-only too | research R5; T7 scenarios in `design.md` with the PR |
+
+| `runDelete` takes the handler function rather than a kind and a branch; `hasDeploymentRecord` and `kindWordOf` name the boolean and the message word; the three cmd arg-count tests share `assertRequiresOneArg` in `cmd/args_test.go` | review findings CON1, CON2, DRY1, S1, CC1 of the `/shrine-pr-review` pass on PR #66 (constitution VII) | this table; the PR description |
 
 ## Complexity Tracking
 
