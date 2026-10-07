@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/CarlosHPlata/shrine/internal/engine"
+	"github.com/CarlosHPlata/shrine/internal/manifest"
 	"github.com/CarlosHPlata/shrine/internal/state"
 	"github.com/containerd/errdefs"
 	"github.com/docker/docker/api/types/image"
@@ -277,8 +278,8 @@ func TestRepositoryOf(t *testing.T) {
 	}
 	for ref, want := range cases {
 		t.Run(ref, func(t *testing.T) {
-			if got := repositoryOf(ref); got != want {
-				t.Errorf("repositoryOf(%q) = %q, want %q", ref, got, want)
+			if got := manifest.RepositoryOf(ref); got != want {
+				t.Errorf("RepositoryOf(%q) = %q, want %q", ref, got, want)
 			}
 		})
 	}
@@ -615,7 +616,7 @@ func TestResolveImage_PinnedNoLongerServedNamesTheWayOut(t *testing.T) {
 	}
 
 	want := `pinned exact version "ghcr.io/me/app@` + appDigest + `" for team-a/web is no longer served by the registry; ` +
-		`deploy the application under Always or IfNotPresent to release the pin, then return to Pinned: ` +
+		`run "shrine bump application web" to choose another version: ` +
 		`pulling image "ghcr.io/me/app@` + appDigest + `": manifest unknown`
 	if err.Error() != want {
 		t.Errorf("error:\ngot  %q\nwant %q", err.Error(), want)
@@ -661,5 +662,217 @@ func TestResolveImage_ManifestOwnedFailuresEmitNoResolveError(t *testing.T) {
 	}
 	if _, ok := obs.find("image.resolve", engine.StatusError); ok {
 		t.Error("manifest-owned failures keep T2's behaviour: no backend image.resolve error event")
+	}
+}
+
+const (
+	repinTarget = pinnedRepo + ":17"
+	newDigest   = "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+	newPinned   = pinnedRepo + "@" + newDigest
+)
+
+func repinTestOp(target, policy string) engine.ResolveImageOp {
+	op := resolveTestOp(pinnedTag, policy)
+	op.Repin = target
+	return op
+}
+
+func repinnedAPI(targets ...string) *scriptedDockerAPI {
+	api := newScriptedDockerAPI()
+	for _, target := range targets {
+		api.inspected[target] = image.InspectResponse{ID: pulledImageID, RepoDigests: []string{newPinned}}
+	}
+	return api
+}
+
+func TestResolveImage_RepinPullsTheTargetAndRecordsIt(t *testing.T) {
+	api := repinnedAPI(repinTarget)
+	pins := newFakePinStore(existingPin())
+	backend, obs := pinnedBackend(api, pins)
+
+	resolved, err := backend.ResolveImage(repinTestOp(repinTarget, "Pinned"))
+	if err != nil {
+		t.Fatalf("ResolveImage failed: %v", err)
+	}
+
+	assertCalls(t, api.calls, []string{"ImagePull", "ImageInspect"})
+	if !slices.Equal(api.pulledRefs, []string{repinTarget}) {
+		t.Errorf("pulled %v, want the target only", api.pulledRefs)
+	}
+	wantPin := state.ImagePin{Kind: "Application", Name: "web", Requested: repinTarget, Pinned: newPinned, PinnedAt: fixedNow}
+	if len(pins.puts) != 1 || pins.puts[0] != wantPin {
+		t.Errorf("puts = %+v, want exactly %+v", pins.puts, wantPin)
+	}
+	want := engine.ResolvedImage{Ref: newPinned, Digest: newDigest, ImageID: pulledImageID, Source: engine.ImageSourceRepinned, Requested: repinTarget}
+	if resolved != want {
+		t.Errorf("resolved = %+v, want %+v", resolved, want)
+	}
+	started, ok := obs.find("image.resolve", engine.StatusStarted)
+	if !ok {
+		t.Fatal("no image.resolve started event")
+	}
+	if started.Fields["ref"] != repinTarget {
+		t.Errorf("started ref = %q, want the target %q", started.Fields["ref"], repinTarget)
+	}
+	finished, ok := obs.find("image.resolve", engine.StatusFinished)
+	if !ok {
+		t.Fatal("no image.resolve finished event")
+	}
+	assertFields(t, finished.Fields, map[string]string{"source": "repinned", "requested": repinTarget, "ref": newPinned, "digest": newDigest})
+	if _, has := finished.Fields["pinned_at"]; has {
+		t.Errorf("a repin is a fresh pin and carries no pinned_at, got %q", finished.Fields["pinned_at"])
+	}
+}
+
+func TestResolveImage_RepinExpandsAnAlias(t *testing.T) {
+	const expanded = "docker.io/me/app:17"
+	api := newScriptedDockerAPI()
+	api.inspected[expanded] = image.InspectResponse{ID: pulledImageID, RepoDigests: []string{"me/app@" + newDigest}}
+	pins := newFakePinStore(existingPin())
+	backend, obs := pinnedBackend(api, pins)
+
+	resolved, err := backend.ResolveImage(repinTestOp("reg:myregistry/me/app:17", "Pinned"))
+	if err != nil {
+		t.Fatalf("ResolveImage failed: %v", err)
+	}
+
+	if !slices.Equal(api.pulledRefs, []string{expanded}) {
+		t.Errorf("pulled %v, want only the expanded target", api.pulledRefs)
+	}
+	if len(pins.puts) != 1 || pins.puts[0].Requested != expanded || pins.puts[0].Pinned != "docker.io/me/app@"+newDigest {
+		t.Errorf("puts = %+v, want the expanded target recorded", pins.puts)
+	}
+	if resolved.Requested != expanded {
+		t.Errorf("Requested = %q, want the expanded target", resolved.Requested)
+	}
+	started, _ := obs.find("image.resolve", engine.StatusStarted)
+	if started.Fields["ref"] != expanded {
+		t.Errorf("started ref = %q, want the expanded target %q", started.Fields["ref"], expanded)
+	}
+}
+
+func TestResolveImage_RepinByDigestRecordsTheDigestReference(t *testing.T) {
+	api := repinnedAPI(newPinned)
+	pins := newFakePinStore(existingPin())
+	backend, _ := pinnedBackend(api, pins)
+
+	resolved, err := backend.ResolveImage(repinTestOp(newPinned, "Pinned"))
+	if err != nil {
+		t.Fatalf("ResolveImage failed: %v", err)
+	}
+
+	if !slices.Equal(api.pulledRefs, []string{newPinned}) {
+		t.Errorf("pulled %v, want the digest reference", api.pulledRefs)
+	}
+	if len(pins.puts) != 1 || pins.puts[0].Requested != newPinned || pins.puts[0].Pinned != newPinned {
+		t.Errorf("puts = %+v, want Requested and Pinned both %q", pins.puts, newPinned)
+	}
+	if resolved.Requested != newPinned || resolved.Ref != newPinned {
+		t.Errorf("resolved = %+v, want Ref and Requested both %q", resolved, newPinned)
+	}
+	if got, want := manifest.ReadableVersion(resolved.Requested, resolved.Digest), manifest.ShortDigest(newDigest); got != want {
+		t.Errorf("readable version = %q, want the digest alone %q", got, want)
+	}
+}
+
+func TestResolveImage_RepinPullFailureLeavesThePin(t *testing.T) {
+	api := repinnedAPI(repinTarget)
+	cause := errors.New("manifest unknown")
+	api.pullErrs[repinTarget] = cause
+	pins := newFakePinStore(existingPin())
+	backend, obs := pinnedBackend(api, pins)
+
+	_, err := backend.ResolveImage(repinTestOp(repinTarget, "Pinned"))
+	if err == nil {
+		t.Fatal("a failed pull must fail the repin")
+	}
+	if !errors.Is(err, cause) {
+		t.Errorf("error %v must wrap the pull cause", err)
+	}
+	if _, ok := obs.find("image.pull", engine.StatusError); !ok {
+		t.Error("the failing pull must emit its own error event")
+	}
+	if _, ok := obs.find("image.resolve", engine.StatusFinished); ok {
+		t.Error("a failed repin must not emit image.resolve finished")
+	}
+	if len(pins.puts) != 0 {
+		t.Errorf("no pin may be written on failure, puts = %+v", pins.puts)
+	}
+	if pin, err := pins.Get("team-a", "web"); err != nil || pin != existingPin() {
+		t.Errorf("the existing pin must be untouched, got %+v, %v", pin, err)
+	}
+}
+
+func TestResolveImage_RepinWithoutADigestEmitsAResolveError(t *testing.T) {
+	api := newScriptedDockerAPI()
+	api.inspected[repinTarget] = image.InspectResponse{ID: pulledImageID}
+	pins := newFakePinStore(existingPin())
+	backend, obs := pinnedBackend(api, pins)
+
+	_, err := backend.ResolveImage(repinTestOp(repinTarget, "Pinned"))
+	if err == nil {
+		t.Fatal("an image without a registry digest must not be pinned")
+	}
+	want := `image "ghcr.io/me/app:17" carries no registry digest and cannot be pinned`
+	if err.Error() != want {
+		t.Errorf("error = %q, want %q", err.Error(), want)
+	}
+	resolveErr, ok := obs.find("image.resolve", engine.StatusError)
+	if !ok {
+		t.Fatal("the backend must emit an image.resolve error when the target cannot be pinned")
+	}
+	assertFields(t, resolveErr.Fields, map[string]string{"team": "team-a", "name": "web", "ref": repinTarget})
+	if len(pins.puts) != 0 {
+		t.Errorf("no pin may be written on failure, puts = %+v", pins.puts)
+	}
+}
+
+func TestResolveImage_RepinRequiresThePinnedPolicy(t *testing.T) {
+	api := repinnedAPI(repinTarget)
+	pins := newFakePinStore(existingPin())
+	backend, obs := pinnedBackend(api, pins)
+
+	_, err := backend.ResolveImage(repinTestOp(repinTarget, "Always"))
+	if err == nil {
+		t.Fatal("a repin under a manifest-owned policy must be refused")
+	}
+	want := "repin of team-a/web requires the Pinned policy, got Always"
+	if err.Error() != want {
+		t.Errorf("error = %q, want %q", err.Error(), want)
+	}
+	if len(api.calls) != 0 {
+		t.Errorf("a refused repin must make no docker call, calls = %v", api.calls)
+	}
+	if len(obs.events) != 0 {
+		t.Errorf("a refused repin must emit no event, events = %+v", obs.events)
+	}
+	if len(pins.puts) != 0 || len(pins.releases) != 0 {
+		t.Errorf("a refused repin must not touch the pin, puts=%v releases=%v", pins.puts, pins.releases)
+	}
+}
+
+func TestResolveImage_RepinUntaggedTargetPinsNewest(t *testing.T) {
+	api := repinnedAPI(pinnedRepo)
+	pins := newFakePinStore(existingPin())
+	backend, obs := pinnedBackend(api, pins)
+
+	resolved, err := backend.ResolveImage(repinTestOp(pinnedRepo, "Pinned"))
+	if err != nil {
+		t.Fatalf("ResolveImage failed: %v", err)
+	}
+
+	if !slices.Equal(api.pulledRefs, []string{pinnedRepo}) {
+		t.Errorf("pulled %v, want the untagged reference", api.pulledRefs)
+	}
+	if len(pins.puts) != 1 || pins.puts[0].Requested != pinnedRepo || pins.puts[0].Pinned != newPinned {
+		t.Errorf("puts = %+v, want Requested %q and Pinned %q", pins.puts, pinnedRepo, newPinned)
+	}
+	finished, ok := obs.find("image.resolve", engine.StatusFinished)
+	if !ok {
+		t.Fatal("no image.resolve finished event")
+	}
+	assertFields(t, finished.Fields, map[string]string{"requested": pinnedRepo, "source": "repinned"})
+	if got, want := manifest.ReadableVersion(resolved.Requested, resolved.Digest), "latest@"+manifest.ShortDigest(newDigest); got != want {
+		t.Errorf("readable version = %q, want %q", got, want)
 	}
 }

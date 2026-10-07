@@ -68,6 +68,7 @@ type ResolveImageOp struct {
 	Kind            string
 	Image           string
 	ImagePullPolicy string
+	Repin           string // the target to pin instead of Image; empty on every deploy path
 }
 
 // ResolvedImage keeps the pullable reference and the local image id apart:
@@ -88,6 +89,7 @@ const (
 	ImageSourceManifest = "manifest"
 	ImageSourceResolved = "resolved"
 	ImageSourcePinned   = "pinned"
+	ImageSourceRepinned = "repinned"
 )
 
 type ContainerBackend interface {

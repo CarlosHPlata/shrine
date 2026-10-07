@@ -2,7 +2,6 @@ package planner
 
 import (
 	"fmt"
-	"strings"
 
 	"github.com/CarlosHPlata/shrine/internal/manifest"
 )
@@ -122,7 +121,7 @@ func namesFixedVersion(image string) bool {
 }
 
 func fixedVersionImageError(kind, name, image string, fromDefault bool) error {
-	repository := repositoryWithoutVersion(image)
+	repository := manifest.RepositoryOf(image)
 	hint := fmt.Sprintf("use %q or %q", repository, repository+":latest")
 	return fmt.Errorf("%s %q: spec.image %q names a fixed version but the image pull policy is Pinned%s",
 		kind, name, image, fixedVersionRemedy(fromDefault, hint))
@@ -141,12 +140,4 @@ func fixedVersionRemedy(fromDefault bool, manifestHint string) string {
 		return configSourcedRemedy
 	}
 	return "; " + manifestHint
-}
-
-func repositoryWithoutVersion(image string) string {
-	repository, _, _ := strings.Cut(image, "@")
-	if tag := manifest.TagOf(repository); tag != "" {
-		repository = strings.TrimSuffix(repository, ":"+tag)
-	}
-	return repository
 }

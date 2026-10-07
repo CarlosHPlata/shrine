@@ -1,6 +1,9 @@
 package manifest
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestTagOf(t *testing.T) {
 	cases := map[string]string{
@@ -134,6 +137,26 @@ func TestDigestOf(t *testing.T) {
 		t.Run(ref, func(t *testing.T) {
 			if got := DigestOf(ref); got != want {
 				t.Errorf("DigestOf(%q) = %q, want %q", ref, got, want)
+			}
+		})
+	}
+}
+
+func TestRepositoryOf(t *testing.T) {
+	digest := "sha256:" + strings.Repeat("a", 64)
+	cases := map[string]string{
+		"postgres:17":                     "postgres",
+		"postgres":                        "postgres",
+		"127.0.0.1:5000/shrine/whoami:v2": "127.0.0.1:5000/shrine/whoami",
+		"127.0.0.1:5000/shrine/whoami":    "127.0.0.1:5000/shrine/whoami",
+		"ghcr.io/me/app@" + digest:        "ghcr.io/me/app",
+		"reg:lab/hello-api:1.2":           "reg:lab/hello-api",
+		"":                                "",
+	}
+	for ref, want := range cases {
+		t.Run(ref, func(t *testing.T) {
+			if got := RepositoryOf(ref); got != want {
+				t.Errorf("RepositoryOf(%q) = %q, want %q", ref, got, want)
 			}
 		})
 	}

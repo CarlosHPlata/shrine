@@ -350,7 +350,7 @@ func TestPinnedImagePolicy(t *testing.T) {
 			AssertFailure().
 			AssertStderrContains("is no longer served by the registry").
 			AssertStderrContains(`"` + w.registry.Host + "/shrine/whoami@" + zeroDigest + `"`).
-			AssertStderrContains("deploy the ")
+			AssertStderrContains(`run "shrine bump application whoami-pinned" to choose another version`)
 		tc.AssertContainerNotExists(pinnedApp)
 		tc.AssertContainerNotExists(pinnedResource)
 		tc.AssertNetworkNotExists("shrine." + testTeam + ".private")
