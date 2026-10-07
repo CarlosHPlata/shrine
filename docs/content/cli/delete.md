@@ -31,5 +31,6 @@ Remove resources from the platform state.
 
 * [shrine](shrine/)	 - shrine is a CLI tool that interprets declarative YAML manifests and orchestrates Docker containers.
 * [shrine delete application](shrine-delete-application/)	 - Delete an application from state and release its host port and image pin
+* [shrine delete resource](shrine-delete-resource/)	 - Delete a resource from state and release its image pin
 * [shrine delete team](shrine-delete-team/)	 - Delete a team from state
 

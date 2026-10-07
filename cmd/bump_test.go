@@ -12,19 +12,7 @@ import (
 
 func TestBump_RequiresArg(t *testing.T) {
 	for _, sub := range []string{"application", "app", "resource", "res"} {
-		t.Run(sub, func(t *testing.T) {
-			var out bytes.Buffer
-			cmd.SetOutput(&out)
-			cmd.SetArgs([]string{"bump", sub, "--state-dir", t.TempDir(), "--config-dir", t.TempDir()})
-
-			err := cmd.Execute()
-			if err == nil {
-				t.Fatalf("expected error when 'bump %s' is invoked without a name", sub)
-			}
-			if !strings.Contains(err.Error(), "accepts 1 arg") {
-				t.Errorf("expected Cobra arg-count error, got: %v", err)
-			}
-		})
+		t.Run(sub, func(t *testing.T) { assertRequiresOneArg(t, "bump", sub) })
 	}
 }
 

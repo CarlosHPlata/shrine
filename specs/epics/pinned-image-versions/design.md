@@ -236,7 +236,7 @@ One `ResolveImageOp` per step, in step order, from the step's manifest. The firs
 ### 4.8 Delete
 
 - `DeleteApplication` releases the pin after the host port. `DeleteTeam` calls `ReleaseTeam` after releasing host ports. Both in T3.
-- `DeleteResource` in T7 is `DeleteApplication` generalised over the kind: no host port, same refusal while the container exists, record and pin released, `--team` and `--dry-run`.
+- `DeleteResource` in T7 is `DeleteApplication` generalised over the kind: no host port, same refusal while the container exists, record and pin released, `--team` and `--dry-run`. *Amended by T7 (spec 037):* `findImagePin` reads a pin as the artifact's only when `pin.Kind` equals the requested kind, the guard the candidate search and the queries already apply, so `delete application` and `delete resource` never release each other's pin; `Deployments.Remove` stays by name because one record, one pin, and one container exist per `team/name`, so a kind on `Remove` would guard an unreachable case.
 
 ### 4.9 Events and rendering
 
@@ -353,7 +353,7 @@ Each ticket's spec starts from these. Identifiers are `T<n>-<nn>`; the PRD requi
 ### T7. shrine delete resource and pin release on every delete
 
 - **T7-01** [R-27] `DeleteResource` as the kind-generalised `DeleteApplication`. Where: `internal/handler/deployments.go`; `cmd/delete.go`.
-- **T7-02** [R-11] Every delete verb releases pins, asserted end to end.
+- **T7-02** [R-11] Every delete verb releases pins, asserted end to end. *Amended by T7 (spec 037):* the ambiguity-across-teams case for `delete resource` is a unit test, as it is for `delete application`; the integration suite covers `--team` given and omitted, and the three-verb pin-release assertion lives in `TestDeleteResource` in the delete suite (`tests/integration/delete_test.go`).
 - **T7-03** [R-30] CLI page; `AGENTS.md` CLI reference.
 
 ### T8. Operator guide

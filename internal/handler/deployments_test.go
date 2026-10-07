@@ -1,7 +1,10 @@
 package handler
 
 import (
+	"bytes"
 	"errors"
+	"io"
+	"os"
 	"strings"
 	"testing"
 
@@ -125,7 +128,7 @@ func TestDeleteApplication_RefusesWhileContainerExists(t *testing.T) {
 	store := deleteTestStore([]string{"demo"}, state.HostPortMap{"demo/api": 30000}, nil)
 	backend := &stubContainerBackend{existing: map[string]bool{"demo.api": true}}
 
-	err := DeleteApplication(store, backend, DeleteApplicationOptions{Name: "api"})
+	err := DeleteApplication(store, backend, DeleteOptions{Name: "api"})
 	if err == nil {
 		t.Fatal("expected a refusal while the container exists")
 	}
@@ -144,7 +147,7 @@ func TestDeleteApplication_ReleasesPortAndRecord(t *testing.T) {
 	)
 	backend := &stubContainerBackend{existing: map[string]bool{}}
 
-	if err := DeleteApplication(store, backend, DeleteApplicationOptions{Name: "api"}); err != nil {
+	if err := DeleteApplication(store, backend, DeleteOptions{Name: "api"}); err != nil {
 		t.Fatalf("DeleteApplication failed: %v", err)
 	}
 
@@ -161,10 +164,10 @@ func TestDeleteApplication_IdempotentWhenNothingHeld(t *testing.T) {
 	store := deleteTestStore([]string{"demo"}, state.HostPortMap{}, nil)
 	backend := &stubContainerBackend{existing: map[string]bool{}}
 
-	if err := DeleteApplication(store, backend, DeleteApplicationOptions{Name: "ghost"}); err != nil {
+	if err := DeleteApplication(store, backend, DeleteOptions{Name: "ghost"}); err != nil {
 		t.Errorf("deleting nothing should be a soft success, got: %v", err)
 	}
-	if err := DeleteApplication(store, backend, DeleteApplicationOptions{Name: "ghost", Team: "demo"}); err != nil {
+	if err := DeleteApplication(store, backend, DeleteOptions{Name: "ghost", Team: "demo"}); err != nil {
 		t.Errorf("deleting nothing with an explicit team should be a soft success, got: %v", err)
 	}
 }
@@ -175,7 +178,7 @@ func TestDeleteApplication_DryRunWritesNothing(t *testing.T) {
 	)
 	backend := &stubContainerBackend{existing: map[string]bool{}}
 
-	if err := DeleteApplication(store, backend, DeleteApplicationOptions{Name: "api", DryRun: true}); err != nil {
+	if err := DeleteApplication(store, backend, DeleteOptions{Name: "api", DryRun: true}); err != nil {
 		t.Fatalf("dry-run DeleteApplication failed: %v", err)
 	}
 
@@ -193,7 +196,7 @@ func TestDeleteApplication_AmbiguousAcrossTeams(t *testing.T) {
 		state.HostPortMap{"demo/api": 30000, "media/api": 30001}, nil)
 	backend := &stubContainerBackend{existing: map[string]bool{}}
 
-	err := DeleteApplication(store, backend, DeleteApplicationOptions{Name: "api"})
+	err := DeleteApplication(store, backend, DeleteOptions{Name: "api"})
 	if err == nil {
 		t.Fatal("expected an ambiguity error")
 	}
@@ -203,7 +206,7 @@ func TestDeleteApplication_AmbiguousAcrossTeams(t *testing.T) {
 	}
 
 	// Disambiguated with --team it proceeds.
-	if err := DeleteApplication(store, backend, DeleteApplicationOptions{Name: "api", Team: "demo"}); err != nil {
+	if err := DeleteApplication(store, backend, DeleteOptions{Name: "api", Team: "demo"}); err != nil {
 		t.Fatalf("explicit --team should disambiguate, got: %v", err)
 	}
 	if _, err := store.HostPorts.GetHostPort("media", "api"); err != nil {
@@ -285,7 +288,7 @@ func TestDeleteApplication_ReleasesThePin(t *testing.T) {
 	store.ImagePins = newMemImagePinStore(apiPin())
 	backend := &stubContainerBackend{existing: map[string]bool{}}
 
-	if err := DeleteApplication(store, backend, DeleteApplicationOptions{Name: "api"}); err != nil {
+	if err := DeleteApplication(store, backend, DeleteOptions{Name: "api"}); err != nil {
 		t.Fatalf("DeleteApplication failed: %v", err)
 	}
 
@@ -300,7 +303,7 @@ func TestDeleteApplication_DryRunKeepsThePin(t *testing.T) {
 	store.ImagePins = newMemImagePinStore(apiPin())
 	backend := &stubContainerBackend{existing: map[string]bool{}}
 
-	if err := DeleteApplication(store, backend, DeleteApplicationOptions{Name: "api", DryRun: true}); err != nil {
+	if err := DeleteApplication(store, backend, DeleteOptions{Name: "api", DryRun: true}); err != nil {
 		t.Fatalf("dry-run DeleteApplication failed: %v", err)
 	}
 
@@ -316,7 +319,7 @@ func TestDeleteApplication_PinAloneIsFoundAndReleased(t *testing.T) {
 	store.ImagePins = newMemImagePinStore(apiPin())
 	backend := &stubContainerBackend{existing: map[string]bool{}}
 
-	if err := DeleteApplication(store, backend, DeleteApplicationOptions{Name: "api"}); err != nil {
+	if err := DeleteApplication(store, backend, DeleteOptions{Name: "api"}); err != nil {
 		t.Fatalf("DeleteApplication failed: %v", err)
 	}
 
@@ -329,8 +332,244 @@ func TestDeleteApplication_ToleratesAStoreWithoutPins(t *testing.T) {
 	store := deleteTestStore([]string{"demo"}, state.HostPortMap{"demo/api": 30000}, nil)
 	backend := &stubContainerBackend{existing: map[string]bool{}}
 
-	if err := DeleteApplication(store, backend, DeleteApplicationOptions{Name: "api"}); err != nil {
+	if err := DeleteApplication(store, backend, DeleteOptions{Name: "api"}); err != nil {
 		t.Fatalf("DeleteApplication must tolerate a nil ImagePins store, got %v", err)
+	}
+}
+
+func cachePin() state.ImagePin {
+	return state.ImagePin{Kind: manifest.ResourceKind, Name: "cache", Requested: "ghcr.io/me/cache:latest", Pinned: "ghcr.io/me/cache@sha256:abc"}
+}
+
+// cacheDeleteStore holds a torn-down resource: its record and its pin, with
+// no host-port store at all so the resource path is proven never to consult one.
+func cacheDeleteStore() *state.Store {
+	store := deleteTestStore([]string{"demo"}, nil,
+		map[string][]state.Deployment{"demo": {{Kind: manifest.ResourceKind, Name: "cache"}}})
+	store.HostPorts = nil
+	store.ImagePins = newMemImagePinStore(cachePin())
+	return store
+}
+
+// captureStdout runs fn with os.Stdout redirected through an in-memory pipe
+// and returns what it printed.
+func captureStdout(t *testing.T, fn func()) string {
+	t.Helper()
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("os.Pipe: %v", err)
+	}
+	orig := os.Stdout
+	os.Stdout = w
+	done := make(chan string)
+	go func() {
+		var buf bytes.Buffer
+		_, _ = io.Copy(&buf, r)
+		done <- buf.String()
+	}()
+	defer func() { os.Stdout = orig }()
+	fn()
+	_ = w.Close()
+	os.Stdout = orig
+	return <-done
+}
+
+func TestDeleteResource_ReleasesPinAndRecord(t *testing.T) {
+	store := cacheDeleteStore()
+	backend := &stubContainerBackend{existing: map[string]bool{}}
+
+	if err := DeleteResource(store, backend, DeleteOptions{Name: "cache"}); err != nil {
+		t.Fatalf("DeleteResource failed: %v", err)
+	}
+
+	if _, err := store.ImagePins.Get("demo", "cache"); !errors.Is(err, state.ErrImagePinNotFound) {
+		t.Errorf("the pin should be released, got %v", err)
+	}
+	records, _ := store.Deployments.List("demo")
+	if len(records) != 0 {
+		t.Errorf("the stale deployment record should be removed, got %v", records)
+	}
+}
+
+// A pin alone, with no record, still locates the team and is released: a
+// torn-down pinned resource may keep only its pin.
+func TestDeleteResource_PinAloneIsFoundAndReleased(t *testing.T) {
+	store := deleteTestStore([]string{"demo"}, nil, nil)
+	store.HostPorts = nil
+	store.ImagePins = newMemImagePinStore(cachePin())
+	backend := &stubContainerBackend{existing: map[string]bool{}}
+
+	if err := DeleteResource(store, backend, DeleteOptions{Name: "cache"}); err != nil {
+		t.Fatalf("DeleteResource failed: %v", err)
+	}
+
+	if _, err := store.ImagePins.Get("demo", "cache"); !errors.Is(err, state.ErrImagePinNotFound) {
+		t.Errorf("the pin should be released, got %v", err)
+	}
+}
+
+func TestDeleteResource_IdempotentWhenNothingHeld(t *testing.T) {
+	store := deleteTestStore([]string{"demo"}, nil, nil)
+	store.ImagePins = newMemImagePinStore()
+	backend := &stubContainerBackend{existing: map[string]bool{}}
+
+	if err := DeleteResource(store, backend, DeleteOptions{Name: "ghost"}); err != nil {
+		t.Errorf("deleting nothing should be a soft success, got: %v", err)
+	}
+	if err := DeleteResource(store, backend, DeleteOptions{Name: "ghost", Team: "demo"}); err != nil {
+		t.Errorf("deleting nothing with an explicit team should be a soft success, got: %v", err)
+	}
+}
+
+func TestDeleteResource_ToleratesAStoreWithoutPins(t *testing.T) {
+	store := deleteTestStore([]string{"demo"}, nil,
+		map[string][]state.Deployment{"demo": {{Kind: manifest.ResourceKind, Name: "cache"}}})
+	backend := &stubContainerBackend{existing: map[string]bool{}}
+
+	if err := DeleteResource(store, backend, DeleteOptions{Name: "cache"}); err != nil {
+		t.Fatalf("DeleteResource must tolerate a nil ImagePins store, got %v", err)
+	}
+}
+
+// The kind guard keeps delete resource from touching an application that
+// shares the name.
+func TestDeleteResource_IgnoresAnApplicationOfTheSameName(t *testing.T) {
+	store := deleteTestStore([]string{"demo"}, nil,
+		map[string][]state.Deployment{"demo": {{Kind: manifest.ApplicationKind, Name: "api"}}})
+	store.ImagePins = newMemImagePinStore(apiPin())
+	backend := &stubContainerBackend{existing: map[string]bool{}}
+
+	if err := DeleteResource(store, backend, DeleteOptions{Name: "api"}); err != nil {
+		t.Fatalf("DeleteResource should be a soft success, got %v", err)
+	}
+
+	if _, err := store.ImagePins.Get("demo", "api"); err != nil {
+		t.Errorf("the application's pin must remain, got %v", err)
+	}
+	records, _ := store.Deployments.List("demo")
+	if len(records) != 1 {
+		t.Errorf("the application's record must remain, got %v", records)
+	}
+}
+
+func TestDeleteApplication_IgnoresAResourceOfTheSameName(t *testing.T) {
+	store := deleteTestStore([]string{"demo"}, state.HostPortMap{},
+		map[string][]state.Deployment{"demo": {{Kind: manifest.ResourceKind, Name: "cache"}}})
+	store.ImagePins = newMemImagePinStore(cachePin())
+	backend := &stubContainerBackend{existing: map[string]bool{}}
+
+	if err := DeleteApplication(store, backend, DeleteOptions{Name: "cache"}); err != nil {
+		t.Fatalf("DeleteApplication should be a soft success, got %v", err)
+	}
+
+	if _, err := store.ImagePins.Get("demo", "cache"); err != nil {
+		t.Errorf("the resource's pin must remain, got %v", err)
+	}
+	records, _ := store.Deployments.List("demo")
+	if len(records) != 1 {
+		t.Errorf("the resource's record must remain, got %v", records)
+	}
+}
+
+func TestDeleteResource_RefusesWhileContainerExists(t *testing.T) {
+	backend := &stubContainerBackend{existing: map[string]bool{"demo.cache": true}}
+
+	for _, dryRun := range []bool{false, true} {
+		store := cacheDeleteStore()
+		err := DeleteResource(store, backend, DeleteOptions{Name: "cache", DryRun: dryRun})
+		if err == nil {
+			t.Fatalf("dryRun=%v: expected a refusal while the container exists", dryRun)
+		}
+		for _, want := range []string{`resource "demo/cache" still has a container`, "shrine teardown demo"} {
+			if !strings.Contains(err.Error(), want) {
+				t.Errorf("dryRun=%v: refusal should contain %q, got: %v", dryRun, want, err)
+			}
+		}
+		if _, getErr := store.ImagePins.Get("demo", "cache"); getErr != nil {
+			t.Errorf("dryRun=%v: the pin must NOT be released when the delete is refused", dryRun)
+		}
+		records, _ := store.Deployments.List("demo")
+		if len(records) != 1 {
+			t.Errorf("dryRun=%v: the record must NOT be removed when the delete is refused, got %v", dryRun, records)
+		}
+	}
+}
+
+func TestDeleteResource_DryRunWritesNothing(t *testing.T) {
+	store := cacheDeleteStore()
+	backend := &stubContainerBackend{existing: map[string]bool{}}
+
+	var err error
+	out := captureStdout(t, func() {
+		err = DeleteResource(store, backend, DeleteOptions{Name: "cache", DryRun: true})
+	})
+	if err != nil {
+		t.Fatalf("dry-run DeleteResource failed: %v", err)
+	}
+
+	if _, err := store.ImagePins.Get("demo", "cache"); err != nil {
+		t.Error("dry-run must not release the pin")
+	}
+	records, _ := store.Deployments.List("demo")
+	if len(records) != 1 {
+		t.Error("dry-run must not remove the deployment record")
+	}
+	for _, want := range []string{
+		"[dry-run] would release image pin ghcr.io/me/cache@sha256:abc for demo/cache",
+		"[dry-run] would remove deployment record for demo/cache",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("dry-run output missing %q:\n%s", want, out)
+		}
+	}
+	if strings.Contains(out, "host port") {
+		t.Errorf("a resource dry run must not mention a host port:\n%s", out)
+	}
+}
+
+func TestDeleteResource_AmbiguousAcrossTeams(t *testing.T) {
+	store := deleteTestStore([]string{"demo", "media"}, nil, map[string][]state.Deployment{
+		"demo":  {{Kind: manifest.ResourceKind, Name: "cache"}},
+		"media": {{Kind: manifest.ResourceKind, Name: "cache"}},
+	})
+	backend := &stubContainerBackend{existing: map[string]bool{}}
+
+	err := DeleteResource(store, backend, DeleteOptions{Name: "cache"})
+	if err == nil {
+		t.Fatal("expected an ambiguity error")
+	}
+	if want := `ambiguous: resource "cache" found in teams [demo, media]`; !strings.Contains(err.Error(), want) {
+		t.Errorf("ambiguity error should contain %q, got: %v", want, err)
+	}
+
+	if err := DeleteResource(store, backend, DeleteOptions{Name: "cache", Team: "demo"}); err != nil {
+		t.Fatalf("explicit --team should disambiguate, got: %v", err)
+	}
+	if records, _ := store.Deployments.List("demo"); len(records) != 0 {
+		t.Errorf("demo's record should be removed, got %v", records)
+	}
+	if records, _ := store.Deployments.List("media"); len(records) != 1 {
+		t.Errorf("media's record must be untouched, got %v", records)
+	}
+}
+
+// Only resource state counts as a candidate: an application of the same name
+// in another team does not make the resource ambiguous.
+func TestDeleteResource_ApplicationInAnotherTeamIsNotACandidate(t *testing.T) {
+	store := deleteTestStore([]string{"demo", "media"}, nil, map[string][]state.Deployment{
+		"demo":  {{Kind: manifest.ApplicationKind, Name: "api"}},
+		"media": {{Kind: manifest.ResourceKind, Name: "api"}},
+	})
+	backend := &stubContainerBackend{existing: map[string]bool{}}
+
+	if err := DeleteResource(store, backend, DeleteOptions{Name: "api"}); err != nil {
+		t.Fatalf("DeleteResource should find media's resource without ambiguity, got: %v", err)
+	}
+	if records, _ := store.Deployments.List("media"); len(records) != 0 {
+		t.Errorf("media's resource record should be removed, got %v", records)
+	}
+	if records, _ := store.Deployments.List("demo"); len(records) != 1 {
+		t.Errorf("demo's application record must remain, got %v", records)
 	}
 }
 

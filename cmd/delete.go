@@ -2,7 +2,9 @@ package cmd
 
 import (
 	"github.com/CarlosHPlata/shrine/internal/app"
+	"github.com/CarlosHPlata/shrine/internal/engine"
 	"github.com/CarlosHPlata/shrine/internal/handler"
+	"github.com/CarlosHPlata/shrine/internal/state"
 	"github.com/spf13/cobra"
 )
 
@@ -25,6 +27,8 @@ var deleteTeamCmd = &cobra.Command{
 var (
 	deleteAppTeam   string
 	deleteAppDryRun bool
+	deleteResTeam   string
+	deleteResDryRun bool
 )
 
 var deleteApplicationCmd = &cobra.Command{
@@ -35,23 +39,39 @@ image pin, and drop its stale deployment record. The application's container
 must already be torn down — Docker state is authoritative and a live container
 blocks the delete.`,
 	Args: cobra.ExactArgs(1),
-	RunE: func(cmd *cobra.Command, args []string) error {
+	RunE: runDelete(handler.DeleteApplication, &deleteAppTeam, &deleteAppDryRun),
+}
+
+var deleteResourceCmd = &cobra.Command{
+	Use:   "resource [name]",
+	Short: "Delete a resource from state and release its image pin",
+	Long: `Forget a resource: release its image pin and drop its stale deployment
+record. The resource's container must already be torn down — Docker state is
+authoritative and a live container blocks the delete.`,
+	Args: cobra.ExactArgs(1),
+	RunE: runDelete(handler.DeleteResource, &deleteResTeam, &deleteResDryRun),
+}
+
+type deleteHandler func(*state.Store, engine.ContainerBackend, handler.DeleteOptions) error
+
+// Flag pointers are read at run time, after Cobra parsed them.
+func runDelete(del deleteHandler, team *string, dryRun *bool) func(*cobra.Command, []string) error {
+	return func(cmd *cobra.Command, args []string) error {
 		backend, err := app.NewQueryContainerBackend(cfg, store)
 		if err != nil {
 			return err
 		}
-		return handler.DeleteApplication(store, backend, handler.DeleteApplicationOptions{
-			Name:   args[0],
-			Team:   deleteAppTeam,
-			DryRun: deleteAppDryRun,
-		})
-	},
+		return del(store, backend, handler.DeleteOptions{Name: args[0], Team: *team, DryRun: *dryRun})
+	}
 }
 
 func init() {
 	rootCmd.AddCommand(deleteCmd)
 	deleteCmd.AddCommand(deleteTeamCmd)
 	deleteCmd.AddCommand(deleteApplicationCmd)
+	deleteCmd.AddCommand(deleteResourceCmd)
 	deleteApplicationCmd.Flags().StringVarP(&deleteAppTeam, "team", "t", "", "Team owning the application (searched automatically when omitted)")
 	deleteApplicationCmd.Flags().BoolVar(&deleteAppDryRun, "dry-run", false, "Print what would be released without changing state")
+	deleteResourceCmd.Flags().StringVarP(&deleteResTeam, "team", "t", "", "Team owning the resource (searched automatically when omitted)")
+	deleteResourceCmd.Flags().BoolVar(&deleteResDryRun, "dry-run", false, "Print what would be released without changing state")
 }
