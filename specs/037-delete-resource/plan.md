@@ -6,7 +6,7 @@
 
 ## Summary
 
-Ticket T3 made `delete application` and `delete team` release pins and left `DeleteApplication` as the one per-artifact delete: team resolution over host ports, application records, and application pins; refusal while `<team>.<name>` exists in Docker; dry-run lines; release of port, pin, and record in that order. This ticket generalises that body over the kind into an unexported `deleteArtifact`, keeps `DeleteApplication` as a one-line wrapper, adds `DeleteResource` as the second, and renames the shared options to `DeleteOptions`. The resource path skips the host-port step and otherwise prints the same lines with `resource` for `application`. The candidate search and the pin read both compare the pin's kind to the requested kind, so the two verbs never release each other's pin. `cmd/delete.go` gains `delete resource <name>` with `--team` and `--dry-run` through a shared `runDelete(kind)` dispatcher over `app.NewQueryContainerBackend`. The delete integration suite gains `TestDeleteResource` on T3's loopback-registry world, written first, including one scenario that runs all three delete verbs and asserts each releases its pins. Documentation: a generated `delete resource` page, the `delete` parent page, the manifest reference's "things that release a pin" sentence, and the `AGENTS.md` CLI reference and command tree.
+Ticket T3 made `delete application` and `delete team` release pins and left `DeleteApplication` as the one per-artifact delete: team resolution over host ports, application records, and application pins; refusal while `<team>.<name>` exists in Docker; dry-run lines; release of port, pin, and record in that order. This ticket generalises that body over the kind into an unexported `deleteArtifact`, keeps `DeleteApplication` as a one-line wrapper, adds `DeleteResource` as the second, and renames the shared options to `DeleteOptions`. The resource path skips the host-port step and otherwise prints the same lines with `resource` for `application`. The candidate search and the pin read both compare the pin's kind to the requested kind, so the two verbs never release each other's pin. `cmd/delete.go` gains `delete resource <name>` with `--team` and `--dry-run` through a shared `runDelete(handler)` dispatcher over `app.NewQueryContainerBackend`. The delete integration suite gains `TestDeleteResource` on T3's loopback-registry world, written first, including one scenario that runs all three delete verbs and asserts each releases its pins. Documentation: a generated `delete resource` page, the `delete` parent page, the manifest reference's "things that release a pin" sentence, and the `AGENTS.md` CLI reference and command tree.
 
 ## Technical Context
 
@@ -27,12 +27,12 @@ Ticket T3 made `delete application` and `delete team` release pins and left `Del
 | Principle | Gate Question | Status |
 |-----------|---------------|--------|
 | I. Declarative Manifest-First | Does this feature expose new capabilities via manifest fields (not CLI flags)? | [x] Pass: no new capability; delete is a state operation the PRD (R-27) defines as a command, mirroring the existing `delete application`. `--team` and `--dry-run` are the constitution's own required flags, not infrastructure |
-| II. Kubectl-Style CLI | Do new commands follow verb-first convention and include `--dry-run`? | [x] Pass: `shrine delete resource <name>`, resource type before the name, `--team` optional with automatic search and an ambiguity error, `--dry-run` with a print-only path. `cmd/delete.go` dispatches through `runDelete(kind)`; every rule lives in `internal/handler/deployments.go` |
+| II. Kubectl-Style CLI | Do new commands follow verb-first convention and include `--dry-run`? | [x] Pass: `shrine delete resource <name>`, resource type before the name, `--team` optional with automatic search and an ambiguity error, `--dry-run` with a print-only path. `cmd/delete.go` dispatches through `runDelete(handler)`; every rule lives in `internal/handler/deployments.go` |
 | III. Pluggable Backend | Is new infrastructure logic behind a backend interface (not engine core)? | [x] Pass: the only infrastructure call is `ContainerBackend.InspectContainer`, already used by `DeleteApplication`; interfaces and `engine.go` untouched; a nil backend is tolerated as today |
 | IV. Simplicity & YAGNI | Is every abstraction justified by three or more concrete usages? | [x] Pass: no new type beyond the renamed `DeleteOptions`; `deleteArtifact` is the extraction of a body two exported functions would otherwise duplicate; `hasHostPortStep` is a one-line predicate; `runDelete` replaces two identical `RunE` closures; no interface, no option pattern, no new package |
 | V. Integration-Test Gate | Does this phase map to an integration test phase using `NewDockerSuite` against a real binary? | [x] Pass: `TestDeleteResource` in `tests/integration/delete_test.go` on `newPinnedSuite` (loopback registry, real binary), written before the implementation; CI executes (ticket T7 integration scenarios) |
 | VI. Docker-Authoritative State | Does state update happen after Docker operations complete? | [x] Pass: the delete inspects Docker first and refuses while the container exists; state is released only after Docker reports it gone; an unreachable runtime fails the command before any release, as today |
-| VII. Clean Code & Readability | Is repeated logic extracted into named helpers? Are names self-documenting? | [x] Pass: `deleteArtifact`, `resolveDeleteTeam(kind)`, `findImagePin(kind)`, `findDeploymentRecord(kind)`, `hasHostPortStep`, `runDelete`; existing WHY comments kept, one updated to name both verbs |
+| VII. Clean Code & Readability | Is repeated logic extracted into named helpers? Are names self-documenting? | [x] Pass: `deleteArtifact`, `resolveDeleteTeam(kind)`, `findImagePin(kind)`, `hasDeploymentRecord(kind)`, `hasHostPortStep`, `runDelete`; existing WHY comments kept, one updated to name both verbs |
 
 **Post-Phase-1 re-check**: all gates still pass. Installations that never run `delete resource` see no change: `DeleteApplication`'s observable behaviour is preserved line for line (its unit tests keep their assertions), and the one internal change on its path, the kind guard on the pin read, cannot alter a result because one pin exists per `team/name` and the candidate search already applied the guard.
 
@@ -42,7 +42,7 @@ Every functional requirement of the spec is bound to the seam that satisfies it,
 
 | Spec | Design | Where |
 |---|---|---|
-| FR-001 | T7-01, R-27, 4.8 | `cmd/delete.go`: `deleteResourceCmd`, `-t/--team`, `--dry-run`, `cobra.ExactArgs(1)`, `runDelete(manifest.ResourceKind, …)` |
+| FR-001 | T7-01, R-27, 4.8 | `cmd/delete.go`: `deleteResourceCmd`, `-t/--team`, `--dry-run`, `cobra.ExactArgs(1)`, `runDelete(handler.DeleteResource, …)` |
 | FR-002 | T7-01, R-27, R2 | `resolveDeleteTeam(store, kind, name, team)`: records and pins of the requested kind; host ports only for applications; ambiguity error with the kind word; `--team` short-circuits |
 | FR-003 | T7-01, R-27, constitution VI | `deleteArtifact` step 2: `InspectContainer(team + "." + name)`; refusal message with the kind word; `app.NewQueryContainerBackend` failure surfaces before the handler |
 | FR-004 | T7-01, R-27, R1 | `deleteArtifact` steps 3 and 5: `hasHostPortStep(kind)` gates the port; pin then record; the per-line output and the nothing-held line |
@@ -81,7 +81,7 @@ cmd/
 └── delete_test.go               # NEW: TestDeleteResource_RequiresArg
 
 internal/handler/
-├── deployments.go               # DeleteApplicationOptions → DeleteOptions; DeleteApplication/DeleteResource wrappers; deleteArtifact; kind on resolveDeleteTeam, findImagePin, findDeploymentRecord; hasHostPortStep
+├── deployments.go               # DeleteApplicationOptions → DeleteOptions; DeleteApplication/DeleteResource wrappers; deleteArtifact; kind on resolveDeleteTeam, findImagePin, hasDeploymentRecord; hasHostPortStep
 └── deployments_test.go          # call sites → DeleteOptions; + TestDeleteResource_* (eight) and TestDeleteApplication_IgnoresAResourceOfTheSameName
 
 tests/integration/

@@ -314,25 +314,19 @@ type DeleteOptions struct {
 	DryRun bool
 }
 
-// DeleteApplication forgets an application: it releases the published
-// host-port allocation, the image pin, and drops the stale deployment record.
-// Docker is authoritative — while the container still exists the delete
-// refuses and points at teardown. The body is shared with DeleteResource.
+// DeleteApplication forgets an application: host port, pin, and stale record go.
 func DeleteApplication(store *state.Store, container engine.ContainerBackend, opts DeleteOptions) error {
 	return deleteArtifact(store, container, manifest.ApplicationKind, opts)
 }
 
-// DeleteResource forgets a resource: it releases the image pin and drops the
-// stale deployment record. Resources publish no host port, so there is none
-// to release. Docker is authoritative — while the container still exists the
-// delete refuses and points at teardown. The body is shared with
-// DeleteApplication.
+// DeleteResource forgets a resource: pin and stale record go; it holds no host port.
 func DeleteResource(store *state.Store, container engine.ContainerBackend, opts DeleteOptions) error {
 	return deleteArtifact(store, container, manifest.ResourceKind, opts)
 }
 
+// Docker is authoritative: a live container refuses the delete before any state is released.
 func deleteArtifact(store *state.Store, container engine.ContainerBackend, kind string, opts DeleteOptions) error {
-	kindWord := strings.ToLower(kind)
+	kindWord := kindWordOf(kind)
 	team, err := resolveDeleteTeam(store, kind, opts.Name, opts.Team)
 	if err != nil {
 		return err
@@ -356,8 +350,8 @@ func deleteArtifact(store *state.Store, container engine.ContainerBackend, kind 
 		port, hasPort = p, portErr == nil
 	}
 	pin, hasPin := findImagePin(store, team, kind, opts.Name)
-	record := findDeploymentRecord(store, team, kind, opts.Name)
-	nothingHeld := !hasPort && !hasPin && !record
+	hasRecord := hasDeploymentRecord(store, team, kind, opts.Name)
+	nothingHeld := !hasPort && !hasPin && !hasRecord
 
 	if opts.DryRun {
 		if hasPort {
@@ -366,7 +360,7 @@ func deleteArtifact(store *state.Store, container engine.ContainerBackend, kind 
 		if hasPin {
 			fmt.Printf("[dry-run] would release image pin %s for %s\n", pin.Pinned, ref)
 		}
-		if record {
+		if hasRecord {
 			fmt.Printf("[dry-run] would remove deployment record for %s\n", ref)
 		}
 		if nothingHeld {
@@ -387,7 +381,7 @@ func deleteArtifact(store *state.Store, container engine.ContainerBackend, kind 
 		}
 		fmt.Printf("Released image pin for %s.\n", ref)
 	}
-	if record {
+	if hasRecord {
 		if err := store.Deployments.Remove(team, opts.Name); err != nil {
 			return fmt.Errorf("removing deployment record for %s: %w", ref, err)
 		}
@@ -399,16 +393,12 @@ func deleteArtifact(store *state.Store, container engine.ContainerBackend, kind 
 	return nil
 }
 
-// hasHostPortStep holds only for applications: resources never publish a
-// host port, so their delete has no allocation to read or release.
+// Resources never publish a host port.
 func hasHostPortStep(kind string) bool {
 	return kind == manifest.ApplicationKind
 }
 
-// findImagePin reports the application's or resource's pin when the store
-// has one of the requested kind; a store without pins (older callers,
-// partial test stores) holds none. The kind guard keeps one verb from
-// releasing the other kind's pin when names collide within a team.
+// The kind guard keeps one delete verb from releasing the other kind's pin on a name collision.
 func findImagePin(store *state.Store, team, kind, name string) (state.ImagePin, bool) {
 	if store.ImagePins == nil {
 		return state.ImagePin{}, false
@@ -420,10 +410,7 @@ func findImagePin(store *state.Store, team, kind, name string) (state.ImagePin, 
 	return pin, true
 }
 
-// resolveDeleteTeam returns the team owning the application or resource,
-// searching every team's allocations, deployment records, and pins of that
-// kind when none was given. An empty result with a nil error means the
-// artifact is unknown everywhere.
+// An empty team with a nil error means the artifact is unknown everywhere.
 func resolveDeleteTeam(store *state.Store, kind, name, team string) (string, error) {
 	if team != "" {
 		return team, nil
@@ -478,10 +465,14 @@ func resolveDeleteTeam(store *state.Store, kind, name, team string) (string, err
 	}
 	sort.Strings(names)
 	return "", fmt.Errorf("ambiguous: %s %q found in teams [%s], use --team to disambiguate",
-		strings.ToLower(kind), name, strings.Join(names, ", "))
+		kindWordOf(kind), name, strings.Join(names, ", "))
 }
 
-func findDeploymentRecord(store *state.Store, team, kind, name string) bool {
+func kindWordOf(kind string) string {
+	return strings.ToLower(kind)
+}
+
+func hasDeploymentRecord(store *state.Store, team, kind, name string) bool {
 	deployments, err := store.Deployments.List(team)
 	if err != nil {
 		return false

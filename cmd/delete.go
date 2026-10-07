@@ -2,8 +2,9 @@ package cmd
 
 import (
 	"github.com/CarlosHPlata/shrine/internal/app"
+	"github.com/CarlosHPlata/shrine/internal/engine"
 	"github.com/CarlosHPlata/shrine/internal/handler"
-	"github.com/CarlosHPlata/shrine/internal/manifest"
+	"github.com/CarlosHPlata/shrine/internal/state"
 	"github.com/spf13/cobra"
 )
 
@@ -38,7 +39,7 @@ image pin, and drop its stale deployment record. The application's container
 must already be torn down — Docker state is authoritative and a live container
 blocks the delete.`,
 	Args: cobra.ExactArgs(1),
-	RunE: runDelete(manifest.ApplicationKind, &deleteAppTeam, &deleteAppDryRun),
+	RunE: runDelete(handler.DeleteApplication, &deleteAppTeam, &deleteAppDryRun),
 }
 
 var deleteResourceCmd = &cobra.Command{
@@ -48,22 +49,19 @@ var deleteResourceCmd = &cobra.Command{
 record. The resource's container must already be torn down — Docker state is
 authoritative and a live container blocks the delete.`,
 	Args: cobra.ExactArgs(1),
-	RunE: runDelete(manifest.ResourceKind, &deleteResTeam, &deleteResDryRun),
+	RunE: runDelete(handler.DeleteResource, &deleteResTeam, &deleteResDryRun),
 }
 
-// runDelete builds the RunE shared by delete application and delete
-// resource; the flag pointers are read at run time, after Cobra parsed them.
-func runDelete(kind string, team *string, dryRun *bool) func(*cobra.Command, []string) error {
+type deleteHandler func(*state.Store, engine.ContainerBackend, handler.DeleteOptions) error
+
+// Flag pointers are read at run time, after Cobra parsed them.
+func runDelete(del deleteHandler, team *string, dryRun *bool) func(*cobra.Command, []string) error {
 	return func(cmd *cobra.Command, args []string) error {
 		backend, err := app.NewQueryContainerBackend(cfg, store)
 		if err != nil {
 			return err
 		}
-		opts := handler.DeleteOptions{Name: args[0], Team: *team, DryRun: *dryRun}
-		if kind == manifest.ResourceKind {
-			return handler.DeleteResource(store, backend, opts)
-		}
-		return handler.DeleteApplication(store, backend, opts)
+		return del(store, backend, handler.DeleteOptions{Name: args[0], Team: *team, DryRun: *dryRun})
 	}
 }
 

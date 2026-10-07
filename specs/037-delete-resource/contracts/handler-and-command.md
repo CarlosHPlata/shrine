@@ -17,7 +17,7 @@ func DeleteResource(store *state.Store, container engine.ContainerBackend, opts 
 func deleteArtifact(store *state.Store, container engine.ContainerBackend, kind string, opts DeleteOptions) error
 func resolveDeleteTeam(store *state.Store, kind, name, team string) (string, error)
 func findImagePin(store *state.Store, team, kind, name string) (state.ImagePin, bool)
-func findDeploymentRecord(store *state.Store, team, kind, name string) bool   // renamed from findApplicationRecord
+func hasDeploymentRecord(store *state.Store, team, kind, name string) bool   // renamed from findApplicationRecord
 func hasHostPortStep(kind string) bool                                         // kind == manifest.ApplicationKind
 ```
 
@@ -25,7 +25,7 @@ Order inside `deleteArtifact`, unchanged from today's `DeleteApplication` with t
 
 1. `resolveDeleteTeam`; empty team → `Nothing to delete for <kindWord> %q.` and return nil.
 2. `container != nil` and `InspectContainer(team + "." + name)` succeeds → refusal error `<kindWord> %q still has a container; run "shrine teardown %s" first` (ref form `team/name`).
-3. Read held state: host port only when `hasHostPortStep(kind)`; pin through `findImagePin` with the kind guard; record through `findDeploymentRecord`.
+3. Read held state: host port only when `hasHostPortStep(kind)`; pin through `findImagePin` with the kind guard; record through `hasDeploymentRecord`.
 4. `opts.DryRun` → the `[dry-run]` lines, return nil.
 5. Release host port (applications), release pin, remove record, each printing its line; `nothingHeld` prints the in-team line.
 
@@ -54,7 +54,7 @@ var deleteApplicationCmd = &cobra.Command{Use: "application [name]", Short: …u
 var deleteResourceCmd = &cobra.Command{Use: "resource [name]", Short: "Delete a resource from state and release its image pin", Long: …operator-output.md…, Args: cobra.ExactArgs(1),
 	RunE: runDelete(manifest.ResourceKind, &deleteResTeam, &deleteResDryRun)}
 
-func runDelete(kind string, team *string, dryRun *bool) func(*cobra.Command, []string) error {
+func runDelete(del deleteHandler, team *string, dryRun *bool) func(*cobra.Command, []string) error {
 	return func(cmd *cobra.Command, args []string) error {
 		backend, err := app.NewQueryContainerBackend(cfg, store)
 		if err != nil { return err }

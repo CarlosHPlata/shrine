@@ -29,7 +29,7 @@ The values `deleteArtifact` reads before deciding, in order:
 | container exists | `container.InspectContainer(team + "." + name)` returns no error | refusal | refusal |
 | `port, hasPort` | `store.HostPorts.GetHostPort(team, name)` | read | never read; `hasPort` is false |
 | `pin, hasPin` | `findImagePin(store, team, kind, name)`: `ImagePins.Get` and `pin.Kind == kind` | read | read |
-| `record` | `findDeploymentRecord(store, team, kind, name)`: a record with that name and kind in `Deployments.List(team)` | read | read |
+| `record` | `hasDeploymentRecord(store, team, kind, name)`: a record with that name and kind in `Deployments.List(team)` | read | read |
 | `nothingHeld` | `!hasPort && !hasPin && !record` | | |
 
 Release order, unchanged from `DeleteApplication`: host port (applications only), pin, record. Each step prints one line; a failure returns at that step with the earlier releases kept.
@@ -51,7 +51,7 @@ delete
 └── resource    [name] [-t team] [--dry-run] NEW
 ```
 
-Per-subcommand flag variables (`deleteAppTeam`, `deleteAppDryRun`, `deleteResTeam`, `deleteResDryRun`); `runDelete(kind, team *string, dryRun *bool)` builds `app.NewQueryContainerBackend(cfg, store)` and dispatches by kind.
+Per-subcommand flag variables (`deleteAppTeam`, `deleteAppDryRun`, `deleteResTeam`, `deleteResDryRun`); `runDelete(del deleteHandler, team *string, dryRun *bool)` builds `app.NewQueryContainerBackend(cfg, store)` and dispatches by kind.
 
 ## 6. Integration world (`tests/integration`) — REUSED
 
