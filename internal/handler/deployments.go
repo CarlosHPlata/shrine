@@ -78,7 +78,45 @@ func valueOrUnknown(value string) string {
 	return value
 }
 
-func formatDeploymentsTable(deployments []teamedDeployment) string {
+// loadImagePins reads every pin once for a listing; a store without a pin
+// store (hand-built in tests) simply has none.
+func loadImagePins(store *state.Store) (map[string]state.ImagePin, error) {
+	if store.ImagePins == nil {
+		return map[string]state.ImagePin{}, nil
+	}
+	pins, err := store.ImagePins.ListAll()
+	if err != nil {
+		return nil, fmt.Errorf("listing image pins: %w", err)
+	}
+	return pins, nil
+}
+
+// pinFor finds the pin a deployment record points at. The pin key carries no
+// kind, so the kind is checked here.
+func pinFor(team string, d state.Deployment, pins map[string]state.ImagePin) (state.ImagePin, bool) {
+	pin, ok := pins[state.ImagePinKey(team, d.Name)]
+	if !ok || pin.Kind != d.Kind {
+		return state.ImagePin{}, false
+	}
+	return pin, true
+}
+
+func readablePin(pin state.ImagePin) string {
+	return manifest.ReadableVersion(pin.Requested, manifest.DigestOf(pin.Pinned))
+}
+
+// versionCell is the readable form of the pin for a Pinned record and the
+// reference the manifest named for every other one (design section 4.7).
+func versionCell(team string, d state.Deployment, pins map[string]state.ImagePin) string {
+	if d.Policy == manifest.ImagePullPolicyPinned {
+		if pin, ok := pinFor(team, d, pins); ok {
+			return readablePin(pin)
+		}
+	}
+	return valueOrUnknown(d.Image)
+}
+
+func formatDeploymentsTable(deployments []teamedDeployment, pins map[string]state.ImagePin) string {
 	var b strings.Builder
 	header := fmt.Sprintf(deploymentRowFormat, "TEAM", "NAME", "KIND", "VERSION", "CONTAINER ID")
 	b.WriteString(header)
@@ -89,15 +127,20 @@ func formatDeploymentsTable(deployments []teamedDeployment) string {
 			td.Team,
 			td.Deployment.Name,
 			td.Deployment.Kind,
-			valueOrUnknown(td.Deployment.Image),
+			versionCell(td.Team, td.Deployment, pins),
 			shortContainerID(td.Deployment.ContainerID),
 		)
 	}
 	return b.String()
 }
 
-func printDeploymentsTable(deployments []teamedDeployment) {
-	fmt.Print(formatDeploymentsTable(deployments))
+func printDeploymentsTable(deployments []teamedDeployment, store *state.Store) error {
+	pins, err := loadImagePins(store)
+	if err != nil {
+		return err
+	}
+	fmt.Print(formatDeploymentsTable(deployments, pins))
+	return nil
 }
 
 func ListApplications(team string, store *state.Store) error {
@@ -110,8 +153,7 @@ func ListApplications(team string, store *state.Store) error {
 		fmt.Println("No applications deployed.")
 		return nil
 	}
-	printDeploymentsTable(apps)
-	return nil
+	return printDeploymentsTable(apps, store)
 }
 
 func ListResources(team string, store *state.Store) error {
@@ -124,8 +166,7 @@ func ListResources(team string, store *state.Store) error {
 		fmt.Println("No resources deployed.")
 		return nil
 	}
-	printDeploymentsTable(resources)
-	return nil
+	return printDeploymentsTable(resources, store)
 }
 
 func ListDeployed(team string, store *state.Store) error {
@@ -137,8 +178,7 @@ func ListDeployed(team string, store *state.Store) error {
 		fmt.Println("No deployments found.")
 		return nil
 	}
-	printDeploymentsTable(deployments)
-	return nil
+	return printDeploymentsTable(deployments, store)
 }
 
 func DescribeApplication(team, name string, store *state.Store) error {
