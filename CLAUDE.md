@@ -1,7 +1,7 @@
 <!-- SPECKIT START -->
 For additional context about technologies to be used, project structure,
 shell commands, and other important information, read the current plan
-at specs/037-delete-resource/plan.md
+at specs/038-image-versions-guide/plan.md
 <!-- SPECKIT END -->
 
 ## graphify
