@@ -262,6 +262,16 @@ Only three things release a pin: `shrine delete application <name>`, `shrine del
 
 If the registry no longer serves a pinned exact version and the host does not have it either, the deploy stops before any container or network is touched and names the artifact, the exact version, and the way out.
 
+**Reading what is pinned.** `shrine get deployed` (and `get applications`, `get resources`) shows a pinned artifact's version as the readable version it was resolved from, `@`, and the first twelve characters of the exact version, for example `latest@3f2a9c1b4d7e`; a manifest-owned artifact shows the reference its manifest named. `shrine describe app <name>` and `describe resource <name>` show the full exact version with the readable form and the date it was pinned on a `Pinned:` line, and the image the running container was started from on a `Running image:` line, so a `Pinned:` that differs from `Running image:` is a pin that has been recorded but not yet deployed. `shrine status` shows the running image in an IMAGE column beside the running state. `get` needs no container runtime; `describe` prints `Running image: unavailable` when the runtime cannot be reached and still succeeds. Pins of artifacts that are not deployed are never shown.
+
+```text
+TEAM                 NAME                           KIND            VERSION                                  CONTAINER ID
+lab                  hello-db                       Resource        17@9c1b4d7e3f2a                          5d0a11c3b2e4
+
+Pinned:       postgres@sha256:9c1b4d7e3f2a…  (17@9c1b4d7e3f2a, 2026-10-06)
+Running image: postgres@sha256:9c1b4d7e3f2a…
+```
+
 ## Templating
 
 Shrine resolves `valueFrom` references, vault-sourced values, and `template` expressions at deploy time using Go `text/template`. Vault secrets (any `valueFrom` field whose value starts with the `vault:` prefix) are fetched from the configured secrets plugin and treated as resolved string values before template expressions are evaluated. The dependency graph is topologically sorted (Kahn's algorithm) so all three resolution mechanisms — `valueFrom`, vault fetch, and `template` — resolve in the correct order. Circular references are a validation error.
