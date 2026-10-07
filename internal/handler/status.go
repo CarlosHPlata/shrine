@@ -14,7 +14,25 @@ type containerStatusRow struct {
 	Kind    string
 	Running bool
 	Status  string
+	Image   string
 	ImageID string
+}
+
+const (
+	statusHeaderFormat = "%-25s %-15s %-10s %-12s %-40s %-19s\n"
+	statusRowFormat    = "%-25s %-15s %-10v %-12s %-40s %-19s\n"
+)
+
+// shortImageReference is the table form of a running image: a digest
+// reference keeps twelve hex characters (design TD-11), a tag stays as is.
+func shortImageReference(ref string) string {
+	if ref == "" {
+		return "-"
+	}
+	if repository, digest, ok := strings.Cut(ref, "@"); ok {
+		return repository + "@" + manifest.ShortDigest(digest)
+	}
+	return ref
 }
 
 func inspectDeployments(deployments []teamedDeployment, backend engine.ContainerBackend) ([]containerStatusRow, error) {
@@ -33,19 +51,27 @@ func inspectDeployments(deployments []teamedDeployment, backend engine.Container
 			Kind:    td.Deployment.Kind,
 			Running: info.Running,
 			Status:  info.Status,
+			Image:   shortImageReference(info.Image),
 			ImageID: imagePreview,
 		})
 	}
 	return rows, nil
 }
 
-func printStatusTable(rows []containerStatusRow) {
-	fmt.Printf("%-25s %-15s %-10s %-12s %-19s\n", "NAME", "KIND", "RUNNING", "STATUS", "IMAGE ID")
-	fmt.Println(strings.Repeat("-", 84))
+func formatStatusTable(rows []containerStatusRow) string {
+	var b strings.Builder
+	header := fmt.Sprintf(statusHeaderFormat, "NAME", "KIND", "RUNNING", "STATUS", "IMAGE", "IMAGE ID")
+	b.WriteString(header)
+	b.WriteString(strings.Repeat("-", len(strings.TrimSuffix(header, "\n"))))
+	b.WriteString("\n")
 	for _, r := range rows {
-		fmt.Printf("%-25s %-15s %-10v %-12s %-19s\n",
-			r.Name, r.Kind, r.Running, r.Status, r.ImageID)
+		fmt.Fprintf(&b, statusRowFormat, r.Name, r.Kind, r.Running, r.Status, r.Image, r.ImageID)
 	}
+	return b.String()
+}
+
+func printStatusTable(rows []containerStatusRow) {
+	fmt.Print(formatStatusTable(rows))
 }
 
 func StatusTeam(name string, store *state.Store, backend engine.ContainerBackend) error {
