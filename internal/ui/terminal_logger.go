@@ -173,6 +173,8 @@ func (t *TerminalObserver) renderImageResolved(e engine.Event) {
 		fmt.Fprintf(t.out, "  📌 Pinned %s at %s\n", artifact, manifest.ReadableVersion(e.Fields["requested"], e.Fields["digest"]))
 	case engine.ImageSourcePinned:
 		fmt.Fprintf(t.out, "  📌 Using pinned %s %s (since %s)\n", artifact, manifest.ReadableVersion(e.Fields["requested"], e.Fields["digest"]), e.Fields["pinned_at"])
+	case engine.ImageSourceRepinned:
+		fmt.Fprintf(t.out, "  📌 Bumped %s to %s\n", artifact, manifest.ReadableVersion(e.Fields["requested"], e.Fields["digest"]))
 	}
 }
 

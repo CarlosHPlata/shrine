@@ -193,6 +193,13 @@ func TestTerminalObserver_RendersEachKind(t *testing.T) {
 		{ev("image.resolve", engine.StatusFinished, "team", "team-a", "name", "db", "ref", "postgres@sha256:9c1b4d7e3f2a9c1b",
 			"digest", "sha256:9c1b4d7e3f2a9c1b4d7e3f2a9c1b4d7e3f2a9c1b4d7e3f2a9c1b4d7e3f2a9c1b", "requested", "postgres:17", "source", "pinned", "pinned_at", "2026-10-06"),
 			"  📌 Using pinned team-a.db 17@9c1b4d7e3f2a (since 2026-10-06)\n"},
+		{ev("image.resolve", engine.StatusFinished, "team", "team-a", "name", "db", "ref", "postgres@sha256:9c1b4d7e3f2a9c1b",
+			"digest", "sha256:9c1b4d7e3f2a9c1b4d7e3f2a9c1b4d7e3f2a9c1b4d7e3f2a9c1b4d7e3f2a9c1b", "requested", "postgres:17", "source", "repinned"),
+			"  📌 Bumped team-a.db to 17@9c1b4d7e3f2a\n"},
+		{ev("image.resolve", engine.StatusFinished, "team", "team-a", "name", "db", "ref", "postgres@sha256:9c1b4d7e3f2a9c1b",
+			"digest", "sha256:9c1b4d7e3f2a9c1b4d7e3f2a9c1b4d7e3f2a9c1b4d7e3f2a9c1b4d7e3f2a9c1b",
+			"requested", "postgres@sha256:9c1b4d7e3f2a9c1b4d7e3f2a9c1b4d7e3f2a9c1b4d7e3f2a9c1b4d7e3f2a9c1b", "source", "repinned"),
+			"  📌 Bumped team-a.db to 9c1b4d7e3f2a\n"},
 	}
 
 	for _, tc := range cases {

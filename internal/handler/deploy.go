@@ -43,6 +43,30 @@ func buildPortContext(store *state.Store, cfg *config.Config) (planner.PortConte
 	return ports, nil
 }
 
+// planManifestSet plans a loaded set the way every manifest-driven command
+// does, so bump never accepts a set that deploy would reject. The port
+// context is returned so a caller needing it again does not read state twice.
+func planManifestSet(errOut io.Writer, set *planner.ManifestSet, store *state.Store, cfg *config.Config, filter planner.Filter) (planner.PlanResult, planner.PortContext, error) {
+	ports, err := buildPortContext(store, cfg)
+	if err != nil {
+		return planner.PlanResult{}, planner.PortContext{}, err
+	}
+	result := planner.Plan(set, store.Teams, cfg.Registries, ports, filter, cfg.ImagePullPolicy)
+
+	if result.Error != nil {
+		return planner.PlanResult{}, planner.PortContext{}, result.Error
+	}
+
+	if len(result.ValidationErr) > 0 {
+		fmt.Fprintln(errOut, "Validation errors:")
+		for _, err := range result.ValidationErr {
+			fmt.Fprintln(errOut, err)
+		}
+		return planner.PlanResult{}, planner.PortContext{}, fmt.Errorf("Spec validation errors")
+	}
+	return result, ports, nil
+}
+
 // DryRun runs a dry-run deploy scoped by filter. When cfg is non-nil, registries
 // and the Traefik config are validated; the dry-run engine prints route
 // operations instead of writing files. Planning output goes to out, validation
@@ -61,23 +85,9 @@ func DryRun(out, errOut io.Writer, manifestDir string, store *state.Store, cfg *
 	if err != nil {
 		return err
 	}
-
-	ports, err := buildPortContext(store, cfg)
+	result, ports, err := planManifestSet(errOut, set, store, cfg, filter)
 	if err != nil {
 		return err
-	}
-	result := planner.Plan(set, store.Teams, cfg.Registries, ports, filter, cfg.ImagePullPolicy)
-
-	if result.Error != nil {
-		return result.Error
-	}
-
-	if len(result.ValidationErr) > 0 {
-		fmt.Fprintln(errOut, "Validation errors:")
-		for _, err := range result.ValidationErr {
-			fmt.Fprintln(errOut, err)
-		}
-		return fmt.Errorf("Spec validation errors")
 	}
 
 	if len(result.Steps) == 0 {
@@ -104,23 +114,9 @@ func Deploy(b *app.DeployBundle, manifestDir string, filter planner.Filter) erro
 	if err != nil {
 		return err
 	}
-
-	ports, err := buildPortContext(b.Store, b.Cfg)
+	result, _, err := planManifestSet(b.ErrOut, set, b.Store, b.Cfg, filter)
 	if err != nil {
 		return err
-	}
-	result := planner.Plan(set, b.Store.Teams, b.Cfg.Registries, ports, filter, b.Cfg.ImagePullPolicy)
-
-	if result.Error != nil {
-		return result.Error
-	}
-
-	if len(result.ValidationErr) > 0 {
-		fmt.Fprintln(b.ErrOut, "Validation errors:")
-		for _, err := range result.ValidationErr {
-			fmt.Fprintln(b.ErrOut, err)
-		}
-		return fmt.Errorf("Spec validation errors")
 	}
 
 	if len(result.Steps) == 0 {

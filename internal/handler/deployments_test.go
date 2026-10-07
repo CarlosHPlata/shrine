@@ -225,7 +225,12 @@ func TestDeleteTeam_ReleasesTeamHostPorts(t *testing.T) {
 	}
 }
 
-type memImagePinStore struct{ pins map[string]state.ImagePin }
+// memImagePinStore keeps every Put in puts as well, so a test can prove a
+// command recorded nothing.
+type memImagePinStore struct {
+	pins map[string]state.ImagePin
+	puts []state.ImagePin
+}
 
 func newMemImagePinStore(pins ...state.ImagePin) *memImagePinStore {
 	m := &memImagePinStore{pins: map[string]state.ImagePin{}}
@@ -244,6 +249,7 @@ func (m *memImagePinStore) Get(team, name string) (state.ImagePin, error) {
 }
 func (m *memImagePinStore) Put(team string, pin state.ImagePin) error {
 	m.pins[state.ImagePinKey(team, pin.Name)] = pin
+	m.puts = append(m.puts, pin)
 	return nil
 }
 func (m *memImagePinStore) Release(team, name string) error {

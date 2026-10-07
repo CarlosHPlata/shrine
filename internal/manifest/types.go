@@ -278,6 +278,16 @@ func DigestOf(ref string) string {
 	return digest
 }
 
+// RepositoryOf returns the reference without its version. Only a colon after
+// the last slash starts a tag, so a registry port is never mistaken for one.
+func RepositoryOf(ref string) string {
+	repository, _, _ := strings.Cut(ref, "@")
+	if tag := TagOf(repository); tag != "" {
+		repository = strings.TrimSuffix(repository, ":"+tag)
+	}
+	return repository
+}
+
 // ReadableVersion is a pin as a person reads it: the tag it was resolved
 // from and a short exact version, or the short exact version alone when the
 // request was itself a digest (design section 3.5).

@@ -56,6 +56,57 @@ type ApplyBundle struct {
 	Engine   *engine.Engine
 }
 
+// BumpBundle is the dependency set passed to handler.Bump.
+type BumpBundle struct {
+	Out              io.Writer
+	ErrOut           io.Writer
+	Cfg              *config.Config
+	Store            *state.Store
+	Paths            *config.Paths
+	SpecsDir         string
+	Observer         engine.Observer
+	ContainerBackend engine.ContainerBackend
+}
+
+// BuildBumpBundle composes the dependency graph for `shrine bump`: validate
+// registries, resolve specsDir, observers, container backend.
+//
+// It builds no Traefik plugin, vault, routing backend, or engine: bump only
+// resolves an image and records the pin, and never touches a container
+// (design TD-12).
+func BuildBumpBundle(cfg *config.Config, store *state.Store, paths *config.Paths, manifestDir string, out, errOut io.Writer) (*BumpBundle, func() error, error) {
+	if err := cfg.ValidateRegistries(); err != nil {
+		return nil, nil, fmt.Errorf("validating registries: %w", err)
+	}
+
+	specsDir, err := cfg.ResolveSpecsDir(manifestDir)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	observer, closeObserver, err := newObserverPair(out, paths)
+	if err != nil {
+		return nil, nil, fmt.Errorf("observer: %w", err)
+	}
+
+	containerBackend, err := newContainerBackend(store, cfg.Registries, observer)
+	if err != nil {
+		_ = closeObserver()
+		return nil, nil, fmt.Errorf("container backend: %w", err)
+	}
+
+	return &BumpBundle{
+		Out:              out,
+		ErrOut:           errOut,
+		Cfg:              cfg,
+		Store:            store,
+		Paths:            paths,
+		SpecsDir:         specsDir,
+		Observer:         observer,
+		ContainerBackend: containerBackend,
+	}, joinCleanup(closeObserver), nil
+}
+
 // BuildApplyBundle composes the dependency graph for `shrine apply --file`.
 //
 // On success the returned cleanup func is non-nil and safe to call more than

@@ -8,6 +8,7 @@ import (
 
 	"github.com/CarlosHPlata/shrine/internal/config"
 	"github.com/CarlosHPlata/shrine/internal/engine"
+	"github.com/CarlosHPlata/shrine/internal/engine/local"
 	"github.com/CarlosHPlata/shrine/internal/state"
 )
 
@@ -390,5 +391,216 @@ func TestBundleCleanup_SecondCallDoesNotPanic(t *testing.T) {
 	// file reports "already closed".
 	if logger.closes != 2 {
 		t.Errorf("log writer closed %d times across two cleanup calls, want 2", logger.closes)
+	}
+}
+
+// stubContainerBackend satisfies the interface without behaviour: bump
+// assembly only stores the backend, it never calls it.
+type stubContainerBackend struct{ engine.ContainerBackend }
+
+type containerBackendCall struct {
+	called     bool
+	store      *state.Store
+	registries []config.RegistryConfig
+	observer   engine.Observer
+	backend    engine.ContainerBackend
+}
+
+// recordingContainerBackend captures the constructor's inputs so the bump
+// test can check what the backend was built with.
+func recordingContainerBackend(call *containerBackendCall) func(*state.Store, []config.RegistryConfig, engine.Observer) (engine.ContainerBackend, error) {
+	return func(store *state.Store, registries []config.RegistryConfig, observer engine.Observer) (engine.ContainerBackend, error) {
+		call.called = true
+		call.store = store
+		call.registries = registries
+		call.observer = observer
+		call.backend = &stubContainerBackend{}
+		return call.backend, nil
+	}
+}
+
+func engineMustNotBeCalled(t *testing.T) func(local.EngineOptions) (*engine.Engine, error) {
+	return func(local.EngineOptions) (*engine.Engine, error) {
+		t.Error("the local engine was constructed")
+		return nil, errBoom
+	}
+}
+
+// forbidDeployOnlyCollaborators fails the test if bump assembly reaches for
+// anything beyond the observer pair and the container backend (TD-12).
+func forbidDeployOnlyCollaborators(t *testing.T) {
+	t.Helper()
+	swapConstructor(t, &newVault, vaultMustNotBeCalled(t))
+	swapConstructor(t, &newTraefikPlugin, traefikPluginMustNotBeCalled(t))
+	swapConstructor(t, &newLocalEngine, engineMustNotBeCalled(t))
+}
+
+const bumpManifestDir = "/abs/bump-specs"
+
+func buildBump(in bundleInputs) (*BumpBundle, func() error, error) {
+	return BuildBumpBundle(in.cfg, in.store, in.paths, bumpManifestDir, in.out, in.errOut)
+}
+
+func TestBuildBumpBundle_ComposesObserverAndContainerBackend(t *testing.T) {
+	pinHermeticEnv(t)
+	logger := useInMemoryFileLogger(t)
+	forbidDeployOnlyCollaborators(t)
+	call := &containerBackendCall{}
+	swapConstructor(t, &newContainerBackend, recordingContainerBackend(call))
+	in := newBundleInputs()
+	in.cfg.Registries = []config.RegistryConfig{{Host: "registry.example.com"}}
+
+	bundle, cleanup, err := buildBump(in)
+
+	requireAssembled(t, cleanup, err)
+	if bundle.Out != in.out {
+		t.Error("Out is not the writer passed in")
+	}
+	if bundle.ErrOut != in.errOut {
+		t.Error("ErrOut is not the writer passed in")
+	}
+	if bundle.Cfg != in.cfg {
+		t.Error("Cfg is not the config passed in")
+	}
+	if bundle.Store != in.store {
+		t.Error("Store is not the store passed in")
+	}
+	if bundle.Paths != in.paths {
+		t.Error("Paths is not the paths passed in")
+	}
+	if bundle.SpecsDir != bumpManifestDir {
+		t.Errorf("SpecsDir = %q, want the manifest dir %q over the configured specsDir", bundle.SpecsDir, bumpManifestDir)
+	}
+	if logger.stateDir != in.paths.StateDir {
+		t.Errorf("file logger opened under %q, want the state dir %q", logger.stateDir, in.paths.StateDir)
+	}
+	if pair, ok := bundle.Observer.(engine.MultiObserver); !ok || len(pair) != 2 {
+		t.Errorf("Observer = %T, want the terminal + file-logger pair", bundle.Observer)
+	}
+	assertReachesLogger(t, "Observer", bundle.Observer, logger)
+
+	if !call.called {
+		t.Fatal("the container backend was not constructed")
+	}
+	if bundle.ContainerBackend != call.backend {
+		t.Error("ContainerBackend is not the backend the constructor returned")
+	}
+	if call.store != in.store {
+		t.Error("container backend built without the store passed in")
+	}
+	if len(call.registries) != 1 || call.registries[0].Host != "registry.example.com" {
+		t.Errorf("container backend built with registries %+v, want the configured ones", call.registries)
+	}
+	assertReachesLogger(t, "container backend observer", call.observer, logger)
+
+	if in.out.Len() != 0 || in.errOut.Len() != 0 {
+		t.Errorf("assembly wrote output: out=%q errOut=%q", in.out.String(), in.errOut.String())
+	}
+}
+
+func TestBuildBumpBundle_SlotFailures(t *testing.T) {
+	cases := []struct {
+		prefix       string
+		arrange      func(t *testing.T, cfg *config.Config)
+		wantCause    error
+		wantContains string
+		opensLogger  bool
+	}{
+		{
+			prefix: "validating registries: ",
+			arrange: func(t *testing.T, cfg *config.Config) {
+				cfg.Registries = []config.RegistryConfig{{Alias: "bad alias!"}}
+			},
+			wantContains: `registries: alias "bad alias!" contains invalid characters`,
+		},
+		{
+			prefix: "observer: ",
+			arrange: func(t *testing.T, cfg *config.Config) {
+				swapConstructor(t, &newFileLogger, failingFileLogger(errBoom))
+			},
+			wantCause:    errBoom,
+			wantContains: "initializing file logger: ",
+		},
+		{
+			prefix: "container backend: ",
+			arrange: func(t *testing.T, cfg *config.Config) {
+				swapConstructor(t, &newContainerBackend, failingContainerBackend(errBoom))
+			},
+			wantCause:   errBoom,
+			opensLogger: true,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.prefix, func(t *testing.T) {
+			pinHermeticEnv(t)
+			logger := useInMemoryFileLogger(t)
+			forbidDeployOnlyCollaborators(t)
+			swapConstructor(t, &newContainerBackend, recordingContainerBackend(&containerBackendCall{}))
+			in := newBundleInputs()
+			tc.arrange(t, in.cfg)
+
+			bundle, cleanup, err := buildBump(in)
+
+			assertSlotFailure(t, err, bundle == nil, cleanup == nil, tc.prefix)
+			if tc.wantCause != nil && !errors.Is(err, tc.wantCause) {
+				t.Errorf("error %q lost its cause %q", err, tc.wantCause)
+			}
+			if !strings.Contains(err.Error(), tc.wantContains) {
+				t.Errorf("error %q should contain %q", err.Error(), tc.wantContains)
+			}
+			if tc.opensLogger && logger.closes != 1 {
+				t.Errorf("log writer closed %d times after a late failure, want 1", logger.closes)
+			}
+			if !tc.opensLogger && (logger.created || logger.closes != 0) {
+				t.Errorf("log writer touched before it could be opened: created=%v closes=%d", logger.created, logger.closes)
+			}
+		})
+	}
+}
+
+func TestBuildBumpBundle_FailsBeforeConstructionWhenSpecsDirUnresolvable(t *testing.T) {
+	logger := useInMemoryFileLogger(t)
+	swapConstructor(t, &newContainerBackend, containerBackendMustNotBeCalled(t))
+	t.Setenv("HOME", "")
+	cfg := &config.Config{SpecsDir: "~/manifests"}
+
+	bundle, cleanup, err := BuildBumpBundle(cfg, nil, nil, "", io.Discard, io.Discard)
+
+	assertUnresolvableSpecsDir(t, err)
+	if bundle != nil || cleanup != nil {
+		t.Fatalf("expected no bundle and no cleanup on failure, got bundle=%v cleanup=%v", bundle != nil, cleanup != nil)
+	}
+	if logger.created {
+		t.Error("log writer opened before the specs directory resolved")
+	}
+}
+
+func TestBuildBumpBundle_CleanupClosesLogWriter(t *testing.T) {
+	cases := []struct {
+		name     string
+		closeErr error
+	}{
+		{name: "clean close"},
+		{name: "close error is reported", closeErr: errBoom},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			pinHermeticEnv(t)
+			logger := useInMemoryFileLogger(t)
+			logger.closeErr = tc.closeErr
+			swapConstructor(t, &newContainerBackend, recordingContainerBackend(&containerBackendCall{}))
+
+			_, cleanup, err := buildBump(newBundleInputs())
+			requireAssembled(t, cleanup, err)
+
+			if err := cleanup(); !errors.Is(err, tc.closeErr) {
+				t.Errorf("cleanup returned %v, want %v", err, tc.closeErr)
+			}
+			if logger.closes != 1 {
+				t.Errorf("log writer closed %d times, want 1", logger.closes)
+			}
+		})
 	}
 }

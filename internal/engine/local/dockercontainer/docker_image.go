@@ -28,6 +28,9 @@ func (backend *DockerBackend) ResolveImage(op engine.ResolveImageOp) (engine.Res
 	if err != nil {
 		return engine.ResolvedImage{}, backend.emitErr("registry.alias", map[string]string{"ref": op.Image}, err)
 	}
+	if op.Repin != "" {
+		return backend.repin(ctx, op)
+	}
 
 	backend.emitStarted("image.resolve", map[string]string{"team": op.Team, "name": op.Name, "ref": ref})
 
@@ -41,6 +44,28 @@ func (backend *DockerBackend) ResolveImage(op engine.ResolveImageOp) (engine.Res
 		return engine.ResolvedImage{}, err
 	}
 
+	backend.emitFinished("image.resolve", resolvedImageFields(op, resolved))
+	return resolved, nil
+}
+
+// repin pins the exact version op.Repin resolves to in place of the
+// manifest reference. Bump is its only caller; it lives here so the backend
+// stays the one writer of pins (TD-8).
+func (backend *DockerBackend) repin(ctx context.Context, op engine.ResolveImageOp) (engine.ResolvedImage, error) {
+	if op.ImagePullPolicy != manifest.ImagePullPolicyPinned {
+		return engine.ResolvedImage{}, fmt.Errorf("repin of %s/%s requires the Pinned policy, got %s", op.Team, op.Name, op.ImagePullPolicy)
+	}
+	target, err := expandRegistryAlias(op.Repin, backend.registries)
+	if err != nil {
+		return engine.ResolvedImage{}, backend.emitErr("registry.alias", map[string]string{"ref": op.Repin}, err)
+	}
+
+	backend.emitStarted("image.resolve", map[string]string{"team": op.Team, "name": op.Name, "ref": target})
+
+	resolved, err := backend.pinReference(ctx, op, target, engine.ImageSourceRepinned)
+	if err != nil {
+		return engine.ResolvedImage{}, err
+	}
 	backend.emitFinished("image.resolve", resolvedImageFields(op, resolved))
 	return resolved, nil
 }
@@ -72,7 +97,7 @@ func (backend *DockerBackend) resolveManifestOwned(ctx context.Context, op engin
 	}
 	return engine.ResolvedImage{
 		Ref:     ref,
-		Digest:  pickRepoDigest(located.RepoDigests, repositoryOf(ref)),
+		Digest:  pickRepoDigest(located.RepoDigests, manifest.RepositoryOf(ref)),
 		ImageID: located.ID,
 		Source:  engine.ImageSourceManifest,
 	}, nil
@@ -86,7 +111,7 @@ func (backend *DockerBackend) resolvePinned(ctx context.Context, op engine.Resol
 	if found {
 		return backend.reusePin(ctx, op, pin)
 	}
-	return backend.pinNewest(ctx, op, ref)
+	return backend.pinReference(ctx, op, ref, engine.ImageSourceResolved)
 }
 
 // usablePin returns the artifact's pin when it is for the repository the
@@ -133,9 +158,9 @@ func (backend *DockerBackend) reusePin(ctx context.Context, op engine.ResolveIma
 	}, nil
 }
 
-// pinNewest is the first deploy under Pinned: pull the newest version of the
-// repository, record its exact version, and run that.
-func (backend *DockerBackend) pinNewest(ctx context.Context, op engine.ResolveImageOp, ref string) (engine.ResolvedImage, error) {
+// pinReference records the exact version ref resolves to: a first deploy
+// under Pinned passes the newest, a bump passes the chosen reference.
+func (backend *DockerBackend) pinReference(ctx context.Context, op engine.ResolveImageOp, ref, source string) (engine.ResolvedImage, error) {
 	if err := backend.pullImage(ctx, ref); err != nil {
 		return engine.ResolvedImage{}, err
 	}
@@ -143,7 +168,7 @@ func (backend *DockerBackend) pinNewest(ctx context.Context, op engine.ResolveIm
 	if err != nil {
 		return engine.ResolvedImage{}, err
 	}
-	digest := pickRepoDigest(local.RepoDigests, repositoryOf(ref))
+	digest := pickRepoDigest(local.RepoDigests, manifest.RepositoryOf(ref))
 	if digest == "" {
 		return engine.ResolvedImage{}, backend.emitErr("image.resolve", resolveErrorFields(op, ref),
 			fmt.Errorf("image %q carries no registry digest and cannot be pinned", ref))
@@ -167,7 +192,7 @@ func (backend *DockerBackend) pinNewest(ctx context.Context, op engine.ResolveIm
 		Ref:       pin.Pinned,
 		Digest:    digest,
 		ImageID:   local.ID,
-		Source:    engine.ImageSourceResolved,
+		Source:    source,
 		Requested: ref,
 	}, nil
 }
@@ -185,14 +210,14 @@ func (backend *DockerBackend) releasePin(op engine.ResolveImageOp) error {
 	return nil
 }
 
-// notServedError is the pinned failure of R-14: the registry no longer has
-// the exact version and the host does not either. Until bump exists (T6) the
-// way out is the manifest's policy.
+// notServedError is the pinned failure of R-14: neither the registry nor the
+// host has the exact version, so the pin cannot be honoured and only a bump
+// can choose another exact version. The kind is lower-cased to name the
+// bump subcommand.
 func (backend *DockerBackend) notServedError(op engine.ResolveImageOp, pin state.ImagePin, cause error) error {
 	return backend.emitErr("image.resolve", resolveErrorFields(op, pin.Pinned),
-		fmt.Errorf("pinned exact version %q for %s/%s is no longer served by the registry; deploy the %s under %s or %s to release the pin, then return to %s: %w",
-			pin.Pinned, op.Team, op.Name, strings.ToLower(op.Kind),
-			manifest.ImagePullPolicyAlways, manifest.ImagePullPolicyIfNotPresent, manifest.ImagePullPolicyPinned, cause))
+		fmt.Errorf("pinned exact version %q for %s/%s is no longer served by the registry; run \"shrine bump %s %s\" to choose another version: %w",
+			pin.Pinned, op.Team, op.Name, strings.ToLower(op.Kind), op.Name, cause))
 }
 
 func resolveErrorFields(op engine.ResolveImageOp, ref string) map[string]string {
@@ -221,11 +246,11 @@ func (backend *DockerBackend) findImageByReference(ctx context.Context, ref stri
 }
 
 func pinnedReference(ref, digest string) string {
-	return repositoryOf(ref) + "@" + digest
+	return manifest.RepositoryOf(ref) + "@" + digest
 }
 
 func sameRepository(a, b string) bool {
-	return normalizeRepository(repositoryOf(a)) == normalizeRepository(repositoryOf(b))
+	return normalizeRepository(manifest.RepositoryOf(a)) == normalizeRepository(manifest.RepositoryOf(b))
 }
 
 // locateImage keeps today's pull semantics: any policy but Always reuses a
@@ -307,15 +332,6 @@ func pickRepoDigest(repoDigests []string, repository string) string {
 		}
 	}
 	return ""
-}
-
-func repositoryOf(ref string) string {
-	repository, _, _ := strings.Cut(ref, "@")
-	slash := strings.LastIndex(repository, "/")
-	if colon := strings.LastIndex(repository, ":"); colon > slash {
-		repository = repository[:colon]
-	}
-	return repository
 }
 
 // normalizeRepository drops the Docker Hub prefixes the daemon omits in
