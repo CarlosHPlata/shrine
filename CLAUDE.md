@@ -1,7 +1,7 @@
 <!-- SPECKIT START -->
 For additional context about technologies to be used, project structure,
 shell commands, and other important information, read the current plan
-at specs/034-pull-policy-config-default/plan.md
+at specs/035-pinned-version-queries/plan.md
 <!-- SPECKIT END -->
 
 ## graphify

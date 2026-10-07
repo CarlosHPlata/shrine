@@ -12,8 +12,11 @@ var statusTeamFlag string
 var statusCmd = &cobra.Command{
 	Use:   "status [team]",
 	Short: "Show live deployment status",
-	Long:  `Show the live container status for all teams, or for a specific team if provided.`,
-	Args:  cobra.MaximumNArgs(1),
+	Long: `Show the live container status for all teams, or for a specific team if provided.
+
+The IMAGE column shows the image each container was started from: the exact
+version for a Pinned artifact, the tag reference otherwise.`,
+	Args: cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		backend, err := dockercontainer.NewDockerBackend(store, cfg.Registries, engine.NoopObserver{})
 		if err != nil {
@@ -41,8 +44,11 @@ var statusAppCmd = &cobra.Command{
 	Use:     "application [name]",
 	Aliases: []string{"app"},
 	Short:   "Show live status for an application",
-	Long:    `Show the live container status for a specific deployed application.`,
-	Args:    cobra.ExactArgs(1),
+	Long: `Show the live container status for a specific deployed application.
+
+The IMAGE column shows the image each container was started from: the exact
+version for a Pinned artifact, the tag reference otherwise.`,
+	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		backend, err := dockercontainer.NewDockerBackend(store, cfg.Registries, engine.NoopObserver{})
 		if err != nil {
@@ -56,8 +62,11 @@ var statusResourceCmd = &cobra.Command{
 	Use:     "resource [name]",
 	Aliases: []string{"res"},
 	Short:   "Show live status for a resource",
-	Long:    `Show the live container status for a specific deployed resource.`,
-	Args:    cobra.ExactArgs(1),
+	Long: `Show the live container status for a specific deployed resource.
+
+The IMAGE column shows the image each container was started from: the exact
+version for a Pinned artifact, the tag reference otherwise.`,
+	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		backend, err := dockercontainer.NewDockerBackend(store, cfg.Registries, engine.NoopObserver{})
 		if err != nil {

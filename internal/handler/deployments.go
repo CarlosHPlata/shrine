@@ -1,9 +1,11 @@
 package handler
 
 import (
+	"errors"
 	"fmt"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/CarlosHPlata/shrine/internal/engine"
 	"github.com/CarlosHPlata/shrine/internal/manifest"
@@ -78,7 +80,49 @@ func valueOrUnknown(value string) string {
 	return value
 }
 
-func formatDeploymentsTable(deployments []teamedDeployment) string {
+// loadImagePins reads every pin once for a listing; a store without a pin
+// store (hand-built in tests) simply has none.
+func loadImagePins(store *state.Store) (map[string]state.ImagePin, error) {
+	if store.ImagePins == nil {
+		return map[string]state.ImagePin{}, nil
+	}
+	pins, err := store.ImagePins.ListAll()
+	if err != nil {
+		return nil, fmt.Errorf("listing image pins: %w", err)
+	}
+	return pins, nil
+}
+
+// isPinFor guards the one ambiguity the pin key leaves open: it carries no
+// kind, so a pin is the record's only when the kinds agree.
+func isPinFor(pin state.ImagePin, d state.Deployment) bool {
+	return pin.Kind == d.Kind
+}
+
+func pinFor(team string, d state.Deployment, pins map[string]state.ImagePin) (state.ImagePin, bool) {
+	pin, ok := pins[state.ImagePinKey(team, d.Name)]
+	if !ok || !isPinFor(pin, d) {
+		return state.ImagePin{}, false
+	}
+	return pin, true
+}
+
+func readablePin(pin state.ImagePin) string {
+	return manifest.ReadableVersion(pin.Requested, manifest.DigestOf(pin.Pinned))
+}
+
+// versionCell is the readable form of the pin for a Pinned record and the
+// reference the manifest named for every other one (design section 4.7).
+func versionCell(team string, d state.Deployment, pins map[string]state.ImagePin) string {
+	if d.Policy == manifest.ImagePullPolicyPinned {
+		if pin, ok := pinFor(team, d, pins); ok {
+			return readablePin(pin)
+		}
+	}
+	return valueOrUnknown(d.Image)
+}
+
+func formatDeploymentsTable(deployments []teamedDeployment, pins map[string]state.ImagePin) string {
 	var b strings.Builder
 	header := fmt.Sprintf(deploymentRowFormat, "TEAM", "NAME", "KIND", "VERSION", "CONTAINER ID")
 	b.WriteString(header)
@@ -89,15 +133,20 @@ func formatDeploymentsTable(deployments []teamedDeployment) string {
 			td.Team,
 			td.Deployment.Name,
 			td.Deployment.Kind,
-			valueOrUnknown(td.Deployment.Image),
+			versionCell(td.Team, td.Deployment, pins),
 			shortContainerID(td.Deployment.ContainerID),
 		)
 	}
 	return b.String()
 }
 
-func printDeploymentsTable(deployments []teamedDeployment) {
-	fmt.Print(formatDeploymentsTable(deployments))
+func printDeploymentsTable(deployments []teamedDeployment, store *state.Store) error {
+	pins, err := loadImagePins(store)
+	if err != nil {
+		return err
+	}
+	fmt.Print(formatDeploymentsTable(deployments, pins))
+	return nil
 }
 
 func ListApplications(team string, store *state.Store) error {
@@ -110,8 +159,7 @@ func ListApplications(team string, store *state.Store) error {
 		fmt.Println("No applications deployed.")
 		return nil
 	}
-	printDeploymentsTable(apps)
-	return nil
+	return printDeploymentsTable(apps, store)
 }
 
 func ListResources(team string, store *state.Store) error {
@@ -124,8 +172,7 @@ func ListResources(team string, store *state.Store) error {
 		fmt.Println("No resources deployed.")
 		return nil
 	}
-	printDeploymentsTable(resources)
-	return nil
+	return printDeploymentsTable(resources, store)
 }
 
 func ListDeployed(team string, store *state.Store) error {
@@ -137,61 +184,125 @@ func ListDeployed(team string, store *state.Store) error {
 		fmt.Println("No deployments found.")
 		return nil
 	}
-	printDeploymentsTable(deployments)
-	return nil
+	return printDeploymentsTable(deployments, store)
 }
 
-func DescribeApplication(team, name string, store *state.Store) error {
-	return describeDeployment(team, name, manifest.ApplicationKind, store)
+func DescribeApplication(team, name string, store *state.Store, backend engine.ContainerBackend) error {
+	return describeDeployment(team, name, manifest.ApplicationKind, store, backend)
 }
 
-func DescribeResource(team, name string, store *state.Store) error {
-	return describeDeployment(team, name, manifest.ResourceKind, store)
+func DescribeResource(team, name string, store *state.Store, backend engine.ContainerBackend) error {
+	return describeDeployment(team, name, manifest.ResourceKind, store, backend)
 }
 
-func describeDeployment(team, name, kind string, store *state.Store) error {
-	if team != "" {
-		// Explicit team: search only within that team.
-		deployments, err := store.Deployments.List(team)
-		if err != nil {
-			return fmt.Errorf("listing deployments for team %q: %w", team, err)
-		}
-		for _, d := range deployments {
-			if d.Name == name && d.Kind == kind {
-				printDeploymentDetail(team, d)
-				return nil
-			}
-		}
-		return fmt.Errorf("%s %q not found in team %q", kind, name, team)
-	}
-
-	// No team specified: search all teams and disambiguate.
-	all, err := collectAllDeployments(store)
+// describeDeployment never fails because of the backend: the record is the
+// source of every line but the running image, which degrades on its own.
+func describeDeployment(team, name, kind string, store *state.Store, backend engine.ContainerBackend) error {
+	td, err := findDeployment(team, name, kind, store)
 	if err != nil {
 		return err
 	}
+	detail, err := gatherDeploymentDetail(td, store, backend)
+	if err != nil {
+		return err
+	}
+	fmt.Print(formatDeploymentDetail(detail))
+	return nil
+}
 
+func findDeployment(team, name, kind string, store *state.Store) (teamedDeployment, error) {
+	if team != "" {
+		deployments, err := store.Deployments.List(team)
+		if err != nil {
+			return teamedDeployment{}, fmt.Errorf("listing deployments for team %q: %w", team, err)
+		}
+		for _, d := range deployments {
+			if d.Name == name && d.Kind == kind {
+				return teamedDeployment{Team: team, Deployment: d}, nil
+			}
+		}
+		return teamedDeployment{}, fmt.Errorf("%s %q not found in team %q", kind, name, team)
+	}
+
+	all, err := collectAllDeployments(store)
+	if err != nil {
+		return teamedDeployment{}, err
+	}
 	var matches []teamedDeployment
 	for _, td := range all {
 		if td.Deployment.Name == name && td.Deployment.Kind == kind {
 			matches = append(matches, td)
 		}
 	}
-
 	switch len(matches) {
 	case 0:
-		return fmt.Errorf("%s %q not found in any team", kind, name)
+		return teamedDeployment{}, fmt.Errorf("%s %q not found in any team", kind, name)
 	case 1:
-		printDeploymentDetail(matches[0].Team, matches[0].Deployment)
-		return nil
+		return matches[0], nil
 	default:
 		teamNames := make([]string, len(matches))
 		for i, m := range matches {
 			teamNames[i] = m.Team
 		}
-		return fmt.Errorf("ambiguous: %s %q found in teams [%s], use --team to disambiguate",
+		return teamedDeployment{}, fmt.Errorf("ambiguous: %s %q found in teams [%s], use --team to disambiguate",
 			kind, name, strings.Join(teamNames, ", "))
 	}
+}
+
+// deploymentDetail is everything the describe block prints: the record, the
+// pin it points at when it is Pinned, and the running image already rendered.
+type deploymentDetail struct {
+	Team         string
+	Deployment   state.Deployment
+	Pin          state.ImagePin
+	HasPin       bool
+	RunningImage string
+}
+
+func gatherDeploymentDetail(td teamedDeployment, store *state.Store, backend engine.ContainerBackend) (deploymentDetail, error) {
+	pin, hasPin, err := lookupPin(store, td.Team, td.Deployment)
+	if err != nil {
+		return deploymentDetail{}, err
+	}
+	return deploymentDetail{
+		Team:         td.Team,
+		Deployment:   td.Deployment,
+		Pin:          pin,
+		HasPin:       hasPin,
+		RunningImage: runningImage(backend, td.Deployment.ContainerID),
+	}, nil
+}
+
+// lookupPin reads the pin only for a Pinned record; a missing pin is shown,
+// not failed, because the record is what proves the artifact is deployed.
+func lookupPin(store *state.Store, team string, d state.Deployment) (state.ImagePin, bool, error) {
+	if d.Policy != manifest.ImagePullPolicyPinned || store.ImagePins == nil {
+		return state.ImagePin{}, false, nil
+	}
+	pin, err := store.ImagePins.Get(team, d.Name)
+	if errors.Is(err, state.ErrImagePinNotFound) {
+		return state.ImagePin{}, false, nil
+	}
+	if err != nil {
+		return state.ImagePin{}, false, fmt.Errorf("reading image pin for %s/%s: %w", team, d.Name, err)
+	}
+	if !isPinFor(pin, d) {
+		return state.ImagePin{}, false, nil
+	}
+	return pin, true, nil
+}
+
+// runningImage is read live because Docker, not the record, knows what a
+// container was created from; without Docker the line degrades alone.
+func runningImage(backend engine.ContainerBackend, containerID string) string {
+	if backend == nil {
+		return "unavailable (no container runtime)"
+	}
+	info, err := backend.InspectContainer(containerID)
+	if err != nil {
+		return fmt.Sprintf("unavailable (%v)", err)
+	}
+	return valueOrUnknown(info.Image)
 }
 
 // DeleteApplicationOptions parameterizes DeleteApplication. Team is optional
@@ -353,22 +464,30 @@ func findApplicationRecord(store *state.Store, team, name string) bool {
 	return false
 }
 
-func formatDeploymentDetail(team string, d state.Deployment) string {
-	hashPreview := d.ConfigHash
+func pinLine(d deploymentDetail) string {
+	if d.Deployment.Policy != manifest.ImagePullPolicyPinned {
+		return ""
+	}
+	if !d.HasPin {
+		return "Pinned:       -\n"
+	}
+	return fmt.Sprintf("Pinned:       %s (%s, %s)\n", d.Pin.Pinned, readablePin(d.Pin), d.Pin.PinnedAt.UTC().Format(time.DateOnly))
+}
+
+func formatDeploymentDetail(d deploymentDetail) string {
+	hashPreview := d.Deployment.ConfigHash
 	if len(hashPreview) > 16 {
 		hashPreview = hashPreview[:16] + "..."
 	}
 	var b strings.Builder
-	fmt.Fprintf(&b, "Name:         %s\n", d.Name)
-	fmt.Fprintf(&b, "Team:         %s\n", team)
-	fmt.Fprintf(&b, "Kind:         %s\n", d.Kind)
-	fmt.Fprintf(&b, "Image:        %s\n", valueOrUnknown(d.Image))
-	fmt.Fprintf(&b, "Pull policy:  %s\n", valueOrUnknown(d.Policy))
-	fmt.Fprintf(&b, "Container ID: %s\n", d.ContainerID)
+	fmt.Fprintf(&b, "Name:         %s\n", d.Deployment.Name)
+	fmt.Fprintf(&b, "Team:         %s\n", d.Team)
+	fmt.Fprintf(&b, "Kind:         %s\n", d.Deployment.Kind)
+	fmt.Fprintf(&b, "Image:        %s\n", valueOrUnknown(d.Deployment.Image))
+	fmt.Fprintf(&b, "Pull policy:  %s\n", valueOrUnknown(d.Deployment.Policy))
+	b.WriteString(pinLine(d))
+	fmt.Fprintf(&b, "Running image: %s\n", d.RunningImage)
+	fmt.Fprintf(&b, "Container ID: %s\n", d.Deployment.ContainerID)
 	fmt.Fprintf(&b, "Config Hash:  %s\n", hashPreview)
 	return b.String()
-}
-
-func printDeploymentDetail(team string, d state.Deployment) {
-	fmt.Print(formatDeploymentDetail(team, d))
 }

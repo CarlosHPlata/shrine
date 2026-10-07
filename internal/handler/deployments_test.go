@@ -327,3 +327,64 @@ func TestDeleteApplication_ToleratesAStoreWithoutPins(t *testing.T) {
 		t.Fatalf("DeleteApplication must tolerate a nil ImagePins store, got %v", err)
 	}
 }
+
+func describeTestStore(records map[string][]state.Deployment) *state.Store {
+	teams := make([]string, 0, len(records))
+	for team := range records {
+		teams = append(teams, team)
+	}
+	return deleteTestStore(teams, nil, records)
+}
+
+func pinnedApiRecord() state.Deployment {
+	return state.Deployment{Name: "api", Kind: manifest.ApplicationKind, ContainerID: "c1", Image: "ghcr.io/me/api", Policy: manifest.ImagePullPolicyPinned}
+}
+
+func TestDescribeApplication_SucceedsWhenTheBackendCannotInspect(t *testing.T) {
+	store := describeTestStore(map[string][]state.Deployment{"demo": {pinnedApiRecord()}})
+	store.ImagePins = newMemImagePinStore(apiPin())
+
+	if err := DescribeApplication("demo", "api", store, &stubContainerBackend{}); err != nil {
+		t.Fatalf("describe must succeed when the container cannot be inspected, got %v", err)
+	}
+}
+
+func TestDescribeApplication_ToleratesAStoreWithoutPins(t *testing.T) {
+	store := describeTestStore(map[string][]state.Deployment{"demo": {pinnedApiRecord()}})
+
+	if err := DescribeApplication("", "api", store, &stubContainerBackend{existing: map[string]bool{"c1": true}}); err != nil {
+		t.Fatalf("describe must tolerate a nil ImagePins store, got %v", err)
+	}
+}
+
+func TestDescribeApplication_ToleratesANilBackend(t *testing.T) {
+	store := describeTestStore(map[string][]state.Deployment{"demo": {pinnedApiRecord()}})
+	store.ImagePins = newMemImagePinStore(apiPin())
+
+	if err := DescribeApplication("demo", "api", store, nil); err != nil {
+		t.Fatalf("describe must tolerate a nil backend, got %v", err)
+	}
+}
+
+func TestDescribeApplication_NotFoundAndAmbiguousAreUnchanged(t *testing.T) {
+	store := describeTestStore(map[string][]state.Deployment{"demo": {pinnedApiRecord()}, "other": {pinnedApiRecord()}})
+
+	err := DescribeApplication("", "missing", store, nil)
+	if err == nil || !strings.Contains(err.Error(), "not found") {
+		t.Fatalf("expected a not-found error, got %v", err)
+	}
+	err = DescribeApplication("", "api", store, nil)
+	if err == nil || !strings.Contains(err.Error(), "ambiguous") {
+		t.Fatalf("expected an ambiguity error, got %v", err)
+	}
+}
+
+func TestDescribeApplication_APinWithoutARecordIsNotFound(t *testing.T) {
+	store := describeTestStore(map[string][]state.Deployment{"demo": {}})
+	store.ImagePins = newMemImagePinStore(apiPin())
+
+	err := DescribeApplication("", "api", store, nil)
+	if err == nil || !strings.Contains(err.Error(), "not found") {
+		t.Fatalf("a pin without a deployment record must stay invisible, got %v", err)
+	}
+}

@@ -14,6 +14,9 @@ Show live status for an application
 
 Show the live container status for a specific deployed application.
 
+The IMAGE column shows the image each container was started from: the exact
+version for a Pinned artifact, the tag reference otherwise.
+
 ```
 shrine status application [name] [flags]
 ```

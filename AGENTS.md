@@ -34,9 +34,11 @@ Syncs team manifests to state. Uses --path/-p flag or specsDir from config (no l
 
 ### shrine status app/resource <name>
 Team is now an optional --team/-t flag, not a required positional argument. Shrine auto-searches all teams; use --team to disambiguate. Examples: shrine status app my-api, shrine status app my-api --team team-a, shrine status resource my-db
+The table's IMAGE column shows the image each container was started from (the exact version, shortened to twelve hex characters, for a `Pinned` artifact; the tag reference otherwise) beside IMAGE ID.
 
 ### shrine describe app/resource <name>
 Same as status: team is now an optional --team flag, not required. Examples: shrine describe app my-api, shrine describe app my-api --team team-a
+Shows `Image:` (the reference the manifest named) and `Pull policy:`; under `Pinned` also a `Pinned:` line (full exact version, readable form, date) and a `Running image:` line read from Docker (`unavailable` when the daemon cannot be reached; the command still succeeds). A `Pinned:` that differs from `Running image:` is a recorded, not yet deployed, pin.
 
 ### shrine delete application <name>
 Forgets an application from state: releases its published host-port allocation (see `networking.publish`) and its image pin (see `imagePullPolicy: Pinned`), and drops the stale deployment record. Docker-authoritative — refuses while the container exists (run teardown first). --team/-t is optional (all teams searched, ambiguity errors); supports --dry-run. `shrine delete team <name>` also releases every host port and every image pin the team held.

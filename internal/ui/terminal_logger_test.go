@@ -236,22 +236,6 @@ func TestTerminalObserver_ImageResolveStartsNoIndicatorAndErrorsGenerically(t *t
 	}
 }
 
-func TestShortDigest(t *testing.T) {
-	cases := map[string]string{
-		"sha256:a1b2c3d4e5f6a7b8c9d0": "a1b2c3d4e5f6",
-		"a1b2c3d4e5f6a7b8":            "a1b2c3d4e5f6",
-		"sha256:abc":                  "abc",
-		"":                            "",
-	}
-	for digest, want := range cases {
-		t.Run(digest, func(t *testing.T) {
-			if got := shortDigest(digest); got != want {
-				t.Errorf("shortDigest(%q) = %q, want %q", digest, got, want)
-			}
-		})
-	}
-}
-
 func TestTerminalObserver_RoutingConfigureAliases(t *testing.T) {
 	const routingLine = "  🔗 Configuring routing: web.example.com -> port 8080\n"
 
@@ -301,24 +285,6 @@ func TestTerminalObserver_GenericErrorLine(t *testing.T) {
 			t.Errorf("got  %q\nwant %q", got, want)
 		}
 	})
-}
-
-func TestReadableVersion(t *testing.T) {
-	const digest = "sha256:9c1b4d7e3f2a9c1b4d7e3f2a9c1b4d7e3f2a9c1b4d7e3f2a9c1b4d7e3f2a9c1b"
-	cases := map[string]string{
-		"postgres:17":                     "17@9c1b4d7e3f2a",
-		"postgres":                        "latest@9c1b4d7e3f2a",
-		"127.0.0.1:5000/shrine/whoami":    "latest@9c1b4d7e3f2a",
-		"ghcr.io/me/web:latest":           "latest@9c1b4d7e3f2a",
-		"postgres@sha256:aaaaaaaaaaaaaaa": "9c1b4d7e3f2a",
-	}
-	for requested, want := range cases {
-		t.Run(requested, func(t *testing.T) {
-			if got := readableVersion(requested, digest); got != want {
-				t.Errorf("readableVersion(%q) = %q, want %q", requested, got, want)
-			}
-		})
-	}
 }
 
 func TestTerminalObserver_PinnedLinesForUntaggedAndDigestRequests(t *testing.T) {

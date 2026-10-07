@@ -20,6 +20,7 @@ func (m *mockBackend) InspectContainer(id string) (engine.ContainerInfo, error) 
 		Running: true,
 		Status:  "running",
 		ImageID: "sha256:12345678901234567890",
+		Image:   "docker.io/traefik/whoami:latest",
 	}, nil
 }
 
@@ -127,4 +128,56 @@ func TestStatusAutoTeam(t *testing.T) {
 			t.Errorf("StatusResource() error = %v, wantErr not found", err)
 		}
 	})
+}
+
+func TestFormatStatusTable_AddsImageBetweenStatusAndImageID(t *testing.T) {
+	out := formatStatusTable([]containerStatusRow{{
+		Name:    "whoami-pinned",
+		Kind:    "Application",
+		Running: true,
+		Status:  "running",
+		Image:   "127.0.0.1:5000/shrine/whoami@3f2a9c1b4d7e",
+		ImageID: "sha256:3f2a9c1b4d7e",
+	}})
+
+	header, separator, rows := tableLines(t, out)
+	assertInOrder(t, header, "NAME", "KIND", "RUNNING", "STATUS", "IMAGE", "IMAGE ID")
+	if len(separator) != len(header) || strings.Trim(separator, "-") != "" {
+		t.Errorf("separator must be dashes as long as the header, got %q", separator)
+	}
+	if len(rows) != 1 {
+		t.Fatalf("expected one row, got %d:\n%s", len(rows), out)
+	}
+	assertInOrder(t, rows[0], "whoami-pinned", "Application", "true", "running", "127.0.0.1:5000/shrine/whoami@3f2a9c1b4d7e", "sha256:3f2a9c1b4d7e")
+}
+
+func TestShortImageReference(t *testing.T) {
+	const digest = "sha256:3f2a9c1b4d7e3f2a9c1b4d7e3f2a9c1b4d7e3f2a9c1b4d7e3f2a9c1b4d7e3f2a"
+	cases := map[string]string{
+		"":                                       "-",
+		"repo@" + digest:                         "repo@3f2a9c1b4d7e",
+		"127.0.0.1:5000/shrine/whoami@" + digest: "127.0.0.1:5000/shrine/whoami@3f2a9c1b4d7e",
+		"docker.io/traefik/whoami:latest":        "docker.io/traefik/whoami:latest",
+		"postgres":                               "postgres",
+	}
+	for ref, want := range cases {
+		t.Run(ref, func(t *testing.T) {
+			if got := shortImageReference(ref); got != want {
+				t.Errorf("shortImageReference(%q) = %q, want %q", ref, got, want)
+			}
+		})
+	}
+}
+
+func TestInspectDeployments_FillsTheImageCell(t *testing.T) {
+	rows, err := inspectDeployments([]teamedDeployment{{
+		Team:       "lab",
+		Deployment: state.Deployment{Name: "api", Kind: manifest.ApplicationKind, ContainerID: "c1"},
+	}}, &mockBackend{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rows[0].Image != "docker.io/traefik/whoami:latest" {
+		t.Errorf("Image = %q, want the reference the backend reported", rows[0].Image)
+	}
 }

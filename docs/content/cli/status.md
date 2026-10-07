@@ -14,6 +14,9 @@ Show live deployment status
 
 Show the live container status for all teams, or for a specific team if provided.
 
+The IMAGE column shows the image each container was started from: the exact
+version for a Pinned artifact, the tag reference otherwise.
+
 ```
 shrine status [team] [flags]
 ```

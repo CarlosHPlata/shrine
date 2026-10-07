@@ -79,4 +79,11 @@ func TestStatusDocker(t *testing.T) {
 			"--state-dir", tc.StateDir,
 		).AssertSuccess().AssertOutputContains("running")
 	})
+
+	s.Test("should show the IMAGE column beside the running state", func(tc *TestCase) {
+		tc.Run("status", testTeam,
+			"--state-dir", tc.StateDir,
+		).AssertSuccess().AssertOutputLineContains("test-cache", "traefik/whoami")
+		assertColumnsInOrder(tc, "NAME", "KIND", "RUNNING", "STATUS", "IMAGE", "IMAGE ID")
+	})
 }

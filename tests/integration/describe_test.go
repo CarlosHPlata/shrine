@@ -3,6 +3,7 @@
 package integration_test
 
 import (
+	"strings"
 	"testing"
 
 	. "github.com/CarlosHPlata/shrine/tests/integration/testutils"
@@ -43,6 +44,16 @@ func TestDescribeNoDocker(t *testing.T) {
 		tc.Run("describe", "resource", "nonexistent", "--team", testTeam, "--state-dir", tc.StateDir).
 			AssertFailure().
 			AssertStderrContains("not found")
+	})
+
+	s.Test("should still describe a seeded record when the container cannot be inspected", func(tc *TestCase) {
+		SeedDeploymentRecord(tc, testTeam, "Application whoami 0123456789abcdef 3a7b - -")
+
+		tc.Run("describe", "app", "whoami", "--team", testTeam, "--state-dir", tc.StateDir).
+			AssertSuccess().
+			AssertOutputLineContains("Image:", "-").
+			AssertOutputLineContains("Running image:", "unavailable").
+			AssertOutputNotContains("Pinned:")
 	})
 }
 
@@ -107,6 +118,19 @@ func TestDescribeDocker(t *testing.T) {
 			AssertSuccess().
 			AssertOutputLineContains("Image:", "-").
 			AssertOutputLineContains("Pull policy:", "-").
-			AssertOutputNotContains("traefik/whoami")
+			AssertOutputLineContains("Running image:", "traefik/whoami")
+		// The record knows nothing about the image; only the live container does.
+		for _, line := range strings.Split(tc.RunResult().Stdout, "\n") {
+			if strings.Contains(line, "traefik/whoami") && !strings.HasPrefix(line, "Running image:") {
+				tc.Fatalf("a legacy record must not print the image on a record line: %s", line)
+			}
+		}
+	})
+
+	s.Test("should show the image the running container was started from for a manifest-owned app", func(tc *TestCase) {
+		tc.Run("describe", "app", "whoami", "--team", testTeam, "--state-dir", tc.StateDir).
+			AssertSuccess().
+			AssertOutputLineContains("Running image:", "traefik/whoami").
+			AssertOutputNotContains("Pinned:")
 	})
 }

@@ -128,7 +128,7 @@ Resource    hello-db  postgres:17                 postgres@sha256:9c1b4d7e3f2aâ€
 
 ### 3.5 Readable form
 
-Wherever a pin is shown in a table: `<readable>@<twelve hex>`, where readable is the tag of `Requested`, or the short digest alone when `Requested` is itself a digest reference. Examples: `latest@3f2a9c1b4d7e`, `17@9c1b4d7e3f2a`. `describe` shows the full `Pinned` string and the date. *Amended by T3 (spec 033):* an untagged `Requested` (`postgres`) reads as `latest`.
+Wherever a pin is shown in a table: `<readable>@<twelve hex>`, where readable is the tag of `Requested`, or the short digest alone when `Requested` is itself a digest reference. Examples: `latest@3f2a9c1b4d7e`, `17@9c1b4d7e3f2a`. `describe` shows the full `Pinned` string and the date. *Amended by T3 (spec 033):* an untagged `Requested` (`postgres`) reads as `latest`. *Amended by T5 (spec 035):* the helpers live in `internal/manifest` as `ReadableVersion` and `ShortDigest`, exported, beside `TagOf` and `IsDigestReference`, with `DigestOf` added; the terminal, the VERSION column, and the `Pinned:` line share them.
 
 ## 4. Interfaces and flow
 
@@ -231,6 +231,8 @@ One `ResolveImageOp` per step, in step order, from the step's manifest. The firs
 - `printDeploymentDetail` adds `Image:` and `Pull policy:` in T1; T5 adds `Pinned:` with the full digest reference and the date, and `Running image:` from `ContainerInfo.Image`. `describe` gains a container backend through `NewQueryContainerBackend`; when Docker is unreachable the running image prints as unavailable and the command still succeeds.
 - `internal/handler/status.go`: `containerStatusRow` gains `Image`; the table gains an IMAGE column; IMAGE ID stays.
 
+*Amended by T5 (spec 035), as shipped:* the listing reads the pins once through `ImagePins.ListAll()` rather than `Get` per row, and a `Pinned` record without a pin shows the recorded manifest reference. `DescribeApplication` and `DescribeResource` take the container backend as a parameter and tolerate nil; a failed `InspectContainer` renders `Running image: unavailable (<reason>)` and the command succeeds, while a failed backend construction (malformed Docker environment) fails the command as it does for `status` and `delete`. The `Pinned:` line is one line, `<pinned> (<readable>, <YYYY-MM-DD>)`, with the readable form exactly as the VERSION column prints it. The status IMAGE column sits between STATUS and IMAGE ID and shortens a digest reference to `<repository>@<twelve hex>` per TD-11; a tag reference is printed as is.
+
 ### 4.8 Delete
 
 - `DeleteApplication` releases the pin after the host port. `DeleteTeam` calls `ReleaseTeam` after releasing host ports. Both in T3.
@@ -270,6 +272,7 @@ The core scenario is: deploy, move the registry's `latest` to a different image,
 - `testutils.PushAs(tc, source, ref)` tags a small public image already present on the runner, `alpine:3.19` and `alpine:3.20` serve, as `127.0.0.1:<port>/shrine/app:latest` and pushes it. Moving `latest` is a second `PushAs` with the other source. *Amended by T3 (spec 033), as shipped:* the sources are `traefik/whoami:v1.10.1` and `v1.10.2`, pushed as `shrine/whoami:latest`, because an alpine container exits at once and fails the running assertions; `PushAs` is a method on the `LocalRegistry` that `StartLocalRegistry` returns and it returns the pushed digest; the pinned manifests are written at run time by `WritePinnedFixture` (the port is only known then) and only the validation fixtures live under `tests/testdata/pinned/`.
 - `testutils.AssertContainerImageDigest(name, digest)` inspects the container's image and compares `RepoDigests`. *Amended by T3 (spec 033):* not needed; every pinned container is created from the digest reference, so the existing `AssertContainerImage` on `Config.Image` plus an image-id comparison prove the same thing.
 - The "wiped cache" cycle is `docker image rm` of the pinned digest on the runner between deploys.
+- *Amended by T5 (spec 035):* the "pin recorded but not deployed" scenario pushes the newer image and rewrites the pin line in `pins.txt` with its digest (`replacePinDigest` in `pinned_version_queries_test.go`) until T6's `bump` exists.
 
 The fixtures under `tests/testdata/pinned/` are manifests with `imagePullPolicy: Pinned` whose image is `127.0.0.1:<port>/shrine/app`; the port is substituted at test time the way other suites substitute the state directory.
 
