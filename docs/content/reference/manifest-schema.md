@@ -241,7 +241,7 @@ Under `Pinned` the manifest names only the repository, never a fixed version:
 
 - an Application `spec.image` has no tag or the tag `latest`;
 - a Resource omits `spec.version` or sets it to `latest`, and a Resource `spec.image` override, when present, follows the Application rule;
-- a digest reference (`repo@sha256:…`) is a fixed version and is rejected.
+- a reference to an exact version, the registry digest (`repo@sha256:…`), is a fixed version and is rejected.
 
 A violation is reported with the manifest's other validation errors, before anything is deployed:
 
@@ -256,27 +256,38 @@ When the policy came from the configuration default rather than the manifest, th
 resource "db": spec.version "16" names a fixed version but the image pull policy is Pinned (from config.yml imagePullPolicy); set spec.imagePullPolicy on the manifest or change the default
 ```
 
-**The pin lifecycle.** The first deploy of a `Pinned` artifact pulls the newest version of its repository, deploys it, and records a pin: the exact version (the registry digest), the readable version it was resolved from, and the date. Every later deploy runs the pinned exact version, fetching it by digest only when the host no longer has it and never consulting the tag again, across a plain redeploy, a redeploy that recreates the container, a teardown followed by a deploy, and a wiped local image cache. Deploy output says which happened: `📌 Pinned team.name at latest@3f2a9c1b4d7e` on the first deploy, `📌 Using pinned team.name latest@3f2a9c1b4d7e (since 2026-10-06)` afterwards. `shrine deploy --dry-run` previews the decision without writing anything.
+**The pin lifecycle.** The [Managing image versions](/guides/image-versions/) guide walks through every step below with a worked example. The first deploy of a `Pinned` artifact pulls the newest version of its repository, deploys it, and records a pin: the exact version (the registry digest), the readable version it was resolved from, and the date. Every later deploy runs the pinned exact version, fetching it by digest only when the host no longer has it and never consulting the tag again, across a plain redeploy, a redeploy that recreates the container, a teardown followed by a deploy, and a wiped local image cache. Deploy output says which happened: `📌 Pinned shop.api at latest@3f2a9c1b4d7e` on the first deploy, `📌 Using pinned shop.api latest@3f2a9c1b4d7e (since 2026-10-01)` afterwards. `shrine deploy --dry-run` previews the decision without writing anything.
 
 Only four things release a pin: `shrine delete application <name>`, `shrine delete resource <name>`, `shrine delete team <name>`, and a deploy of the artifact under `Always` or `IfNotPresent`. After a release, the next `Pinned` deploy is a first deploy again and records a fresh pin.
 
 **Moving a pin.** `shrine bump application <name>` and `shrine bump resource <name>` move a `Pinned` artifact to a chosen version: a readable version such as `-v 17` or `-v v1.4.0`, or an exact version `-v sha256:…`. Without `-v` they move it to the newest version. The repository always comes from the manifest. The bump verifies that the version exists in the registry, records the new pin, prints the previous and the new version, and touches no container, so the next `shrine deploy` applies it. Rolling back is a bump to the earlier version. A manifest-owned artifact (`Always`, `IfNotPresent`) is refused, because its version is changed by editing the manifest. An artifact that was never deployed can be bumped, so its first deploy runs the chosen version. `--dry-run` prints the reference that would be resolved and writes nothing.
 
 ```text
-shrine bump application whoami-pinned -v v2
-Bumped shrine-deploy-test/whoami-pinned: latest@3f2a9c1b4d7e -> v2@9c1b4d7e3f2a; run "shrine deploy" to apply
+$ shrine bump resource shop-db -v 17
+…
+Bumped shop/shop-db: 16@2d6f0b8e4a1c -> 17@9c1b4d7e3f2a; run "shrine deploy" to apply
 ```
 
-If the registry no longer serves a pinned exact version and the host does not have it either, the deploy stops before any container or network is touched and names the artifact, the exact version, and the `shrine bump` command to run.
+If the registry no longer serves a pinned exact version and the host does not have it either, the deploy stops before any container or network is touched and names the artifact, the exact version, and the `shrine bump` command to run. See [Troubleshooting](/troubleshooting/#a-deploy-stops-because-a-pinned-version-is-no-longer-served).
 
 **Reading what is pinned.** `shrine get deployed` (and `get applications`, `get resources`) shows a pinned artifact's version as the readable version it was resolved from, `@`, and the first twelve characters of the exact version, for example `latest@3f2a9c1b4d7e`; a manifest-owned artifact shows the reference its manifest named. `shrine describe app <name>` and `describe resource <name>` show the full exact version with the readable form and the date it was pinned on a `Pinned:` line, and the image the running container was started from on a `Running image:` line, so a `Pinned:` that differs from `Running image:` is a pin that has been recorded but not yet deployed (the result of a `bump`). `shrine status` shows the running image in an IMAGE column beside the running state. `get` needs no container runtime; `describe` prints `Running image: unavailable` when the runtime cannot be reached and still succeeds. Pins of artifacts that are not deployed are never shown.
 
-```text
-TEAM                 NAME                           KIND            VERSION                                  CONTAINER ID
-lab                  hello-db                       Resource        17@9c1b4d7e3f2a                          5d0a11c3b2e4
+After the bump to 17 shown above, and before the deploy that applies it, the two lines differ:
 
-Pinned:       postgres@sha256:9c1b4d7e3f2a…  (17@9c1b4d7e3f2a, 2026-10-06)
-Running image: postgres@sha256:9c1b4d7e3f2a…
+```text
+$ shrine get resources --team shop
+TEAM                 NAME                           KIND            VERSION                                  CONTAINER ID
+----------------------------------------------------------------------------------------------------------------------------
+shop                 cache                          Resource        redis:7.4                                7a3e5c9b1d2f
+shop                 shop-db                        Resource        17@9c1b4d7e3f2a                          5d0a11c3b2e4
+```
+
+```text
+$ shrine describe resource shop-db
+…
+Pinned:       postgres@sha256:9c1b4d7e3f2abafaeca130ff41ae79c7f98018fd87e177d20f90c7d5b32c63f1 (17@9c1b4d7e3f2a, 2026-10-20)
+Running image: postgres@sha256:2d6f0b8e4a1c5e953124e2943a0ef520833a53ec00009a6c756237ef124ab460
+…
 ```
 
 ## Templating

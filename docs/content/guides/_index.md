@@ -17,3 +17,4 @@ Learn how to accomplish specific tasks with Shrine. These guides walk through re
 - [Custom registries](custom-registries/) — Pull from private registries and use short aliases in manifests.
 - [Secrets vault](secrets-vault/) — Store secrets in an external vault and reference them from manifests.
 - [Team-scoped deploy](team-scoped-deploy/) — Use `shrine deploy team <name>` to reconcile only one team's stack.
+- [Managing image versions](image-versions/) — Pin an image at its newest version, see which version runs, and move it on purpose.
