@@ -16,6 +16,7 @@ shrine apply teams                         # sync team manifests to state
 shrine teardown team-a                     # remove all containers and network for a team
 shrine status                              # show all deployed resources
 shrine status app my-api                  # show status for a specific app
+shrine bump app my-api -v 1.4.0            # pin an app to a version; the next deploy applies it
 ```
 
 ## CLI Reference
@@ -39,6 +40,9 @@ The table's IMAGE column shows the image each container was started from (the ex
 ### shrine describe app/resource <name>
 Same as status: team is now an optional --team flag, not required. Examples: shrine describe app my-api, shrine describe app my-api --team team-a
 Shows `Image:` (the reference the manifest named) and `Pull policy:`; under `Pinned` also a `Pinned:` line (full exact version, readable form, date) and a `Running image:` line read from Docker (`unavailable` when the daemon cannot be reached; the command still succeeds). A `Pinned:` that differs from `Running image:` is a recorded, not yet deployed, pin.
+
+### shrine bump application/resource <name>
+Aliases `app` and `res`. Moves a `Pinned` artifact to another version: `-v` takes a readable version (a tag such as `17` or `v1.4.0`) or an exact version (`sha256:…`); without `-v` the newest version is pinned. The repository always comes from the manifest. Resolves and verifies the version in the registry immediately, records the pin in `pins.txt`, prints the previous and the new version, and touches no container; the next `shrine deploy` applies it. Refuses a manifest-owned artifact (the message names the policy, `Always` or `IfNotPresent`) and an unknown name (the message names the manifest directory). Works for an artifact that was never deployed: its first deploy runs the bumped version. --team/-t verifies the manifest's owner (a name is unique per manifest directory); --path/-p as deploy; --dry-run prints the reference that would be resolved and writes nothing. Examples: shrine bump app my-api -v 1.4.0, shrine bump resource my-db -v 17, shrine bump app my-api --dry-run
 
 ### shrine delete application <name>
 Forgets an application from state: releases its published host-port allocation (see `networking.publish`) and its image pin (see `imagePullPolicy: Pinned`), and drops the stale deployment record. Docker-authoritative — refuses while the container exists (run teardown first). --team/-t is optional (all teams searched, ambiguity errors); supports --dry-run. `shrine delete team <name>` also releases every host port and every image pin the team held.
@@ -166,6 +170,7 @@ shrine/
 ├── cmd/                        # Cobra commands (thin dispatchers)
 │   ├── root.go                 # Global flags: --config-dir, --state-dir
 │   ├── deploy.go               # shrine deploy [--path] [--dry-run] + `team <name>` subcommand
+│   ├── bump.go                 # shrine bump application|resource <name> [-v] [--dry-run]
 │   ├── teardown.go             # shrine teardown <team>
 │   ├── generate.go             # shrine generate team|app|resource <name>
 │   └── ...
@@ -247,7 +252,7 @@ shrine deploy
      └── done
 ```
 
-**Image resolution runs first and fails with zero changes.** `ResolveImage` is called for every planned step before `CreatePlatformNetwork`, so an unresolvable reference stops the deploy before any network or container exists; the result (`Ref`, `Digest`, `ImageID`) rides on `CreateContainerOp`, and `CreateContainer` resolves on its own only when `ImageID` is empty, which is the Traefik plugin's direct path. See `specs/032-preflight-image-resolve/`. Under `imagePullPolicy: Pinned` the pre-pass reuses the exact version recorded in `pins.txt` (pulling it by digest only when the host lacks it) or, on the first deploy, pulls the newest version and records its digest; a resolution under `Always` or `IfNotPresent` releases any pin, so returning to `Pinned` is a first deploy again. See `specs/033-pinned-image-policy/`.
+**Image resolution runs first and fails with zero changes.** `ResolveImage` is called for every planned step before `CreatePlatformNetwork`, so an unresolvable reference stops the deploy before any network or container exists; the result (`Ref`, `Digest`, `ImageID`) rides on `CreateContainerOp`, and `CreateContainer` resolves on its own only when `ImageID` is empty, which is the Traefik plugin's direct path. See `specs/032-preflight-image-resolve/`. Under `imagePullPolicy: Pinned` the pre-pass reuses the exact version recorded in `pins.txt` (pulling it by digest only when the host lacks it) or, on the first deploy, pulls the newest version and records its digest; a resolution under `Always` or `IfNotPresent` releases any pin, so returning to `Pinned` is a first deploy again. See `specs/033-pinned-image-policy/`. A `shrine bump` records a new pin through the same `ResolveImage` (`Repin` set, source `repinned`) without touching any container; a pinned exact version the registry no longer serves fails the pre-pass with a message naming the bump to run. See `specs/036-bump-command/`.
 
 **The resolver is an engine collaborator, not a pipeline stage.** The handler never calls it; `Engine` holds a `resolver.Resolver` and invokes it at two points inside `ExecuteDeploy`:
 
@@ -278,7 +283,7 @@ shrine deploy
 ├── <team>/
 │   ├── secrets.env              # generated secrets (KEY=VALUE, 0600)
 │   ├── deployments.txt          # deployed resource records (<kind> <name> <container-id> <config-hash> <image> <pull-policy>; `-` for an empty value)
-│   └── pins.txt                 # image pins (<kind> <name> <requested> <pinned> <pinned-at>); survive teardown, released by delete and by a manifest-owned deploy
+│   └── pins.txt                 # image pins (<kind> <name> <requested> <pinned> <pinned-at>); survive teardown, released by delete and by a manifest-owned deploy; replaced by `shrine bump`
 └── teams/                       # synced Team manifests (JSON)
 ```
 
