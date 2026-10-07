@@ -93,11 +93,15 @@ func loadImagePins(store *state.Store) (map[string]state.ImagePin, error) {
 	return pins, nil
 }
 
-// pinFor finds the pin a deployment record points at. The pin key carries no
-// kind, so the kind is checked here.
+// isPinFor guards the one ambiguity the pin key leaves open: it carries no
+// kind, so a pin is the record's only when the kinds agree.
+func isPinFor(pin state.ImagePin, d state.Deployment) bool {
+	return pin.Kind == d.Kind
+}
+
 func pinFor(team string, d state.Deployment, pins map[string]state.ImagePin) (state.ImagePin, bool) {
 	pin, ok := pins[state.ImagePinKey(team, d.Name)]
-	if !ok || pin.Kind != d.Kind {
+	if !ok || !isPinFor(pin, d) {
 		return state.ImagePin{}, false
 	}
 	return pin, true
@@ -282,7 +286,7 @@ func lookupPin(store *state.Store, team string, d state.Deployment) (state.Image
 	if err != nil {
 		return state.ImagePin{}, false, fmt.Errorf("reading image pin for %s/%s: %w", team, d.Name, err)
 	}
-	if pin.Kind != d.Kind {
+	if !isPinFor(pin, d) {
 		return state.ImagePin{}, false, nil
 	}
 	return pin, true, nil

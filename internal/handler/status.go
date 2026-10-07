@@ -18,10 +18,7 @@ type containerStatusRow struct {
 	ImageID string
 }
 
-const (
-	statusHeaderFormat = "%-25s %-15s %-10s %-12s %-40s %-19s\n"
-	statusRowFormat    = "%-25s %-15s %-10v %-12s %-40s %-19s\n"
-)
+const statusRowFormat = "%-25s %-15s %-10v %-12s %-40s %-19s\n"
 
 // shortImageReference is the table form of a running image: a digest
 // reference keeps twelve hex characters (design TD-11), a tag stays as is.
@@ -60,7 +57,7 @@ func inspectDeployments(deployments []teamedDeployment, backend engine.Container
 
 func formatStatusTable(rows []containerStatusRow) string {
 	var b strings.Builder
-	header := fmt.Sprintf(statusHeaderFormat, "NAME", "KIND", "RUNNING", "STATUS", "IMAGE", "IMAGE ID")
+	header := fmt.Sprintf(statusRowFormat, "NAME", "KIND", "RUNNING", "STATUS", "IMAGE", "IMAGE ID")
 	b.WriteString(header)
 	b.WriteString(strings.Repeat("-", len(strings.TrimSuffix(header, "\n"))))
 	b.WriteString("\n")
