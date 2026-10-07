@@ -129,7 +129,7 @@ func TestBump(t *testing.T) {
 	// US4, SC-005.
 	s.Test("manifest-owned, unknown, and wrong-team artifacts are refused and nothing is recorded", func(tc *TestCase) {
 		w := worlds[tc]
-		WriteManifestOwnedFixture(tc, w.specsDir, w.registry.Host, "latest")
+		WriteManifestOwnedFixture(tc, w.specsDir, w.registry.Host, "v1.10.1")
 
 		for _, flags := range [][]string{{}, {"--dry-run"}} {
 			bump(tc, w.specsDir, append([]string{"app", "whoami-pinned", "-v", "v2"}, flags...)...).
