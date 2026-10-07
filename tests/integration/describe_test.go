@@ -44,6 +44,16 @@ func TestDescribeNoDocker(t *testing.T) {
 			AssertFailure().
 			AssertStderrContains("not found")
 	})
+
+	s.Test("should still describe a seeded record when the container cannot be inspected", func(tc *TestCase) {
+		SeedDeploymentRecord(tc, testTeam, "Application whoami 0123456789abcdef 3a7b - -")
+
+		tc.Run("describe", "app", "whoami", "--team", testTeam, "--state-dir", tc.StateDir).
+			AssertSuccess().
+			AssertOutputLineContains("Image:", "-").
+			AssertOutputLineContains("Running image:", "unavailable").
+			AssertOutputNotContains("Pinned:")
+	})
 }
 
 func TestDescribeDocker(t *testing.T) {
@@ -108,5 +118,12 @@ func TestDescribeDocker(t *testing.T) {
 			AssertOutputLineContains("Image:", "-").
 			AssertOutputLineContains("Pull policy:", "-").
 			AssertOutputNotContains("traefik/whoami")
+	})
+
+	s.Test("should show the image the running container was started from for a manifest-owned app", func(tc *TestCase) {
+		tc.Run("describe", "app", "whoami", "--team", testTeam, "--state-dir", tc.StateDir).
+			AssertSuccess().
+			AssertOutputLineContains("Running image:", "traefik/whoami").
+			AssertOutputNotContains("Pinned:")
 	})
 }

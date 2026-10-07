@@ -15,9 +15,14 @@ func (backend *DockerBackend) InspectContainer(containerID string) (engine.Conta
 			map[string]string{"id": containerID},
 			fmt.Errorf("inspecting container %q: %w", containerID, err))
 	}
+	var image string
+	if resp.Config != nil {
+		image = resp.Config.Image
+	}
 	return engine.ContainerInfo{
 		Running: resp.State.Running,
 		Status:  resp.State.Status,
 		ImageID: resp.Image,
+		Image:   image,
 	}, nil
 }

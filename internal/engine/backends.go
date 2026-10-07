@@ -59,6 +59,7 @@ type ContainerInfo struct {
 	Running bool
 	Status  string
 	ImageID string
+	Image   string // the reference the container was created from, as the runtime reports it
 }
 
 type ResolveImageOp struct {

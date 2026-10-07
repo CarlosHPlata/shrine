@@ -3,7 +3,6 @@ package ui
 import (
 	"fmt"
 	"io"
-	"strings"
 	"sync"
 	"time"
 
@@ -171,41 +170,17 @@ func (t *TerminalObserver) renderImageResolved(e engine.Event) {
 	case engine.ImageSourceManifest:
 		fmt.Fprintf(t.out, "  🔎 Resolved %s %s\n", artifact, exactVersion(e.Fields["ref"], e.Fields["digest"]))
 	case engine.ImageSourceResolved:
-		fmt.Fprintf(t.out, "  📌 Pinned %s at %s\n", artifact, readableVersion(e.Fields["requested"], e.Fields["digest"]))
+		fmt.Fprintf(t.out, "  📌 Pinned %s at %s\n", artifact, manifest.ReadableVersion(e.Fields["requested"], e.Fields["digest"]))
 	case engine.ImageSourcePinned:
-		fmt.Fprintf(t.out, "  📌 Using pinned %s %s (since %s)\n", artifact, readableVersion(e.Fields["requested"], e.Fields["digest"]), e.Fields["pinned_at"])
+		fmt.Fprintf(t.out, "  📌 Using pinned %s %s (since %s)\n", artifact, manifest.ReadableVersion(e.Fields["requested"], e.Fields["digest"]), e.Fields["pinned_at"])
 	}
-}
-
-// readableVersion is the pin as a person reads it: the tag it was resolved
-// from and a short exact version, or the short exact version alone when the
-// request was itself a digest (design section 3.5).
-func readableVersion(requested, digest string) string {
-	if manifest.IsDigestReference(requested) {
-		return shortDigest(digest)
-	}
-	tag := manifest.TagOf(requested)
-	if tag == "" {
-		tag = "latest"
-	}
-	return tag + "@" + shortDigest(digest)
 }
 
 func exactVersion(ref, digest string) string {
 	if digest == "" {
 		return ref
 	}
-	return ref + "@" + shortDigest(digest)
-}
-
-// shortDigest keeps twelve hex characters, the length container ids are
-// shortened to elsewhere (design TD-11).
-func shortDigest(digest string) string {
-	digest = strings.TrimPrefix(digest, "sha256:")
-	if len(digest) <= 12 {
-		return digest
-	}
-	return digest[:12]
+	return ref + "@" + manifest.ShortDigest(digest)
 }
 
 func (t *TerminalObserver) handleStep(e engine.Event, startStatus engine.EventStatus, prefix string, startFmt string, startFields string, finishFmt string, finishFields ...string) {

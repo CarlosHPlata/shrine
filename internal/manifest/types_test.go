@@ -86,3 +86,55 @@ func TestEffectivePullPolicyWithDefault_Precedence(t *testing.T) {
 		t.Errorf("with nothing declared the derived rule applies, got %q", got)
 	}
 }
+
+func TestReadableVersion(t *testing.T) {
+	const digest = "sha256:9c1b4d7e3f2a9c1b4d7e3f2a9c1b4d7e3f2a9c1b4d7e3f2a9c1b4d7e3f2a9c1b"
+	cases := map[string]string{
+		"postgres:17":                     "17@9c1b4d7e3f2a",
+		"postgres":                        "latest@9c1b4d7e3f2a",
+		"127.0.0.1:5000/shrine/whoami":    "latest@9c1b4d7e3f2a",
+		"ghcr.io/me/web:latest":           "latest@9c1b4d7e3f2a",
+		"postgres@sha256:aaaaaaaaaaaaaaa": "9c1b4d7e3f2a",
+	}
+	for requested, want := range cases {
+		t.Run(requested, func(t *testing.T) {
+			if got := ReadableVersion(requested, digest); got != want {
+				t.Errorf("ReadableVersion(%q) = %q, want %q", requested, got, want)
+			}
+		})
+	}
+	if got := ReadableVersion("postgres:17", "sha256:abc"); got != "17@abc" {
+		t.Errorf("a short exact version is kept as is, got %q", got)
+	}
+}
+
+func TestShortDigest(t *testing.T) {
+	cases := map[string]string{
+		"sha256:a1b2c3d4e5f6a7b8c9d0": "a1b2c3d4e5f6",
+		"a1b2c3d4e5f6a7b8":            "a1b2c3d4e5f6",
+		"sha256:abc":                  "abc",
+		"":                            "",
+	}
+	for digest, want := range cases {
+		t.Run(digest, func(t *testing.T) {
+			if got := ShortDigest(digest); got != want {
+				t.Errorf("ShortDigest(%q) = %q, want %q", digest, got, want)
+			}
+		})
+	}
+}
+
+func TestDigestOf(t *testing.T) {
+	cases := map[string]string{
+		"ghcr.io/me/api@sha256:abc": "sha256:abc",
+		"ghcr.io/me/api:1.2":        "",
+		"":                          "",
+	}
+	for ref, want := range cases {
+		t.Run(ref, func(t *testing.T) {
+			if got := DigestOf(ref); got != want {
+				t.Errorf("DigestOf(%q) = %q, want %q", ref, got, want)
+			}
+		})
+	}
+}

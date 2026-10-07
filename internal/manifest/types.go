@@ -270,3 +270,34 @@ func TagOf(ref string) string {
 func IsDigestReference(ref string) bool {
 	return strings.Contains(ref, "@")
 }
+
+// DigestOf returns the exact version part of a digest reference
+// (repo@sha256:… yields sha256:…), or "" when the reference has none.
+func DigestOf(ref string) string {
+	_, digest, _ := strings.Cut(ref, "@")
+	return digest
+}
+
+// ReadableVersion is a pin as a person reads it: the tag it was resolved
+// from and a short exact version, or the short exact version alone when the
+// request was itself a digest (design section 3.5).
+func ReadableVersion(requested, digest string) string {
+	if IsDigestReference(requested) {
+		return ShortDigest(digest)
+	}
+	tag := TagOf(requested)
+	if tag == "" {
+		tag = "latest"
+	}
+	return tag + "@" + ShortDigest(digest)
+}
+
+// ShortDigest keeps twelve hex characters, the length container ids are
+// shortened to elsewhere (design TD-11).
+func ShortDigest(digest string) string {
+	digest = strings.TrimPrefix(digest, "sha256:")
+	if len(digest) <= 12 {
+		return digest
+	}
+	return digest[:12]
+}
