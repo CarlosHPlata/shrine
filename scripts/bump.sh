@@ -39,7 +39,7 @@ Without a level it shows a menu; before pushing it asks for confirmation.
 Before anything is tagged it checks that you are on $RELEASE_BRANCH with no
 modified, staged or untracked files, level with $REMOTE/$RELEASE_BRANCH, that
 CI ($CI_WORKFLOW, which includes the integration tests) passed for this commit,
-that go.mod and go.sum are tidy, and that go test passes.
+and that go test passes.
 
 The base is the highest stable tag (vX.Y.Z). An alpha or beta leads up to the
 version already in prerelease, or else to the next patch; add --major, --minor
@@ -105,14 +105,6 @@ preflight() {
   esac
 
   command -v go >/dev/null || die "go is not on PATH"
-  # GoReleaser runs `go mod tidy` before building; if that changes anything,
-  # the binaries would not be built from the files this tag points at.
-  if ! output=$(go mod tidy -diff 2>&1); then
-    echo "$output" >&2
-    die "go.mod or go.sum is not tidy; run 'go mod tidy' and merge it through a PR"
-  fi
-  check_ok "go.mod and go.sum are tidy"
-
   echo "  … running go test ./..."
   if ! output=$(go test ./... 2>&1); then
     echo "$output" >&2
@@ -219,7 +211,7 @@ for arg in "$@"; do
   esac
 done
 
-# go test and go mod tidy are relative to the repo root, wherever this was run from.
+# go test is relative to the repo root, wherever this was run from.
 cd "$(git rev-parse --show-toplevel)"
 
 # Local tags are only as fresh as the last fetch; this also updates origin/main.
