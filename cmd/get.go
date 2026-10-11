@@ -1,9 +1,33 @@
 package cmd
 
 import (
+	"github.com/CarlosHPlata/shrine/internal/app"
+	"github.com/CarlosHPlata/shrine/internal/engine"
 	"github.com/CarlosHPlata/shrine/internal/handler"
 	"github.com/spf13/cobra"
 )
+
+const getJSONUsage = "Print the listing as JSON instead of a table"
+
+const getWorkloadsJSONHelp = `
+
+With --json, the listing is printed as one JSON document, {"data": [...]},
+with one entry per row carrying what describe shows: team, name, kind, image,
+pullPolicy, version, pin (reference, version, pinnedAt; null when the artifact
+is not pinned), runningImage (read from the container runtime; null when it
+cannot be read), the full containerId and the full configHash.`
+
+var getJSONFlag bool
+
+// jsonQueryBackend never fails a listing: a runtime that cannot be reached
+// only leaves the running images null.
+func jsonQueryBackend() engine.ContainerBackend {
+	backend, err := app.NewQueryContainerBackend(cfg, store)
+	if err != nil {
+		return nil
+	}
+	return backend
+}
 
 var getCmd = &cobra.Command{
 	Use:   "get",
@@ -15,9 +39,15 @@ var getTeamsCmd = &cobra.Command{
 	Use:     "teams",
 	Aliases: []string{"team"},
 	Short:   "List all registered teams",
-	Long:    `Display all teams currently registered in the platform state.`,
-	Args:    cobra.NoArgs,
+	Long: `Display all teams currently registered in the platform state.
+
+With --json, the teams are printed as one JSON document, {"data": [...]}, with
+name, displayName, maxApps and maxResources for each team.`,
+	Args: cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
+		if getJSONFlag {
+			return handler.ListTeamsJSON(store.Teams)
+		}
 		return handler.ListTeams(store.Teams)
 	},
 }
@@ -56,9 +86,12 @@ The VERSION column shows the version each artifact was deployed with: for a
 Pinned artifact, the readable version its pin was resolved from and the first
 twelve characters of its exact version, such as latest@3f2a9c1b4d7e; for any
 other artifact, the image reference its manifest named. The table is read from
-state, so it needs no container runtime.`,
+state, so it needs no container runtime.` + getWorkloadsJSONHelp,
 	Args: cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
+		if getJSONFlag {
+			return handler.ListApplicationsJSON(getTeamFlag, store, jsonQueryBackend())
+		}
 		return handler.ListApplications(getTeamFlag, store)
 	},
 }
@@ -73,9 +106,12 @@ The VERSION column shows the version each artifact was deployed with: for a
 Pinned artifact, the readable version its pin was resolved from and the first
 twelve characters of its exact version, such as latest@3f2a9c1b4d7e; for any
 other artifact, the image reference its manifest named. The table is read from
-state, so it needs no container runtime.`,
+state, so it needs no container runtime.` + getWorkloadsJSONHelp,
 	Args: cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
+		if getJSONFlag {
+			return handler.ListResourcesJSON(getTeamFlag, store, jsonQueryBackend())
+		}
 		return handler.ListResources(getTeamFlag, store)
 	},
 }
@@ -89,9 +125,12 @@ The VERSION column shows the version each artifact was deployed with: for a
 Pinned artifact, the readable version its pin was resolved from and the first
 twelve characters of its exact version, such as latest@3f2a9c1b4d7e; for any
 other artifact, the image reference its manifest named. The table is read from
-state, so it needs no container runtime.`,
+state, so it needs no container runtime.` + getWorkloadsJSONHelp,
 	Args: cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
+		if getJSONFlag {
+			return handler.ListDeployedJSON(getTeamFlag, store, jsonQueryBackend())
+		}
 		return handler.ListDeployed(getTeamFlag, store)
 	},
 }
@@ -105,4 +144,7 @@ func init() {
 	getCmd.AddCommand(getApplicationsCmd)
 	getCmd.AddCommand(getResourcesCmd)
 	getCmd.AddCommand(getDeployedCmd)
+	for _, listing := range []*cobra.Command{getTeamsCmd, getApplicationsCmd, getResourcesCmd, getDeployedCmd} {
+		listing.Flags().BoolVar(&getJSONFlag, "json", false, getJSONUsage)
+	}
 }

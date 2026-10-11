@@ -20,6 +20,12 @@ twelve characters of its exact version, such as latest@3f2a9c1b4d7e; for any
 other artifact, the image reference its manifest named. The table is read from
 state, so it needs no container runtime.
 
+With --json, the listing is printed as one JSON document, {"data": [...]},
+with one entry per row carrying what describe shows: team, name, kind, image,
+pullPolicy, version, pin (reference, version, pinnedAt; null when the artifact
+is not pinned), runningImage (read from the container runtime; null when it
+cannot be read), the full containerId and the full configHash.
+
 ```
 shrine get applications [flags]
 ```
@@ -28,6 +34,7 @@ shrine get applications [flags]
 
 ```
   -h, --help   help for applications
+      --json   Print the listing as JSON instead of a table
 ```
 
 ### Options inherited from parent commands

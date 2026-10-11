@@ -107,6 +107,42 @@ func TestPinnedVersionQueries(t *testing.T) {
 		assertColumnsInOrder(tc, "TEAM", "NAME", "KIND", "VERSION", "CONTAINER ID")
 	})
 
+	// Spec 039 US1, FR-003, FR-003b: the --json listing carries the pin that
+	// describe shows, beside the table's readable version.
+	s.Test("get --json carries the pin describe shows", func(tc *TestCase) {
+		w := worlds[tc]
+		writeManifestOwnedSibling(tc, w.specsDir)
+		pinnedDeploy(tc, w.specsDir).AssertSuccess()
+		readable := "latest@" + shortHex(w.oldDigest)
+
+		tc.Run("get", "deployed", "--json", "--state-dir", tc.StateDir).AssertSuccess()
+		entries := decodeListing(tc)
+
+		for _, name := range []string{"whoami-pinned", "cache-pinned"} {
+			entry := entryNamed(tc, entries, name)
+			assertField(tc, entry, "pullPolicy", "Pinned")
+			assertField(tc, entry, "version", readable)
+			assertField(tc, entry, "runningImage", w.pinnedRef())
+			pin, ok := entry["pin"].(map[string]any)
+			if !ok {
+				tc.Fatalf("expected %s to carry a pin object, got %#v", name, entry["pin"])
+			}
+			assertField(tc, pin, "reference", w.pinnedRef())
+			assertField(tc, pin, "version", readable)
+			pinnedAt := stringField(tc, pin, "pinnedAt")
+			if !strings.HasPrefix(pinnedAt, pinnedDateOf(tc, name)) || !strings.HasSuffix(pinnedAt, "Z") {
+				tc.Fatalf("expected %s pinnedAt on %s in UTC, got %q", name, pinnedDateOf(tc, name), pinnedAt)
+			}
+		}
+
+		owned := entryNamed(tc, entries, pinnedOwnedApp)
+		assertNullField(tc, owned, "pin")
+		assertField(tc, owned, "version", pinnedSourceOld)
+		if running := stringField(tc, owned, "runningImage"); !strings.Contains(running, pinnedSourceOld) {
+			tc.Fatalf("expected the manifest-owned running image to name %s, got %q", pinnedSourceOld, running)
+		}
+	})
+
 	// US2, FR-004, FR-005, SC-002: the pin and the running image agree right
 	// after a deploy.
 	s.Test("describe shows the pin and the running image in agreement", func(tc *TestCase) {
