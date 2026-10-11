@@ -37,6 +37,9 @@ Syncs team manifests to state. Uses --path/-p flag or specsDir from config (no l
 Team is now an optional --team/-t flag, not a required positional argument. Shrine auto-searches all teams; use --team to disambiguate. Examples: shrine status app my-api, shrine status app my-api --team team-a, shrine status resource my-db
 The table's IMAGE column shows the image each container was started from (the exact version, shortened to twelve hex characters, for a `Pinned` artifact; the tag reference otherwise) beside IMAGE ID.
 
+### shrine get deployed/applications/resources/teams
+Tables are read from state and need no container runtime. `--json` (on these four only; `get config-dir`/`state-dir` reject it) prints one document, `{"data": [...]}`, empty as `{"data": []}`. Workload entries carry `team`, `name`, `kind`, `image`, `pullPolicy`, `version` (the table's VERSION), `pin` (`reference`, `version`, `pinnedAt` in RFC 3339 UTC; `null` unless Pinned with a matching pin), `runningImage` (read live from Docker; `null` when it cannot be read, and the command still succeeds), the full `containerId` and the full `configHash`; a value the table shows as `-` is `""`. Team entries carry `name`, `displayName`, `maxApps`, `maxResources` (numbers). `--team` filters as for the table.
+
 ### shrine describe app/resource <name>
 Same as status: team is now an optional --team flag, not required. Examples: shrine describe app my-api, shrine describe app my-api --team team-a
 Shows `Image:` (the reference the manifest named) and `Pull policy:`; under `Pinned` also a `Pinned:` line (full exact version, readable form, date) and a `Running image:` line read from Docker (`unavailable` when the daemon cannot be reached; the command still succeeds). A `Pinned:` that differs from `Running image:` is a recorded, not yet deployed, pin.

@@ -229,6 +229,15 @@ shop                 cache                          Resource        redis:7.4   
 shop                 shop-db                        Resource        16@2d6f0b8e4a1c                          5d0a11c3b2e4
 ```
 
+For scripts, add `--json` to any of the three commands. It prints the same rows as one JSON document, each entry also carrying the full pin (`pin.reference`, `pin.version`, `pin.pinnedAt`) and the running image, which is `null` when the container runtime cannot be reached. See [`shrine get deployed`](/cli/get_deployed/) for every field:
+
+```text
+$ shrine get deployed --json | jq -r '.data[] | [.name, .version] | @tsv'
+api	latest@3f2a9c1b4d7e
+cache	redis:7.4
+shop-db	16@2d6f0b8e4a1c
+```
+
 `shrine describe` shows one artifact in full. `Pinned:` is the pin: the full exact version, its readable form, and the date it was pinned. `Running image:` is the image the running container was started from:
 
 ```text

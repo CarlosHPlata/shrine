@@ -150,6 +150,38 @@ func ListTeams(store state.TeamStore) error {
 	return nil
 }
 
+type teamEntry struct {
+	Name         string `json:"name"`
+	DisplayName  string `json:"displayName"`
+	MaxApps      int    `json:"maxApps"`
+	MaxResources int    `json:"maxResources"`
+}
+
+func ListTeamsJSON(store state.TeamStore) error {
+	teams, err := store.ListTeams()
+	if err != nil {
+		return fmt.Errorf("listing teams: %w", err)
+	}
+	doc, err := formatTeamsJSON(teams)
+	if err != nil {
+		return err
+	}
+	return printListing(doc)
+}
+
+func formatTeamsJSON(teams []*manifest.TeamManifest) ([]byte, error) {
+	entries := make([]teamEntry, len(teams))
+	for i, t := range teams {
+		entries[i] = teamEntry{
+			Name:         t.Metadata.Name,
+			DisplayName:  t.Spec.DisplayName,
+			MaxApps:      t.Spec.Quotas.MaxApps,
+			MaxResources: t.Spec.Quotas.MaxResources,
+		}
+	}
+	return encodeListing(entries)
+}
+
 // DescribeTeam displays detailed info about a single team from state.
 func DescribeTeam(name string, store *state.Store) error {
 	team, err := store.Teams.LoadTeam(name)

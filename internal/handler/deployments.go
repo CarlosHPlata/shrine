@@ -54,6 +54,15 @@ func deploymentsForTeamOrAll(team string, store *state.Store) ([]teamedDeploymen
 	return collectTeamDeployments(team, store)
 }
 
+// listDeployments lists every kind when kind is empty.
+func listDeployments(team, kind string, store *state.Store) ([]teamedDeployment, error) {
+	deployments, err := deploymentsForTeamOrAll(team, store)
+	if err != nil || kind == "" {
+		return deployments, err
+	}
+	return filterByKind(deployments, kind), nil
+}
+
 func filterByKind(deployments []teamedDeployment, kind string) []teamedDeployment {
 	var filtered []teamedDeployment
 	for _, d := range deployments {
@@ -111,15 +120,26 @@ func readablePin(pin state.ImagePin) string {
 	return manifest.ReadableVersion(pin.Requested, manifest.DigestOf(pin.Pinned))
 }
 
-// versionCell is the readable form of the pin for a Pinned record and the
-// reference the manifest named for every other one (design section 4.7).
-func versionCell(team string, d state.Deployment, pins map[string]state.ImagePin) string {
-	if d.Policy == manifest.ImagePullPolicyPinned {
-		if pin, ok := pinFor(team, d, pins); ok {
-			return readablePin(pin)
-		}
+// pinOf ignores a pin left behind under a manifest-owned policy: only a
+// Pinned record runs the version its pin names.
+func pinOf(team string, d state.Deployment, pins map[string]state.ImagePin) (state.ImagePin, bool) {
+	if d.Policy != manifest.ImagePullPolicyPinned {
+		return state.ImagePin{}, false
 	}
-	return valueOrUnknown(d.Image)
+	return pinFor(team, d, pins)
+}
+
+// versionOf is the readable form of the pin for a Pinned record and the
+// reference the manifest named for every other one (design section 4.7).
+func versionOf(team string, d state.Deployment, pins map[string]state.ImagePin) string {
+	if pin, ok := pinOf(team, d, pins); ok {
+		return readablePin(pin)
+	}
+	return d.Image
+}
+
+func versionCell(team string, d state.Deployment, pins map[string]state.ImagePin) string {
+	return valueOrUnknown(versionOf(team, d, pins))
 }
 
 func formatDeploymentsTable(deployments []teamedDeployment, pins map[string]state.ImagePin) string {
@@ -150,11 +170,10 @@ func printDeploymentsTable(deployments []teamedDeployment, store *state.Store) e
 }
 
 func ListApplications(team string, store *state.Store) error {
-	deployments, err := deploymentsForTeamOrAll(team, store)
+	apps, err := listDeployments(team, manifest.ApplicationKind, store)
 	if err != nil {
 		return err
 	}
-	apps := filterByKind(deployments, manifest.ApplicationKind)
 	if len(apps) == 0 {
 		fmt.Println("No applications deployed.")
 		return nil
@@ -163,11 +182,10 @@ func ListApplications(team string, store *state.Store) error {
 }
 
 func ListResources(team string, store *state.Store) error {
-	deployments, err := deploymentsForTeamOrAll(team, store)
+	resources, err := listDeployments(team, manifest.ResourceKind, store)
 	if err != nil {
 		return err
 	}
-	resources := filterByKind(deployments, manifest.ResourceKind)
 	if len(resources) == 0 {
 		fmt.Println("No resources deployed.")
 		return nil
@@ -176,7 +194,7 @@ func ListResources(team string, store *state.Store) error {
 }
 
 func ListDeployed(team string, store *state.Store) error {
-	deployments, err := deploymentsForTeamOrAll(team, store)
+	deployments, err := listDeployments(team, "", store)
 	if err != nil {
 		return err
 	}
@@ -295,14 +313,24 @@ func lookupPin(store *state.Store, team string, d state.Deployment) (state.Image
 // runningImage is read live because Docker, not the record, knows what a
 // container was created from; without Docker the line degrades alone.
 func runningImage(backend engine.ContainerBackend, containerID string) string {
-	if backend == nil {
-		return "unavailable (no container runtime)"
-	}
-	info, err := backend.InspectContainer(containerID)
+	image, err := inspectRunningImage(backend, containerID)
 	if err != nil {
 		return fmt.Sprintf("unavailable (%v)", err)
 	}
-	return valueOrUnknown(info.Image)
+	return valueOrUnknown(image)
+}
+
+var errNoContainerRuntime = errors.New("no container runtime")
+
+func inspectRunningImage(backend engine.ContainerBackend, containerID string) (string, error) {
+	if backend == nil {
+		return "", errNoContainerRuntime
+	}
+	info, err := backend.InspectContainer(containerID)
+	if err != nil {
+		return "", err
+	}
+	return info.Image, nil
 }
 
 // DeleteOptions parameterizes DeleteApplication and DeleteResource. Team is

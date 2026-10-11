@@ -14,6 +14,9 @@ List all registered teams
 
 Display all teams currently registered in the platform state.
 
+With --json, the teams are printed as one JSON document, {"data": [...]}, with
+name, displayName, maxApps and maxResources for each team.
+
 ```
 shrine get teams [flags]
 ```
@@ -22,6 +25,7 @@ shrine get teams [flags]
 
 ```
   -h, --help   help for teams
+      --json   Print the listing as JSON instead of a table
 ```
 
 ### Options inherited from parent commands
