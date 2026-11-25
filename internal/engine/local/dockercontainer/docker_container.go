@@ -129,6 +129,7 @@ func (backend *DockerBackend) createFreshContainer(ctx context.Context, op engin
 	created, err := backend.client.ContainerCreate(ctx,
 		&container.Config{
 			Image:        op.ResolvedRef,
+			Cmd:          op.Command,
 			Env:          op.Env,
 			Labels:       labels,
 			ExposedPorts: exposedPorts,

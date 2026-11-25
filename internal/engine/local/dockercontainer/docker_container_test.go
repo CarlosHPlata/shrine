@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -278,5 +279,43 @@ func TestConfigHash_NoCommandKeepsThePreUpgradeHash(t *testing.T) {
 	const preUpgrade = "1c2978390d17d3d33980163dab710d7e652dde66532e7b5643e474c51e59533f"
 	if got := configHash(op, op.ImageID); got != preUpgrade {
 		t.Errorf("configHash = %q, want the pre-upgrade hash %q", got, preUpgrade)
+	}
+}
+
+// captureCreatedConfig runs a fresh creation for op and returns the container
+// config that reached ContainerCreate.
+func captureCreatedConfig(t *testing.T, op engine.CreateContainerOp) *container.Config {
+	t.Helper()
+	fake := &fakeDockerAPI{createErr: errors.New("create rejected by fake")}
+	backend := &DockerBackend{client: fake, registries: testRegistries, observer: engine.NoopObserver{}}
+
+	if err := backend.CreateContainer(op); err == nil {
+		t.Fatal("expected CreateContainer to surface the fake's creation error")
+	}
+	if fake.createdConfig == nil {
+		t.Fatal("ContainerCreate was never called")
+	}
+	return fake.createdConfig
+}
+
+func TestCreateContainer_CommandBecomesCmdAndKeepsTheEntrypoint(t *testing.T) {
+	op := aliasTestOp("node:22")
+	op.Command = []string{"npm", "run", "worker"}
+
+	cfg := captureCreatedConfig(t, op)
+
+	if want := []string{"npm", "run", "worker"}; !reflect.DeepEqual([]string(cfg.Cmd), want) {
+		t.Errorf("container Cmd = %q, want %q", cfg.Cmd, want)
+	}
+	if cfg.Entrypoint != nil {
+		t.Errorf("container Entrypoint = %q, want unset so the image's entrypoint is kept", cfg.Entrypoint)
+	}
+}
+
+func TestCreateContainer_NoCommandLeavesCmdUnset(t *testing.T) {
+	cfg := captureCreatedConfig(t, aliasTestOp("node:22"))
+
+	if cfg.Cmd != nil {
+		t.Errorf("container Cmd = %q, want unset so the image's default command runs", cfg.Cmd)
 	}
 }
