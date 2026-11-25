@@ -89,7 +89,7 @@ func (r *LocalRegistry) waitUntilReady(tc *TestCase) {
 }
 
 // PushAs tags source as <host>/<repoTag>, pushes it, and returns the digest
-// the registry assigned, as the daemon records it after the push.
+// the registry now serves for the tag.
 func (r *LocalRegistry) PushAs(tc *TestCase, source, repoTag string) string {
 	tc.t.Helper()
 	ctx := context.Background()
@@ -114,35 +114,65 @@ func (r *LocalRegistry) PushAs(tc *TestCase, source, repoTag string) string {
 		tc.t.Fatalf("push of %s reported an error:\n%s", target, body)
 	}
 
-	inspected, err := cli.ImageInspect(ctx, target)
+	return r.servedDigest(tc, repoTag)
+}
+
+// manifestAccept lists every manifest media type, so the registry answers
+// with whatever it stored for the tag (a single manifest or an index).
+const manifestAccept = "application/vnd.oci.image.index.v1+json, " +
+	"application/vnd.docker.distribution.manifest.list.v2+json, " +
+	"application/vnd.oci.image.manifest.v1+json, " +
+	"application/vnd.docker.distribution.manifest.v2+json"
+
+// servedDigest asks the registry which digest it serves for repoTag. The
+// daemon's RepoDigests can't be trusted for this: with the containerd image
+// store, pushing a single-platform pull of a multi-arch image uploads only
+// that platform's manifest, yet RepoDigests still records the upstream
+// index digest.
+func (r *LocalRegistry) servedDigest(tc *TestCase, repoTag string) string {
+	tc.t.Helper()
+	repo, tag := splitRepoTag(repoTag)
+	url := "http://" + r.Host + "/v2/" + repo + "/manifests/" + tag
+
+	req, err := http.NewRequest(http.MethodHead, url, nil)
 	if err != nil {
-		tc.t.Fatalf("inspecting %s after push: %v", target, err)
+		tc.t.Fatalf("building manifest request for %s: %v", url, err)
 	}
-	prefix := r.Host + "/" + repositoryOfTag(repoTag) + "@"
-	for _, entry := range inspected.RepoDigests {
-		if digest, found := strings.CutPrefix(entry, prefix); found {
-			return digest
-		}
+	req.Header.Set("Accept", manifestAccept)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		tc.t.Fatalf("requesting manifest %s: %v", url, err)
 	}
-	tc.t.Fatalf("no repository digest for %s after push; RepoDigests = %v", target, inspected.RepoDigests)
-	return ""
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		tc.t.Fatalf("manifest %s: registry answered %s", url, resp.Status)
+	}
+	digest := resp.Header.Get("Docker-Content-Digest")
+	if digest == "" {
+		tc.t.Fatalf("manifest %s: registry sent no Docker-Content-Digest header", url)
+	}
+	return digest
 }
 
-func repositoryOfTag(repoTag string) string {
+func splitRepoTag(repoTag string) (repo, tag string) {
 	if colon := strings.LastIndex(repoTag, ":"); colon > strings.LastIndex(repoTag, "/") {
-		return repoTag[:colon]
+		return repoTag[:colon], repoTag[colon+1:]
 	}
-	return repoTag
+	return repoTag, "latest"
 }
 
-// ImageIDOf returns the local image id of ref, failing the test when absent.
-func (tc *TestCase) ImageIDOf(ref string) string {
+// ImageLayersOf returns the root filesystem layer digests of ref (an image
+// reference or id), failing the test when absent. Layers identify an image's
+// content under both image stores. Image ids don't: with the containerd
+// store, a multi-arch pull's id is its index digest, while a container
+// created from the platform manifest reports that manifest's digest.
+func (tc *TestCase) ImageLayersOf(ref string) []string {
 	tc.t.Helper()
 	inspected, err := tc.DockerClient.ImageInspect(context.Background(), ref)
 	if err != nil {
 		tc.t.Fatalf("inspecting image %s: %v", ref, err)
 	}
-	return inspected.ID
+	return inspected.RootFS.Layers
 }
 
 // RemoveImage force-removes ref from the host; the "wiped cache" cycle.

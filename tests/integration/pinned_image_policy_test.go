@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
 	"testing"
 
@@ -34,7 +35,7 @@ func pinnedFixturesPath(parts ...string) string {
 type pinnedWorld struct {
 	registry  *LocalRegistry
 	oldDigest string
-	oldID     string
+	oldLayers []string
 	specsDir  string
 }
 
@@ -62,7 +63,7 @@ func newPinnedSuite(t *testing.T) (*Suite, map[*TestCase]*pinnedWorld) {
 		worlds[tc] = &pinnedWorld{
 			registry:  registry,
 			oldDigest: digest,
-			oldID:     tc.ImageIDOf(pinnedSourceOld),
+			oldLayers: tc.ImageLayersOf(pinnedSourceOld),
 			specsDir:  specsDir,
 		}
 	})
@@ -131,8 +132,8 @@ func assertPinnedWorld(tc *TestCase, w *pinnedWorld) {
 	for _, name := range []string{pinnedApp, pinnedResource} {
 		tc.AssertContainerRunning(name)
 		tc.AssertContainerImage(name, w.pinnedRef())
-		if got := containerImageID(tc, name); got != w.oldID {
-			tc.Fatalf("container %s runs image %s, want the pinned image %s", name, got, w.oldID)
+		if got := tc.ImageLayersOf(containerImageID(tc, name)); !slices.Equal(got, w.oldLayers) {
+			tc.Fatalf("container %s runs image layers %v, want the pinned image layers %v", name, got, w.oldLayers)
 		}
 	}
 }
