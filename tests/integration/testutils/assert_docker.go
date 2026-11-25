@@ -255,3 +255,16 @@ func (tc *TestCase) AssertContainerPublishesPort(name, hostPort, containerPort, 
 	tc.t.Fatalf("container %q missing port binding %s → %s:%s%s", name, hostPort, containerPort, proto, bindingStr)
 	return tc
 }
+
+func (tc *TestCase) AssertContainerCmd(name string, want []string) *TestCase {
+	tc.t.Helper()
+	info, err := tc.DockerClient.ContainerInspect(context.Background(), name)
+	if err != nil {
+		tc.t.Errorf("container %q not found: %v", name, err)
+		return tc
+	}
+	if strings.Join(info.Config.Cmd, "\x00") != strings.Join(want, "\x00") {
+		tc.t.Errorf("container %q Cmd = %q, want %q", name, info.Config.Cmd, want)
+	}
+	return tc
+}
