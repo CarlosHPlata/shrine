@@ -98,7 +98,10 @@ spec:
   volumes:
     - name: uploads
       mountPath: /app/uploads
+  command: ["node", "server.js"]   # optional; replaces the image's CMD (entrypoint kept); list form only
 ```
+
+`command` (Applications and Resources) is an optional list of strings that replaces the image's default command (Docker `CMD`) while keeping its entrypoint. A plain string, an empty list, or an empty item is rejected at validation. The command joins the config hash only when set, so adding, changing, or removing it recreates the container while workloads without one keep their pre-040 hash. See `specs/040-manifest-command/`.
 
 Each `env` entry uses exactly one of `value` / `valueFrom` / `template`. `template` is Go `text/template`; it resolves in topological order so a template can reference a sibling env that was itself resolved from `valueFrom`.
 
@@ -144,6 +147,7 @@ spec:
 
 - **`env`** entries set exactly one of `value` (literal), `valueFrom` (`vault:…`, or another manifest's exported output), `template` (Go `text/template` over sibling env + `{{.team}}`/`{{.name}}`), or `generated` (random secret). Reserved names `host`/`port`/`team`/`name` are not allowed.
 - **`outputs`** entries set only a `name` and an optional `template`. A bare `name` re-exports a declared env var or the built-in `host`/`port`. A `template` may reference any declared env var (exported or not) plus `{{.host}}`/`{{.port}}`/`{{.team}}`/`{{.name}}`. Setting `value`/`valueFrom`/`generated` on an output is rejected (declare it under `env` instead).
+- **`command`** works as on an Application: an optional list that replaces the image's default command, entrypoint kept.
 - **Strict allowlist:** consumers may reference only keys present in `outputs`. An env var that is not exported is private to the resource. Resources are first-class consumers too — a resource's `env` `valueFrom` may reference other manifests' exported outputs.
 
 ### Team
@@ -217,7 +221,7 @@ shrine/
 │       └── integration-tests.md# Integration test suite architecture + phases
 ├── agents/                     # Thin AI consumer adapters
 │   └── claude.md               # Claude persona + session kickstart
-└── test/
+└── tests/
     └── smock/                  # Integration fixture: aterrizar + backendredis + externaldeps
 ```
 
@@ -338,13 +342,22 @@ Self-contained gateway plugin. Activates when `plugins.gateway.traefik` is prese
 ```bash
 go test ./...                        # run all tests
 go test ./internal/planner/...       # single package
-go run . deploy --path test/smock/ --dry-run  # integration smoke test (no Docker needed)
-go run . deploy --path test/smock/          # real Docker round-trip
+go run . deploy --path tests/smock/ --dry-run  # integration smoke test (no Docker needed)
+go run . deploy --path tests/smock/          # real Docker round-trip
 go run . teardown backend
 go run . teardown external
 ```
 
-The `test/smock/` fixture is the integration gate: three manifests across two teams (`backend`, `external`) with cross-team app→app and app→resource dependencies.
+The `tests/smock/` fixture is the integration gate: three manifests across two teams (`backend`, `external`) with cross-team app→app and app→resource dependencies.
+
+### Integration tests (`tests/integration/`, build tag `integration`)
+
+- **Never run the full integration suite locally.** It drives real Docker and is too heavy for a dev machine. Run only the test you are working on: `go test -tags integration ./tests/integration/ -run '^TestName$/subtest' -count=1`. Group a story's tests under one top-level `TestXxx` so a single `-run` pattern selects them.
+- **Tests read as recipes.** A reader who doesn't know Go should follow each step as plain instructions. Use the `testutils` helpers instead of raw calls:
+  - `tc.Deploy(dir)` instead of `tc.Run("deploy", "--path", dir, "--state-dir", tc.StateDir)`.
+  - `tc.CopyManifest(fixture)` with `.Set("spec.field", value)` / `.Remove("spec.field")` to edit a manifest between deploys, instead of hand-written YAML strings.
+  - `tc.WatchContainer(name)` with `.AssertRecreated()` / `.AssertNotRecreated()` to check whether a deploy replaced a container.
+  - Name containers with constants and keep one short comment per step when the intent isn't obvious.
 
 ## Documentation site
 
