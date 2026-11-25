@@ -38,3 +38,19 @@ func TestConfigHash_PortSpecsAffectHash_IndependentOfEnvAndVolumes(t *testing.T)
 		t.Fatalf("expected port specs to be a distinct hash input; both produced %q", withoutPorts)
 	}
 }
+
+func TestConfigHash_CommandOrderChangesTheHash(t *testing.T) {
+	a := ConfigHash("img@sha256:abc", nil, nil, nil, false, "--name", "x")
+	b := ConfigHash("img@sha256:abc", nil, nil, nil, false, "x", "--name")
+	if a == b {
+		t.Fatalf("reordering command arguments must change the hash; both produced %q", a)
+	}
+}
+
+func TestConfigHash_CommandArgumentBoundariesChangeTheHash(t *testing.T) {
+	joined := ConfigHash("img@sha256:abc", nil, nil, nil, false, "a b")
+	split := ConfigHash("img@sha256:abc", nil, nil, nil, false, "a", "b")
+	if joined == split {
+		t.Fatalf(`["a b"] and ["a", "b"] must hash differently; both produced %q`, joined)
+	}
+}
