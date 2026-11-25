@@ -418,9 +418,9 @@ func TestResolveImage_PinnedFirstDeployPullsNewestAndRecordsThePin(t *testing.T)
 		t.Fatalf("ResolveImage failed: %v", err)
 	}
 
-	assertCalls(t, api.calls, []string{"ImagePull", "ImageInspect"})
-	if !slices.Equal(api.pulledRefs, []string{pinnedTag}) {
-		t.Errorf("pulled %v, want the tag reference only", api.pulledRefs)
+	assertCalls(t, api.calls, []string{"ImagePull", "ImageInspect", "ImagePull"})
+	if !slices.Equal(api.pulledRefs, []string{pinnedTag, appPinned}) {
+		t.Errorf("pulled %v, want the tag, then the pinned digest reference", api.pulledRefs)
 	}
 	wantPin := state.ImagePin{Kind: "Application", Name: "web", Requested: pinnedTag, Pinned: appPinned, PinnedAt: fixedNow}
 	if len(pins.puts) != 1 || pins.puts[0] != wantPin {
@@ -435,6 +435,42 @@ func TestResolveImage_PinnedFirstDeployPullsNewestAndRecordsThePin(t *testing.T)
 		t.Fatal("no image.resolve finished event")
 	}
 	assertFields(t, finished.Fields, map[string]string{"source": "resolved", "requested": pinnedTag, "ref": appPinned, "digest": appDigest})
+}
+
+func TestResolveImage_PinnedFirstDeployReportsOnlyTheTagPull(t *testing.T) {
+	api := newScriptedDockerAPI()
+	api.inspected[pinnedTag] = image.InspectResponse{ID: pulledImageID, RepoDigests: []string{appPinned}}
+	backend, obs := pinnedBackend(api, newFakePinStore())
+
+	if _, err := backend.ResolveImage(resolveTestOp(pinnedTag, "Pinned")); err != nil {
+		t.Fatalf("ResolveImage failed: %v", err)
+	}
+
+	var reported []string
+	for _, e := range obs.events {
+		if e.Name == "image.pull" && e.Status == engine.StatusStarted {
+			reported = append(reported, e.Fields["ref"])
+		}
+	}
+	if !slices.Equal(reported, []string{pinnedTag}) {
+		t.Errorf("reported pulls = %v, want only the tag; the digest pull only names the pinned image", reported)
+	}
+}
+
+func TestResolveImage_PinnedFirstDeployRecordsNoPinWhenTheDigestPullFails(t *testing.T) {
+	api := newScriptedDockerAPI()
+	api.inspected[pinnedTag] = image.InspectResponse{ID: pulledImageID, RepoDigests: []string{appPinned}}
+	api.pullErrs[appPinned] = errors.New("registry went away")
+	pins := newFakePinStore()
+	backend, _ := pinnedBackend(api, pins)
+
+	_, err := backend.ResolveImage(resolveTestOp(pinnedTag, "Pinned"))
+	if err == nil || !strings.Contains(err.Error(), "registry went away") {
+		t.Fatalf("expected the digest pull error, got %v", err)
+	}
+	if len(pins.puts) != 0 {
+		t.Errorf("no pin may be recorded when the pinned image cannot be named locally, puts = %+v", pins.puts)
+	}
 }
 
 func TestResolveImage_PinnedReusesThePinWithoutRegistryCallWhenPresent(t *testing.T) {
@@ -518,7 +554,7 @@ func TestResolveImage_PinnedReplacesAPinWhoseRepositoryChanged(t *testing.T) {
 		t.Fatalf("ResolveImage failed: %v", err)
 	}
 
-	assertCalls(t, api.calls, []string{"ImagePull", "ImageInspect"})
+	assertCalls(t, api.calls, []string{"ImagePull", "ImageInspect", "ImagePull"})
 	if len(pins.puts) != 1 || pins.puts[0].Pinned != appPinned {
 		t.Errorf("the stale pin must be replaced, puts = %+v", pins.puts)
 	}
@@ -695,9 +731,9 @@ func TestResolveImage_RepinPullsTheTargetAndRecordsIt(t *testing.T) {
 		t.Fatalf("ResolveImage failed: %v", err)
 	}
 
-	assertCalls(t, api.calls, []string{"ImagePull", "ImageInspect"})
-	if !slices.Equal(api.pulledRefs, []string{repinTarget}) {
-		t.Errorf("pulled %v, want the target only", api.pulledRefs)
+	assertCalls(t, api.calls, []string{"ImagePull", "ImageInspect", "ImagePull"})
+	if !slices.Equal(api.pulledRefs, []string{repinTarget, newPinned}) {
+		t.Errorf("pulled %v, want the target, then the pinned digest reference", api.pulledRefs)
 	}
 	wantPin := state.ImagePin{Kind: "Application", Name: "web", Requested: repinTarget, Pinned: newPinned, PinnedAt: fixedNow}
 	if len(pins.puts) != 1 || pins.puts[0] != wantPin {
@@ -736,8 +772,8 @@ func TestResolveImage_RepinExpandsAnAlias(t *testing.T) {
 		t.Fatalf("ResolveImage failed: %v", err)
 	}
 
-	if !slices.Equal(api.pulledRefs, []string{expanded}) {
-		t.Errorf("pulled %v, want only the expanded target", api.pulledRefs)
+	if !slices.Equal(api.pulledRefs, []string{expanded, "docker.io/me/app@" + newDigest}) {
+		t.Errorf("pulled %v, want the expanded target, then its pinned digest reference", api.pulledRefs)
 	}
 	if len(pins.puts) != 1 || pins.puts[0].Requested != expanded || pins.puts[0].Pinned != "docker.io/me/app@"+newDigest {
 		t.Errorf("puts = %+v, want the expanded target recorded", pins.puts)
@@ -861,8 +897,8 @@ func TestResolveImage_RepinUntaggedTargetPinsNewest(t *testing.T) {
 		t.Fatalf("ResolveImage failed: %v", err)
 	}
 
-	if !slices.Equal(api.pulledRefs, []string{pinnedRepo}) {
-		t.Errorf("pulled %v, want the untagged reference", api.pulledRefs)
+	if !slices.Equal(api.pulledRefs, []string{pinnedRepo, newPinned}) {
+		t.Errorf("pulled %v, want the untagged reference, then the pinned digest reference", api.pulledRefs)
 	}
 	if len(pins.puts) != 1 || pins.puts[0].Requested != pinnedRepo || pins.puts[0].Pinned != newPinned {
 		t.Errorf("puts = %+v, want Requested %q and Pinned %q", pins.puts, pinnedRepo, newPinned)

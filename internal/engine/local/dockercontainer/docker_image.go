@@ -174,11 +174,23 @@ func (backend *DockerBackend) pinReference(ctx context.Context, op engine.Resolv
 			fmt.Errorf("image %q carries no registry digest and cannot be pinned", ref))
 	}
 
+	pinned := pinnedReference(ref, digest)
+	if pinned != ref {
+		// With the containerd image store, an image pulled by tag is named
+		// only by that tag: once the tag moves locally, the pinned digest no
+		// longer resolves and the next deploy would pull it again. Pulling
+		// the digest reference gives it its own name. The layers are already
+		// local, so only the manifest is fetched.
+		if err := backend.fetchImage(ctx, pinned); err != nil {
+			return engine.ResolvedImage{}, err
+		}
+	}
+
 	pin := state.ImagePin{
 		Kind:      op.Kind,
 		Name:      op.Name,
 		Requested: ref,
-		Pinned:    pinnedReference(ref, digest),
+		Pinned:    pinned,
 		PinnedAt:  backend.clock(),
 	}
 	pins, ok := backend.pinStore()
@@ -285,13 +297,21 @@ func (backend *DockerBackend) findLocalImage(ctx context.Context, ref string) (l
 }
 
 func (backend *DockerBackend) pullImage(ctx context.Context, ref string) error {
+	backend.emitStarted("image.pull", map[string]string{"ref": ref})
+	if err := backend.fetchImage(ctx, ref); err != nil {
+		return err
+	}
+	backend.emitFinished("image.pull", map[string]string{"ref": ref})
+	return nil
+}
+
+// fetchImage pulls ref without reporting progress; errors are still emitted.
+func (backend *DockerBackend) fetchImage(ctx context.Context, ref string) error {
 	authB64, err := backend.registryAuthFor(ref)
 	if err != nil {
 		return backend.emitErr("registry.auth", map[string]string{"ref": ref},
 			fmt.Errorf("registry credentials for %q: %w", ref, err))
 	}
-
-	backend.emitStarted("image.pull", map[string]string{"ref": ref})
 
 	reader, err := backend.client.ImagePull(ctx, ref, image.PullOptions{
 		RegistryAuth: authB64,
@@ -306,8 +326,6 @@ func (backend *DockerBackend) pullImage(ctx context.Context, ref string) error {
 		return backend.emitErr("image.pull", map[string]string{"ref": ref},
 			fmt.Errorf("reading image stream for %q: %w", ref, err))
 	}
-
-	backend.emitFinished("image.pull", map[string]string{"ref": ref})
 	return nil
 }
 
