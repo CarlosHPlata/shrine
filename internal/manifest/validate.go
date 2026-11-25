@@ -111,7 +111,13 @@ func validateCommand(command []string) []string {
 	if command != nil && len(command) == 0 {
 		return []string{"spec.command must not be empty"}
 	}
-	return nil
+	var errs []string
+	for i, arg := range command {
+		if arg == "" {
+			errs = append(errs, fmt.Sprintf("spec.command[%d] must not be empty", i))
+		}
+	}
+	return errs
 }
 
 const (

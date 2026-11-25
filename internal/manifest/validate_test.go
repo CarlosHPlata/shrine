@@ -561,6 +561,22 @@ func TestValidate_EmptyCommandListIsRejected(t *testing.T) {
 	}
 }
 
+func TestValidate_EmptyCommandItemIsRejected(t *testing.T) {
+	cases := map[string]*Manifest{
+		"Application": applicationManifest(ApplicationSpec{Image: "img", Port: 80, Command: []string{"npm", ""}}),
+		"Resource":    resourceManifest(ResourceSpec{Type: "postgres", Command: []string{"npm", ""}}),
+	}
+	for kind, m := range cases {
+		t.Run(kind, func(t *testing.T) {
+			err := Validate(m)
+			want := "spec.command[1] must not be empty"
+			if err == nil || !strings.Contains(err.Error(), want) {
+				t.Errorf("expected error containing %q, got: %v", want, err)
+			}
+		})
+	}
+}
+
 func resourceManifest(spec ResourceSpec) *Manifest {
 	return &Manifest{
 		TypeMeta: TypeMeta{Kind: ResourceKind, APIVersion: "shrine/v1"},
