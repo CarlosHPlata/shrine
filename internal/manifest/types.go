@@ -156,6 +156,25 @@ type VolumeMount struct {
 	MountPath string `yaml:"mountPath"`
 }
 
+// Command overrides the image's default command (Docker CMD); the image's
+// entrypoint is kept. Only the list form is accepted.
+type Command []string
+
+// UnmarshalYAML rejects any node that is not a sequence, so a plain string
+// (`command: npm start`) fails with a message naming the field instead of
+// yaml.v3's generic type error.
+func (c *Command) UnmarshalYAML(node *yaml.Node) error {
+	if node.Kind != yaml.SequenceNode {
+		return fmt.Errorf("line %d: spec.command must be a list of strings", node.Line)
+	}
+	var items []string
+	if err := node.Decode(&items); err != nil {
+		return err
+	}
+	*c = items
+	return nil
+}
+
 type ApplicationSpec struct {
 	Image           string        `yaml:"image"`
 	Port            int           `yaml:"port,omitempty"`
@@ -165,7 +184,7 @@ type ApplicationSpec struct {
 	Env             []EnvVar      `yaml:"env,omitempty"`
 	Networking      Networking    `yaml:"networking,omitempty"`
 	Volumes         []VolumeMount `yaml:"volumes,omitempty"`
-	Command         []string      `yaml:"command,omitempty"`
+	Command         Command       `yaml:"command,omitempty"`
 	ImagePullPolicy string        `yaml:"imagePullPolicy,omitempty"`
 }
 
@@ -191,7 +210,7 @@ type ResourceSpec struct {
 	Outputs         []Output      `yaml:"outputs,omitempty"`
 	Networking      Networking    `yaml:"networking,omitempty"`
 	Volumes         []VolumeMount `yaml:"volumes,omitempty"`
-	Command         []string      `yaml:"command,omitempty"`
+	Command         Command       `yaml:"command,omitempty"`
 	ImagePullPolicy string        `yaml:"imagePullPolicy,omitempty"`
 }
 
