@@ -78,4 +78,37 @@ func TestDeployCommand(t *testing.T) {
 		container.AssertRecreated()
 		tc.AssertContainerCmd(appWithoutCommand, nil)
 	})
+
+	s.Test("a command written as a plain string is rejected before anything is deployed", func(tc *TestCase) {
+		app := tc.CopyManifest(fixturesPath("basic", "app.yml"))
+		app.Set("spec.command", "npm start")
+
+		tc.Deploy(app.Dir()).
+			AssertFailure().
+			AssertStderrContains(app.Path()).
+			AssertStderrContains("spec.command must be a list of strings")
+		tc.AssertContainerNotExists(appWithoutCommand)
+	})
+
+	s.Test("an empty command list is rejected before anything is deployed", func(tc *TestCase) {
+		app := tc.CopyManifest(fixturesPath("basic", "app.yml"))
+		app.Set("spec.command", []string{})
+
+		tc.Deploy(app.Dir()).
+			AssertFailure().
+			AssertStderrContains(app.Path()).
+			AssertStderrContains("spec.command must not be empty")
+		tc.AssertContainerNotExists(appWithoutCommand)
+	})
+
+	s.Test("a command with an empty item is rejected before anything is deployed", func(tc *TestCase) {
+		app := tc.CopyManifest(fixturesPath("basic", "app.yml"))
+		app.Set("spec.command", []string{"npm", ""})
+
+		tc.Deploy(app.Dir()).
+			AssertFailure().
+			AssertStderrContains(app.Path()).
+			AssertStderrContains("spec.command[1] must not be empty")
+		tc.AssertContainerNotExists(appWithoutCommand)
+	})
 }

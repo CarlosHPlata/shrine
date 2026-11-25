@@ -42,6 +42,9 @@ func (tc *TestCase) CopyManifest(src string) *ManifestFile {
 // Dir is the directory holding only this manifest.
 func (m *ManifestFile) Dir() string { return filepath.Dir(m.path) }
 
+// Path is the manifest file itself, as Shrine names it in its messages.
+func (m *ManifestFile) Path() string { return m.path }
+
 // Set writes value at a dotted field path such as "spec.command".
 func (m *ManifestFile) Set(field string, value any) *ManifestFile {
 	m.tc.t.Helper()
