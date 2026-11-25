@@ -35,6 +35,7 @@ type CreateContainerOp struct {
 	Network          string
 	Env              []string
 	Volumes          []VolumeMount
+	Command          []string
 	ExposeToPlatform bool
 	ImagePullPolicy  string
 	RestartPolicy    string

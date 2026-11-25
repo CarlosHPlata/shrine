@@ -239,3 +239,23 @@ func TestCreateContainer_CreateFailureNamesImage(t *testing.T) {
 		t.Errorf("error event text:\ngot  %q\nwant %q", got, want)
 	}
 }
+
+func TestConfigHash_CommandChangesTheHash(t *testing.T) {
+	without := engine.CreateContainerOp{Team: "team-a", Name: "web", Image: "node:22", Env: []string{"A=1"}}
+
+	withStart := without
+	withStart.Command = []string{"npm", "start"}
+
+	withWorker := without
+	withWorker.Command = []string{"npm", "run", "worker"}
+
+	if configHash(without, "sha256:local") == configHash(withStart, "sha256:local") {
+		t.Error("adding a command must change the config hash")
+	}
+	if configHash(withStart, "sha256:local") == configHash(withWorker, "sha256:local") {
+		t.Error("changing the command must change the config hash")
+	}
+	if configHash(withStart, "sha256:local") != configHash(withStart, "sha256:local") {
+		t.Error("an unchanged command must keep the config hash")
+	}
+}
