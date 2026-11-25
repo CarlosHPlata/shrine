@@ -187,6 +187,7 @@ func (engine *Engine) deployApplication(
 		Network:          application.Metadata.Owner,
 		Env:              env,
 		Volumes:          volumes,
+		Command:          application.Spec.Command,
 		ExposeToPlatform: application.Spec.Networking.ShouldAttachToPlatform(),
 		ImagePullPolicy:  manifest.EffectivePullPolicy(application.Spec.Image, application.Spec.ImagePullPolicy),
 	}
@@ -410,6 +411,7 @@ func (engine *Engine) deployResource(set *planner.ManifestSet, step planner.Plan
 		Network:          resource.Metadata.Owner,
 		Env:              env,
 		Volumes:          volumes,
+		Command:          resource.Spec.Command,
 		ExposeToPlatform: resource.Spec.Networking.ExposeToPlatform,
 		ImagePullPolicy:  manifest.EffectivePullPolicy(resource.Spec.Image, resource.Spec.ImagePullPolicy),
 	}

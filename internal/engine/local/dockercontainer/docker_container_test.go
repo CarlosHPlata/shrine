@@ -259,3 +259,24 @@ func TestConfigHash_CommandChangesTheHash(t *testing.T) {
 		t.Error("an unchanged command must keep the config hash")
 	}
 }
+
+// A workload without command must keep the hash recorded before the field
+// existed, so upgrading Shrine recreates nothing. The literal was computed with
+// the pre-040 ConfigHash (git HEAD fc405cb), not with the current code.
+func TestConfigHash_NoCommandKeepsThePreUpgradeHash(t *testing.T) {
+	op := engine.CreateContainerOp{
+		Team:             "team-a",
+		Name:             "web",
+		Image:            "docker.io/traefik/whoami:latest",
+		ImageID:          "sha256:local",
+		Env:              []string{"A=1"},
+		Volumes:          []engine.VolumeMount{{Name: "data", MountPath: "/data"}},
+		PortBindings:     []engine.PortBinding{{HostIP: "127.0.0.1", HostPort: "30000", ContainerPort: "80", Protocol: "tcp"}},
+		ExposeToPlatform: true,
+	}
+
+	const preUpgrade = "1c2978390d17d3d33980163dab710d7e652dde66532e7b5643e474c51e59533f"
+	if got := configHash(op, op.ImageID); got != preUpgrade {
+		t.Errorf("configHash = %q, want the pre-upgrade hash %q", got, preUpgrade)
+	}
+}
