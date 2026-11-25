@@ -545,6 +545,22 @@ func TestValidate_VolumeMountRules(t *testing.T) {
 	}
 }
 
+func TestValidate_EmptyCommandListIsRejected(t *testing.T) {
+	cases := map[string]*Manifest{
+		"Application": applicationManifest(ApplicationSpec{Image: "img", Port: 80, Command: []string{}}),
+		"Resource":    resourceManifest(ResourceSpec{Type: "postgres", Command: []string{}}),
+	}
+	for kind, m := range cases {
+		t.Run(kind, func(t *testing.T) {
+			err := Validate(m)
+			want := "spec.command must not be empty"
+			if err == nil || !strings.Contains(err.Error(), want) {
+				t.Errorf("expected error containing %q, got: %v", want, err)
+			}
+		})
+	}
+}
+
 func resourceManifest(spec ResourceSpec) *Manifest {
 	return &Manifest{
 		TypeMeta: TypeMeta{Kind: ResourceKind, APIVersion: "shrine/v1"},

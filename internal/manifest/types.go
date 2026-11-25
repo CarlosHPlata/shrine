@@ -165,6 +165,7 @@ type ApplicationSpec struct {
 	Env             []EnvVar      `yaml:"env,omitempty"`
 	Networking      Networking    `yaml:"networking,omitempty"`
 	Volumes         []VolumeMount `yaml:"volumes,omitempty"`
+	Command         []string      `yaml:"command,omitempty"`
 	ImagePullPolicy string        `yaml:"imagePullPolicy,omitempty"`
 }
 
@@ -190,6 +191,7 @@ type ResourceSpec struct {
 	Outputs         []Output      `yaml:"outputs,omitempty"`
 	Networking      Networking    `yaml:"networking,omitempty"`
 	Volumes         []VolumeMount `yaml:"volumes,omitempty"`
+	Command         []string      `yaml:"command,omitempty"`
 	ImagePullPolicy string        `yaml:"imagePullPolicy,omitempty"`
 }
 
