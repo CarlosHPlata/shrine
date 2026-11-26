@@ -1,0 +1,12 @@
+apiVersion: shrine/v1
+kind: Application
+metadata:
+  name: whoami-cmd
+  owner: shrine-deploy-test
+spec:
+  image: traefik/whoami
+  port: 80
+  # traefik/whoami's entrypoint is /whoami; these become its arguments.
+  command: ["--name", "from-command"]
+  networking:
+    exposeToPlatform: false

@@ -101,6 +101,22 @@ func validateApplicationSpec(spec ApplicationSpec) []string {
 	if spec.Volumes != nil {
 		errs = append(errs, validateVolumeMounts(spec.Volumes)...)
 	}
+	errs = append(errs, validateCommand(spec.Command)...)
+	return errs
+}
+
+// validateCommand checks spec.command; nil means the field is absent and the
+// image's default command is kept.
+func validateCommand(command []string) []string {
+	if command != nil && len(command) == 0 {
+		return []string{"spec.command must not be empty"}
+	}
+	var errs []string
+	for i, arg := range command {
+		if arg == "" {
+			errs = append(errs, fmt.Sprintf("spec.command[%d] must not be empty", i))
+		}
+	}
 	return errs
 }
 
@@ -149,6 +165,7 @@ func validateResourceSpec(spec ResourceSpec) []string {
 	if spec.Volumes != nil {
 		errs = append(errs, validateVolumeMounts(spec.Volumes)...)
 	}
+	errs = append(errs, validateCommand(spec.Command)...)
 
 	return errs
 }

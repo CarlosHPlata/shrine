@@ -129,6 +129,7 @@ func (backend *DockerBackend) createFreshContainer(ctx context.Context, op engin
 	created, err := backend.client.ContainerCreate(ctx,
 		&container.Config{
 			Image:        op.ResolvedRef,
+			Cmd:          op.Command,
 			Env:          op.Env,
 			Labels:       labels,
 			ExposedPorts: exposedPorts,
@@ -342,7 +343,7 @@ func configHash(op engine.CreateContainerOp, digest string) string {
 		}
 		portSpecs[i] = spec
 	}
-	return state.ConfigHash(digest, op.Env, volSpecs, portSpecs, op.ExposeToPlatform)
+	return state.ConfigHash(digest, op.Env, volSpecs, portSpecs, op.ExposeToPlatform, op.Command...)
 }
 
 func (backend *DockerBackend) removeDeployment(op engine.RemoveContainerOp) error {

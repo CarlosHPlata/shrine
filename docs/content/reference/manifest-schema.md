@@ -76,6 +76,7 @@ spec:
   volumes:
     - name: <string>
       mountPath: <string>
+  command: [<string>, ...]     # replaces the image's default command; entrypoint kept
   imagePullPolicy: <Always|IfNotPresent|Pinned>
 ```
 
@@ -99,6 +100,7 @@ spec:
 | `spec.networking.exposeToPlatform` | no | `false` | Attach the resource to the shared platform network so gateway plugins can reach it. |
 | `spec.volumes[].name` | yes (per entry) | — | Logical volume name; must be unique within the manifest. |
 | `spec.volumes[].mountPath` | yes (per entry) | — | Absolute path inside the container. |
+| `spec.command` | no | the image's default command | List of strings that replaces the image's default command (Docker `CMD`); the image's entrypoint is kept. See [`spec.command`](#speccommand). |
 | `spec.imagePullPolicy` | no | the `imagePullPolicy` default in `config.yml` when set; else `Always` for `:latest` or no tag, `IfNotPresent` otherwise | Image pull policy: `Always`, `IfNotPresent`, or `Pinned`. See [Image pull policy](#image-pull-policy). |
 
 † Each `env` entry must set exactly one of `value`, `valueFrom`, `template`, or `generated`.
@@ -144,6 +146,7 @@ spec:
   volumes:
     - name: <string>
       mountPath: <string>
+  command: [<string>, ...]     # replaces the image's default command; entrypoint kept
   imagePullPolicy: <Always|IfNotPresent|Pinned>
 ```
 
@@ -158,6 +161,7 @@ spec:
 | `spec.replicas` | no | 1 | Number of container instances to run. |
 | `spec.networking.exposeToPlatform` | no | `false` | Attach the container to the platform network and include it in Traefik routing generation. |
 | `spec.networking.publish` | no | not published | Publish the container's `spec.port` on the host's loopback interface (`localhost:<port>`). See [`spec.networking.publish`](#specnetworkingpublish). |
+| `spec.command` | no | the image's default command | List of strings that replaces the image's default command (Docker `CMD`); the image's entrypoint is kept. See [`spec.command`](#speccommand). |
 | `spec.imagePullPolicy` | no | the `imagePullPolicy` default in `config.yml` when set; else `Always` for `:latest` or no tag, `IfNotPresent` otherwise | Image pull policy: `Always`, `IfNotPresent`, or `Pinned`. See [Image pull policy](#image-pull-policy). |
 
 ### `spec.routing`
@@ -226,6 +230,21 @@ Each env var must set exactly one of `value`, `valueFrom`, or `template`.
 | `value` | Static string value. |
 | `valueFrom` | Reference to a Resource output (`resource.<resource-name>.<output-name>`) or a vault secret (`vault:<project>/<environment>/<secret-name>` — project may be a name, slug, or UUID; see the [Secrets vault guide](/guides/secrets-vault/)). |
 | `template` | Go `text/template` expression; can reference other env vars or resource outputs by name. |
+
+### `spec.command`
+
+`spec.command` is optional on both Applications and Resources. It replaces the image's default command (Docker `CMD`), as Docker Compose's `command` does. The image's entrypoint is kept, so on an image that declares one, the list becomes the entrypoint's arguments. Without `command` the container runs the image's default, exactly as before.
+
+```yaml
+spec:
+  image: node:22
+  port: 3000
+  command: ["npm", "run", "worker"]
+```
+
+- Only the list form is accepted. A plain string (`command: npm start`), an empty list, or an empty item is rejected before anything is deployed, with a message naming the manifest and the field.
+- Adding, changing, or removing `command` recreates the container on the next deploy; an unchanged `command` leaves it alone.
+- Items are passed to Docker as written: no templating and no `valueFrom` substitution.
 
 ### Image pull policy
 

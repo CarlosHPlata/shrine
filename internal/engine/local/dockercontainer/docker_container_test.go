@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -237,5 +238,84 @@ func TestCreateContainer_CreateFailureNamesImage(t *testing.T) {
 	want := `creating container "shrine-deploy-test.alias-app" (image "docker.io/traefik/whoami:latest"): invalid reference format`
 	if got := event.Fields["error"]; got != want {
 		t.Errorf("error event text:\ngot  %q\nwant %q", got, want)
+	}
+}
+
+func TestConfigHash_CommandChangesTheHash(t *testing.T) {
+	without := engine.CreateContainerOp{Team: "team-a", Name: "web", Image: "node:22", Env: []string{"A=1"}}
+
+	withStart := without
+	withStart.Command = []string{"npm", "start"}
+
+	withWorker := without
+	withWorker.Command = []string{"npm", "run", "worker"}
+
+	if configHash(without, "sha256:local") == configHash(withStart, "sha256:local") {
+		t.Error("adding a command must change the config hash")
+	}
+	if configHash(withStart, "sha256:local") == configHash(withWorker, "sha256:local") {
+		t.Error("changing the command must change the config hash")
+	}
+	if configHash(withStart, "sha256:local") != configHash(withStart, "sha256:local") {
+		t.Error("an unchanged command must keep the config hash")
+	}
+}
+
+// A workload without command must keep the hash recorded before the field
+// existed, so upgrading Shrine recreates nothing. The literal was computed with
+// the pre-040 ConfigHash (git HEAD fc405cb), not with the current code.
+func TestConfigHash_NoCommandKeepsThePreUpgradeHash(t *testing.T) {
+	op := engine.CreateContainerOp{
+		Team:             "team-a",
+		Name:             "web",
+		Image:            "docker.io/traefik/whoami:latest",
+		ImageID:          "sha256:local",
+		Env:              []string{"A=1"},
+		Volumes:          []engine.VolumeMount{{Name: "data", MountPath: "/data"}},
+		PortBindings:     []engine.PortBinding{{HostIP: "127.0.0.1", HostPort: "30000", ContainerPort: "80", Protocol: "tcp"}},
+		ExposeToPlatform: true,
+	}
+
+	const preUpgrade = "1c2978390d17d3d33980163dab710d7e652dde66532e7b5643e474c51e59533f"
+	if got := configHash(op, op.ImageID); got != preUpgrade {
+		t.Errorf("configHash = %q, want the pre-upgrade hash %q", got, preUpgrade)
+	}
+}
+
+// captureCreatedConfig runs a fresh creation for op and returns the container
+// config that reached ContainerCreate.
+func captureCreatedConfig(t *testing.T, op engine.CreateContainerOp) *container.Config {
+	t.Helper()
+	fake := &fakeDockerAPI{createErr: errors.New("create rejected by fake")}
+	backend := &DockerBackend{client: fake, registries: testRegistries, observer: engine.NoopObserver{}}
+
+	if err := backend.CreateContainer(op); err == nil {
+		t.Fatal("expected CreateContainer to surface the fake's creation error")
+	}
+	if fake.createdConfig == nil {
+		t.Fatal("ContainerCreate was never called")
+	}
+	return fake.createdConfig
+}
+
+func TestCreateContainer_CommandBecomesCmdAndKeepsTheEntrypoint(t *testing.T) {
+	op := aliasTestOp("node:22")
+	op.Command = []string{"npm", "run", "worker"}
+
+	cfg := captureCreatedConfig(t, op)
+
+	if want := []string{"npm", "run", "worker"}; !reflect.DeepEqual([]string(cfg.Cmd), want) {
+		t.Errorf("container Cmd = %q, want %q", cfg.Cmd, want)
+	}
+	if cfg.Entrypoint != nil {
+		t.Errorf("container Entrypoint = %q, want unset so the image's entrypoint is kept", cfg.Entrypoint)
+	}
+}
+
+func TestCreateContainer_NoCommandLeavesCmdUnset(t *testing.T) {
+	cfg := captureCreatedConfig(t, aliasTestOp("node:22"))
+
+	if cfg.Cmd != nil {
+		t.Errorf("container Cmd = %q, want unset so the image's default command runs", cfg.Cmd)
 	}
 }

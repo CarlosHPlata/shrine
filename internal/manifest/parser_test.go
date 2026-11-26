@@ -3,6 +3,7 @@ package manifest
 import (
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -406,6 +407,44 @@ func TestParse_ResourceImageDefaultsToTypeWithoutVersion(t *testing.T) {
 			m := parseInline(t, "apiVersion: shrine/v1\nkind: Resource\nmetadata:\n  name: db\n  owner: team-a\nspec:\n  "+tc.spec+"\n")
 			if m.Resource.Spec.Image != tc.want {
 				t.Errorf("Spec.Image = %q, want %q", m.Resource.Spec.Image, tc.want)
+			}
+		})
+	}
+}
+
+func TestParse_CommandAsPlainStringIsRejected(t *testing.T) {
+	cases := map[string]string{
+		"Application": "apiVersion: shrine/v1\nkind: Application\nmetadata:\n  name: web\n  owner: team-a\nspec:\n  image: myapp\n  port: 8080\n  command: npm start\n",
+		"Resource":    "apiVersion: shrine/v1\nkind: Resource\nmetadata:\n  name: db\n  owner: team-a\nspec:\n  type: postgres\n  version: \"16\"\n  command: npm start\n",
+	}
+	for kind, doc := range cases {
+		t.Run(kind, func(t *testing.T) {
+			_, err := parseBytes([]byte(doc))
+			want := "spec.command must be a list of strings"
+			if err == nil || !strings.Contains(err.Error(), want) {
+				t.Errorf("expected error containing %q, got: %v", want, err)
+			}
+		})
+	}
+}
+
+func TestParse_CommandListIsDecodedInOrder(t *testing.T) {
+	m := parseInline(t, "apiVersion: shrine/v1\nkind: Application\nmetadata:\n  name: web\n  owner: team-a\nspec:\n  image: myapp\n  port: 8080\n  command: [npm, run, worker]\n")
+	want := []string{"npm", "run", "worker"}
+	if got := []string(m.Application.Spec.Command); !slices.Equal(got, want) {
+		t.Errorf("Spec.Command = %q, want %q", got, want)
+	}
+}
+
+func TestParse_CommandWithNonStringItemIsRejected(t *testing.T) {
+	cases := map[string]string{
+		"Application": "apiVersion: shrine/v1\nkind: Application\nmetadata:\n  name: web\n  owner: team-a\nspec:\n  image: myapp\n  port: 8080\n  command:\n    - {a: b}\n",
+		"Resource":    "apiVersion: shrine/v1\nkind: Resource\nmetadata:\n  name: db\n  owner: team-a\nspec:\n  type: postgres\n  version: \"16\"\n  command:\n    - [npm, start]\n",
+	}
+	for kind, doc := range cases {
+		t.Run(kind, func(t *testing.T) {
+			if _, err := parseBytes([]byte(doc)); err == nil {
+				t.Error("expected a parse error for a non-string command item, got nil")
 			}
 		})
 	}

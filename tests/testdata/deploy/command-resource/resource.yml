@@ -1,0 +1,13 @@
+apiVersion: shrine/v1
+kind: Resource
+metadata:
+  name: cache-cmd
+  owner: shrine-deploy-test
+spec:
+  type: cache
+  version: "1"
+  image: traefik/whoami
+  # traefik/whoami's entrypoint is /whoami; these become its arguments.
+  command: ["--name", "resource-command"]
+  networking:
+    exposeToPlatform: false
