@@ -75,9 +75,11 @@ func ownerAppSet(t *testing.T) *ManifestSet {
 		TypeMeta: manifest.TypeMeta{Kind: manifest.ApplicationKind, APIVersion: "shrine/v1"},
 		Metadata: manifest.Metadata{Name: "alpha", Owner: "team-a"},
 		Spec: manifest.ApplicationSpec{
-			Image: "nginx",
-			Env: []manifest.EnvVar{
-				{Name: "DB_URL", ValueFrom: "resource.db.URL"},
+			ContainerSpec: manifest.ContainerSpec{
+				Image: "nginx",
+				Env: []manifest.EnvVar{
+					{Name: "DB_URL", ValueFrom: "resource.db.URL"},
+				},
 			},
 		},
 	}
@@ -203,8 +205,13 @@ func TestEnrichValueFromResource_ResourceConsumer_SameTeam(t *testing.T) {
 	}
 	set.Resources["cache"] = &manifest.ResourceManifest{
 		Metadata: manifest.Metadata{Name: "cache", Owner: "team-a"},
-		Spec: manifest.ResourceSpec{Type: "redis", Version: "7",
-			Env: []manifest.EnvVar{{Name: "UPSTREAM", ValueFrom: "resource.pg.host"}}},
+		Spec: manifest.ResourceSpec{
+			ContainerSpec: manifest.ContainerSpec{
+				Env: []manifest.EnvVar{{Name: "UPSTREAM", ValueFrom: "resource.pg.host"}},
+			},
+			Type:    "redis",
+			Version: "7",
+		},
 	}
 
 	out, edges, err := applyEnrichmentRule(set, manifest.ResourceKind, lookupResourceOwner(set), parseResourceRef)
@@ -231,8 +238,13 @@ func TestEnrichValueFromResource_ResourceConsumer_CrossTeamFails(t *testing.T) {
 	}
 	set.Resources["cache"] = &manifest.ResourceManifest{
 		Metadata: manifest.Metadata{Name: "cache", Owner: "team-a"},
-		Spec: manifest.ResourceSpec{Type: "redis", Version: "7",
-			Env: []manifest.EnvVar{{Name: "UPSTREAM", ValueFrom: "resource.pg.host"}}},
+		Spec: manifest.ResourceSpec{
+			ContainerSpec: manifest.ContainerSpec{
+				Env: []manifest.EnvVar{{Name: "UPSTREAM", ValueFrom: "resource.pg.host"}},
+			},
+			Type:    "redis",
+			Version: "7",
+		},
 	}
 
 	_, _, err := applyEnrichmentRule(set, manifest.ResourceKind, lookupResourceOwner(set), parseResourceRef)
@@ -253,15 +265,17 @@ func appAppSet(t *testing.T) *ManifestSet {
 	set.Applications["producer"] = &manifest.ApplicationManifest{
 		TypeMeta: manifest.TypeMeta{Kind: manifest.ApplicationKind, APIVersion: "shrine/v1"},
 		Metadata: manifest.Metadata{Name: "producer", Owner: "team-a"},
-		Spec:     manifest.ApplicationSpec{Image: "nginx"},
+		Spec:     manifest.ApplicationSpec{ContainerSpec: manifest.ContainerSpec{Image: "nginx"}},
 	}
 	set.Applications["consumer"] = &manifest.ApplicationManifest{
 		TypeMeta: manifest.TypeMeta{Kind: manifest.ApplicationKind, APIVersion: "shrine/v1"},
 		Metadata: manifest.Metadata{Name: "consumer", Owner: "team-a"},
 		Spec: manifest.ApplicationSpec{
-			Image: "nginx",
-			Env: []manifest.EnvVar{
-				{Name: "PROD_HOST", ValueFrom: "application.producer.host"},
+			ContainerSpec: manifest.ContainerSpec{
+				Image: "nginx",
+				Env: []manifest.EnvVar{
+					{Name: "PROD_HOST", ValueFrom: "application.producer.host"},
+				},
 			},
 		},
 	}

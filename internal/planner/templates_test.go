@@ -10,7 +10,7 @@ import (
 func resourceWith(env []manifest.EnvVar, outputs []manifest.Output) *manifest.ResourceManifest {
 	return &manifest.ResourceManifest{
 		Metadata: manifest.Metadata{Name: "pg", Owner: "team-a"},
-		Spec:     manifest.ResourceSpec{Type: "postgres", Version: "16", Env: env, Outputs: outputs},
+		Spec:     manifest.ResourceSpec{ContainerSpec: manifest.ContainerSpec{Env: env}, Type: "postgres", Version: "16", Outputs: outputs},
 	}
 }
 

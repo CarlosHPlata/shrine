@@ -184,7 +184,7 @@ func TestEngine_ExecuteDeploy_StepLoopFailureSkipsFinalize(t *testing.T) {
 	app := &manifest.ApplicationManifest{
 		TypeMeta: manifest.TypeMeta{Kind: manifest.ApplicationKind},
 		Metadata: manifest.Metadata{Name: "svc-a", Owner: "team-a"},
-		Spec:     manifest.ApplicationSpec{Image: "img"},
+		Spec:     manifest.ApplicationSpec{ContainerSpec: manifest.ContainerSpec{Image: "img"}},
 	}
 	set := emptyManifestSet()
 	set.Applications["svc-a"] = app

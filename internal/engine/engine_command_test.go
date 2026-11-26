@@ -32,7 +32,7 @@ func appSet(command manifest.Command) *planner.ManifestSet {
 	set.Applications["web"] = &manifest.ApplicationManifest{
 		TypeMeta: manifest.TypeMeta{Kind: manifest.ApplicationKind},
 		Metadata: manifest.Metadata{Name: "web", Owner: "team-a"},
-		Spec:     manifest.ApplicationSpec{Image: "node:22", Port: 3000, Command: command},
+		Spec:     manifest.ApplicationSpec{ContainerSpec: manifest.ContainerSpec{Image: "node:22", Port: 3000, Command: command}},
 	}
 	return set
 }
@@ -42,7 +42,7 @@ func resourceSet(command manifest.Command) *planner.ManifestSet {
 	set.Resources["db"] = &manifest.ResourceManifest{
 		TypeMeta: manifest.TypeMeta{Kind: manifest.ResourceKind},
 		Metadata: manifest.Metadata{Name: "db", Owner: "team-a"},
-		Spec:     manifest.ResourceSpec{Type: "redis", Image: "redis:7", Port: 6379, Command: command},
+		Spec:     manifest.ResourceSpec{ContainerSpec: manifest.ContainerSpec{Image: "redis:7", Port: 6379, Command: command}, Type: "redis"},
 	}
 	return set
 }

@@ -67,12 +67,12 @@ func prepassManifestSet() (*planner.ManifestSet, []planner.PlannedStep) {
 	set.Resources["db"] = &manifest.ResourceManifest{
 		TypeMeta: manifest.TypeMeta{Kind: manifest.ResourceKind},
 		Metadata: manifest.Metadata{Name: "db", Owner: "team-a"},
-		Spec:     manifest.ResourceSpec{Type: "postgres", Image: "postgres:16"},
+		Spec:     manifest.ResourceSpec{ContainerSpec: manifest.ContainerSpec{Image: "postgres:16"}, Type: "postgres"},
 	}
 	set.Applications["svc-b"] = &manifest.ApplicationManifest{
 		TypeMeta: manifest.TypeMeta{Kind: manifest.ApplicationKind},
 		Metadata: manifest.Metadata{Name: "svc-b", Owner: "team-a"},
-		Spec:     manifest.ApplicationSpec{Image: "reg:lab/img:latest", Port: 8080},
+		Spec:     manifest.ApplicationSpec{ContainerSpec: manifest.ContainerSpec{Image: "reg:lab/img:latest", Port: 8080}},
 	}
 	steps := []planner.PlannedStep{
 		{Kind: manifest.ResourceKind, Name: "db"},

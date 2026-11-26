@@ -17,19 +17,23 @@ func TestResolve_PublishGrantsNoCrossTeamAccess(t *testing.T) {
 		TypeMeta: manifest.TypeMeta{Kind: manifest.ApplicationKind, APIVersion: "shrine/v1"},
 		Metadata: manifest.Metadata{Name: "target", Owner: "team-a", Access: []string{"team-b"}},
 		Spec: manifest.ApplicationSpec{
-			Image:      "img",
-			Port:       80,
-			Networking: manifest.Networking{Publish: &manifest.Publish{HostPort: 8080}},
+			ContainerSpec: manifest.ContainerSpec{
+				Image:      "img",
+				Port:       80,
+				Networking: manifest.Networking{Publish: &manifest.Publish{HostPort: 8080}},
+			},
 		},
 	}
 	set.Applications["consumer"] = &manifest.ApplicationManifest{
 		TypeMeta: manifest.TypeMeta{Kind: manifest.ApplicationKind, APIVersion: "shrine/v1"},
 		Metadata: manifest.Metadata{Name: "consumer", Owner: "team-b"},
 		Spec: manifest.ApplicationSpec{
-			Image: "img",
-			Port:  80,
-			Dependencies: []manifest.Dependency{
-				{Kind: manifest.ApplicationKind, Name: "target", Owner: "team-a"},
+			ContainerSpec: manifest.ContainerSpec{
+				Image: "img",
+				Port:  80,
+				Dependencies: []manifest.Dependency{
+					{Kind: manifest.ApplicationKind, Name: "target", Owner: "team-a"},
+				},
 			},
 		},
 	}

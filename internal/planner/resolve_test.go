@@ -51,8 +51,10 @@ func TestResolve(t *testing.T) {
 				"app1": {
 					Metadata: manifest.Metadata{Name: "app1", Owner: "team-a"},
 					Spec: manifest.ApplicationSpec{
-						Dependencies: []manifest.Dependency{
-							{Kind: manifest.ResourceKind, Name: "db1", Owner: "team-a"},
+						ContainerSpec: manifest.ContainerSpec{
+							Dependencies: []manifest.Dependency{
+								{Kind: manifest.ResourceKind, Name: "db1", Owner: "team-a"},
+							},
 						},
 					},
 				},
@@ -77,8 +79,10 @@ func TestResolve(t *testing.T) {
 				"app1": {
 					Metadata: manifest.Metadata{Name: "app1", Owner: "team-a"},
 					Spec: manifest.ApplicationSpec{
-						Dependencies: []manifest.Dependency{
-							{Kind: manifest.ResourceKind, Name: "nonexistent", Owner: "team-a"},
+						ContainerSpec: manifest.ContainerSpec{
+							Dependencies: []manifest.Dependency{
+								{Kind: manifest.ResourceKind, Name: "nonexistent", Owner: "team-a"},
+							},
 						},
 					},
 				},
@@ -98,8 +102,10 @@ func TestResolve(t *testing.T) {
 				"app1": {
 					Metadata: manifest.Metadata{Name: "app1", Owner: "team-a"},
 					Spec: manifest.ApplicationSpec{
-						Dependencies: []manifest.Dependency{
-							{Kind: manifest.ResourceKind, Name: "db1", Owner: "team-b"},
+						ContainerSpec: manifest.ContainerSpec{
+							Dependencies: []manifest.Dependency{
+								{Kind: manifest.ResourceKind, Name: "db1", Owner: "team-b"},
+							},
 						},
 					},
 				},
@@ -124,8 +130,10 @@ func TestResolve(t *testing.T) {
 				"app1": {
 					Metadata: manifest.Metadata{Name: "app1", Owner: "team-a"},
 					Spec: manifest.ApplicationSpec{
-						Dependencies: []manifest.Dependency{
-							{Kind: manifest.ResourceKind, Name: "db1", Owner: "team-b"},
+						ContainerSpec: manifest.ContainerSpec{
+							Dependencies: []manifest.Dependency{
+								{Kind: manifest.ResourceKind, Name: "db1", Owner: "team-b"},
+							},
 						},
 					},
 				},
@@ -133,7 +141,7 @@ func TestResolve(t *testing.T) {
 			Resources: map[string]*manifest.ResourceManifest{
 				"db1": {
 					Metadata: manifest.Metadata{Name: "db1", Owner: "team-b", Access: []string{"team-a"}},
-					Spec:     manifest.ResourceSpec{Type: "postgres", Networking: manifest.Networking{ExposeToPlatform: true}},
+					Spec:     manifest.ResourceSpec{ContainerSpec: manifest.ContainerSpec{Networking: manifest.Networking{ExposeToPlatform: true}}, Type: "postgres"},
 				},
 			},
 		}
@@ -150,8 +158,10 @@ func TestResolve(t *testing.T) {
 				"app1": {
 					Metadata: manifest.Metadata{Name: "app1", Owner: "team-a"},
 					Spec: manifest.ApplicationSpec{
-						Dependencies: []manifest.Dependency{
-							{Kind: manifest.ResourceKind, Name: "db1", Owner: "team-a"}, // Specifies team-a
+						ContainerSpec: manifest.ContainerSpec{
+							Dependencies: []manifest.Dependency{
+								{Kind: manifest.ResourceKind, Name: "db1", Owner: "team-a"}, // Specifies team-a
+							},
 						},
 					},
 				},
@@ -227,21 +237,23 @@ func TestResolve(t *testing.T) {
 				"app1": {
 					Metadata: manifest.Metadata{Name: "app1", Owner: "team-a"},
 					Spec: manifest.ApplicationSpec{
-						Env: []manifest.EnvVar{
-							{Name: "DB_URL", ValueFrom: "resource.db1.url"},       // Valid
-							{Name: "INVALID_FMT", ValueFrom: "resource.db1"},      // Invalid format
-							{Name: "WRONG_PREFIX", ValueFrom: "config.db1.url"},   // Wrong prefix
-							{Name: "MISSING_RES", ValueFrom: "resource.db2.url"},  // Missing resource
-							{Name: "MISSING_OUT", ValueFrom: "resource.db1.host"}, // Missing output
-							{Name: "VALID_APP", ValueFrom: "application.worker.host"},
-							{Name: "INVALID_APP_OUT", ValueFrom: "application.worker.url"},
-							{Name: "MISSING_APP", ValueFrom: "application.ghost.host"},
+						ContainerSpec: manifest.ContainerSpec{
+							Env: []manifest.EnvVar{
+								{Name: "DB_URL", ValueFrom: "resource.db1.url"},       // Valid
+								{Name: "INVALID_FMT", ValueFrom: "resource.db1"},      // Invalid format
+								{Name: "WRONG_PREFIX", ValueFrom: "config.db1.url"},   // Wrong prefix
+								{Name: "MISSING_RES", ValueFrom: "resource.db2.url"},  // Missing resource
+								{Name: "MISSING_OUT", ValueFrom: "resource.db1.host"}, // Missing output
+								{Name: "VALID_APP", ValueFrom: "application.worker.host"},
+								{Name: "INVALID_APP_OUT", ValueFrom: "application.worker.url"},
+								{Name: "MISSING_APP", ValueFrom: "application.ghost.host"},
+							},
 						},
 					},
 				},
 				"worker": {
 					Metadata: manifest.Metadata{Name: "worker", Owner: "team-a"},
-					Spec:     manifest.ApplicationSpec{Image: "img", Port: 80},
+					Spec:     manifest.ApplicationSpec{ContainerSpec: manifest.ContainerSpec{Image: "img", Port: 80}},
 				},
 			},
 			Resources: map[string]*manifest.ResourceManifest{
@@ -286,9 +298,11 @@ func TestResolve(t *testing.T) {
 				"db1": {
 					Metadata: manifest.Metadata{Name: "db1", Owner: "team-a"},
 					Spec: manifest.ResourceSpec{
+						ContainerSpec: manifest.ContainerSpec{
+							Port: 5432,
+						},
 						Type:    "postgres",
 						Version: "16",
-						Port:    5432,
 						Outputs: []manifest.Output{
 							{Name: "host"},
 							{Name: "port"},
@@ -331,16 +345,18 @@ func TestResolve(t *testing.T) {
 				"app1": {
 					Metadata: manifest.Metadata{Name: "app1", Owner: "team-a"},
 					Spec: manifest.ApplicationSpec{
-						Env: []manifest.EnvVar{
-							{Name: "LITERAL", Value: "a"},
-							{Name: "REF", ValueFrom: "resource.db1.url"},
-							// Valid: references literal, valueFrom, sibling template, and built-ins.
-							{Name: "T1", Template: "http://{{.LITERAL}}:{{.REF}}/{{.T1}}"}, // T1 can ref itself? Wait, validateEnvTemplates doesn't check for cycles yet.
-							{Name: "T2", Template: "{{.team}}-{{.name}}"},
-							// Invalid: unknown variable.
-							{Name: "BAD", Template: "{{.ghost}}"},
-							// Invalid: syntax error.
-							{Name: "BROKEN", Template: "{{.host"},
+						ContainerSpec: manifest.ContainerSpec{
+							Env: []manifest.EnvVar{
+								{Name: "LITERAL", Value: "a"},
+								{Name: "REF", ValueFrom: "resource.db1.url"},
+								// Valid: references literal, valueFrom, sibling template, and built-ins.
+								{Name: "T1", Template: "http://{{.LITERAL}}:{{.REF}}/{{.T1}}"}, // T1 can ref itself? Wait, validateEnvTemplates doesn't check for cycles yet.
+								{Name: "T2", Template: "{{.team}}-{{.name}}"},
+								// Invalid: unknown variable.
+								{Name: "BAD", Template: "{{.ghost}}"},
+								// Invalid: syntax error.
+								{Name: "BROKEN", Template: "{{.host"},
+							},
 						},
 					},
 				},
@@ -381,14 +397,16 @@ func TestResolve(t *testing.T) {
 					"aterrizar": {
 						Metadata: manifest.Metadata{Name: "aterrizar", Owner: "team-a"},
 						Spec: manifest.ApplicationSpec{
-							Dependencies: []manifest.Dependency{
-								{Kind: manifest.ApplicationKind, Name: "worker", Owner: "team-a"},
+							ContainerSpec: manifest.ContainerSpec{
+								Dependencies: []manifest.Dependency{
+									{Kind: manifest.ApplicationKind, Name: "worker", Owner: "team-a"},
+								},
 							},
 						},
 					},
 					"worker": {
 						Metadata: manifest.Metadata{Name: "worker", Owner: "team-a"},
-						Spec:     manifest.ApplicationSpec{Image: "img", Port: 80},
+						Spec:     manifest.ApplicationSpec{ContainerSpec: manifest.ContainerSpec{Image: "img", Port: 80}},
 					},
 				},
 			}
@@ -404,14 +422,16 @@ func TestResolve(t *testing.T) {
 					"aterrizar": {
 						Metadata: manifest.Metadata{Name: "aterrizar", Owner: "team-a"},
 						Spec: manifest.ApplicationSpec{
-							Dependencies: []manifest.Dependency{
-								{Kind: manifest.ApplicationKind, Name: "worker", Owner: "team-b"},
+							ContainerSpec: manifest.ContainerSpec{
+								Dependencies: []manifest.Dependency{
+									{Kind: manifest.ApplicationKind, Name: "worker", Owner: "team-b"},
+								},
 							},
 						},
 					},
 					"worker": {
 						Metadata: manifest.Metadata{Name: "worker", Owner: "team-b", Access: []string{"team-a"}},
-						Spec:     manifest.ApplicationSpec{Image: "img", Port: 80, Networking: manifest.Networking{ExposeToPlatform: true}},
+						Spec:     manifest.ApplicationSpec{ContainerSpec: manifest.ContainerSpec{Image: "img", Port: 80, Networking: manifest.Networking{ExposeToPlatform: true}}},
 					},
 				},
 			}
@@ -427,14 +447,16 @@ func TestResolve(t *testing.T) {
 					"aterrizar": {
 						Metadata: manifest.Metadata{Name: "aterrizar", Owner: "team-a"},
 						Spec: manifest.ApplicationSpec{
-							Dependencies: []manifest.Dependency{
-								{Kind: manifest.ApplicationKind, Name: "worker", Owner: "team-b"},
+							ContainerSpec: manifest.ContainerSpec{
+								Dependencies: []manifest.Dependency{
+									{Kind: manifest.ApplicationKind, Name: "worker", Owner: "team-b"},
+								},
 							},
 						},
 					},
 					"worker": {
 						Metadata: manifest.Metadata{Name: "worker", Owner: "team-b"},
-						Spec:     manifest.ApplicationSpec{Image: "img", Port: 80},
+						Spec:     manifest.ApplicationSpec{ContainerSpec: manifest.ContainerSpec{Image: "img", Port: 80}},
 					},
 				},
 			}
@@ -457,8 +479,10 @@ func TestResolve(t *testing.T) {
 					"aterrizar": {
 						Metadata: manifest.Metadata{Name: "aterrizar", Owner: "team-a"},
 						Spec: manifest.ApplicationSpec{
-							Dependencies: []manifest.Dependency{
-								{Kind: manifest.ApplicationKind, Name: "ghost", Owner: "team-a"},
+							ContainerSpec: manifest.ContainerSpec{
+								Dependencies: []manifest.Dependency{
+									{Kind: manifest.ApplicationKind, Name: "ghost", Owner: "team-a"},
+								},
 							},
 						},
 					},
@@ -483,14 +507,16 @@ func TestResolve(t *testing.T) {
 					"aterrizar": {
 						Metadata: manifest.Metadata{Name: "aterrizar", Owner: "team-a"},
 						Spec: manifest.ApplicationSpec{
-							Dependencies: []manifest.Dependency{
-								{Kind: manifest.ApplicationKind, Name: "worker", Owner: "team-b"},
+							ContainerSpec: manifest.ContainerSpec{
+								Dependencies: []manifest.Dependency{
+									{Kind: manifest.ApplicationKind, Name: "worker", Owner: "team-b"},
+								},
 							},
 						},
 					},
 					"worker": {
 						Metadata: manifest.Metadata{Name: "worker", Owner: "team-a"},
-						Spec:     manifest.ApplicationSpec{Image: "img", Port: 80},
+						Spec:     manifest.ApplicationSpec{ContainerSpec: manifest.ContainerSpec{Image: "img", Port: 80}},
 					},
 				},
 			}
@@ -513,14 +539,16 @@ func TestResolve(t *testing.T) {
 					"aterrizar": {
 						Metadata: manifest.Metadata{Name: "aterrizar", Owner: "team-a"},
 						Spec: manifest.ApplicationSpec{
-							Dependencies: []manifest.Dependency{
-								{Kind: manifest.ApplicationKind, Name: "worker", Owner: "team-b"},
+							ContainerSpec: manifest.ContainerSpec{
+								Dependencies: []manifest.Dependency{
+									{Kind: manifest.ApplicationKind, Name: "worker", Owner: "team-b"},
+								},
 							},
 						},
 					},
 					"worker": {
 						Metadata: manifest.Metadata{Name: "worker", Owner: "team-b", Access: []string{"team-a"}},
-						Spec:     manifest.ApplicationSpec{Image: "img", Port: 80, Networking: manifest.Networking{ExposeToPlatform: false}},
+						Spec:     manifest.ApplicationSpec{ContainerSpec: manifest.ContainerSpec{Image: "img", Port: 80, Networking: manifest.Networking{ExposeToPlatform: false}}},
 					},
 				},
 			}
@@ -543,14 +571,16 @@ func TestResolve(t *testing.T) {
 					"aterrizar": {
 						Metadata: manifest.Metadata{Name: "aterrizar", Owner: "team-a"},
 						Spec: manifest.ApplicationSpec{
-							Dependencies: []manifest.Dependency{
-								{Kind: manifest.ApplicationKind, Name: "worker", Owner: "team-b"},
+							ContainerSpec: manifest.ContainerSpec{
+								Dependencies: []manifest.Dependency{
+									{Kind: manifest.ApplicationKind, Name: "worker", Owner: "team-b"},
+								},
 							},
 						},
 					},
 					"worker": {
 						Metadata: manifest.Metadata{Name: "worker", Owner: "team-b", Access: []string{"team-c"}},
-						Spec:     manifest.ApplicationSpec{Image: "img", Port: 80, Networking: manifest.Networking{ExposeToPlatform: true}},
+						Spec:     manifest.ApplicationSpec{ContainerSpec: manifest.ContainerSpec{Image: "img", Port: 80, Networking: manifest.Networking{ExposeToPlatform: true}}},
 					},
 				},
 			}
@@ -581,8 +611,10 @@ func TestResolve(t *testing.T) {
 					"app1": {
 						Metadata: manifest.Metadata{Name: "app1", Owner: "team-a"},
 						Spec: manifest.ApplicationSpec{
-							Dependencies: []manifest.Dependency{
-								{Kind: manifest.ResourceKind, Name: "db1", Owner: "team-b"},
+							ContainerSpec: manifest.ContainerSpec{
+								Dependencies: []manifest.Dependency{
+									{Kind: manifest.ResourceKind, Name: "db1", Owner: "team-b"},
+								},
 							},
 						},
 					},
@@ -590,7 +622,7 @@ func TestResolve(t *testing.T) {
 				Resources: map[string]*manifest.ResourceManifest{
 					"db1": {
 						Metadata: manifest.Metadata{Name: "db1", Owner: "team-b", Access: []string{"team-a"}},
-						Spec:     manifest.ResourceSpec{Type: "postgres", Networking: manifest.Networking{ExposeToPlatform: false}},
+						Spec:     manifest.ResourceSpec{ContainerSpec: manifest.ContainerSpec{Networking: manifest.Networking{ExposeToPlatform: false}}, Type: "postgres"},
 					},
 				},
 			}
@@ -613,8 +645,10 @@ func TestResolve(t *testing.T) {
 					"app1": {
 						Metadata: manifest.Metadata{Name: "app1", Owner: "team-a"},
 						Spec: manifest.ApplicationSpec{
-							Dependencies: []manifest.Dependency{
-								{Kind: manifest.ResourceKind, Name: "db1", Owner: "team-b"},
+							ContainerSpec: manifest.ContainerSpec{
+								Dependencies: []manifest.Dependency{
+									{Kind: manifest.ResourceKind, Name: "db1", Owner: "team-b"},
+								},
 							},
 						},
 					},
@@ -622,7 +656,7 @@ func TestResolve(t *testing.T) {
 				Resources: map[string]*manifest.ResourceManifest{
 					"db1": {
 						Metadata: manifest.Metadata{Name: "db1", Owner: "team-b", Access: []string{"team-a"}},
-						Spec:     manifest.ResourceSpec{Type: "postgres", Networking: manifest.Networking{ExposeToPlatform: true}},
+						Spec:     manifest.ResourceSpec{ContainerSpec: manifest.ContainerSpec{Networking: manifest.Networking{ExposeToPlatform: true}}, Type: "postgres"},
 					},
 				},
 			}
@@ -637,7 +671,7 @@ func TestResolve(t *testing.T) {
 			Applications: map[string]*manifest.ApplicationManifest{
 				"shared-name": {
 					Metadata: manifest.Metadata{Name: "shared-name", Owner: "team-a"},
-					Spec:     manifest.ApplicationSpec{Image: "img", Port: 80},
+					Spec:     manifest.ApplicationSpec{ContainerSpec: manifest.ContainerSpec{Image: "img", Port: 80}},
 				},
 			},
 			Resources: map[string]*manifest.ResourceManifest{
@@ -662,7 +696,7 @@ func TestResolve(t *testing.T) {
 			Applications: map[string]*manifest.ApplicationManifest{
 				"key-a": {
 					Metadata: manifest.Metadata{Name: "mismatch-a", Owner: "team-a"},
-					Spec:     manifest.ApplicationSpec{Image: "img", Port: 80},
+					Spec:     manifest.ApplicationSpec{ContainerSpec: manifest.ContainerSpec{Image: "img", Port: 80}},
 				},
 			},
 		}
@@ -692,9 +726,12 @@ func TestResolve_ExportAllowlist(t *testing.T) {
 				"api": {
 					Metadata: manifest.Metadata{Name: "api", Owner: "team-a"},
 					Spec: manifest.ApplicationSpec{
-						Image: "img", Port: 80,
-						Dependencies: []manifest.Dependency{{Kind: manifest.ResourceKind, Name: "pg", Owner: "team-a"}},
-						Env:          consumerEnv,
+						ContainerSpec: manifest.ContainerSpec{
+							Image:        "img",
+							Port:         80,
+							Dependencies: []manifest.Dependency{{Kind: manifest.ResourceKind, Name: "pg", Owner: "team-a"}},
+							Env:          consumerEnv,
+						},
 					},
 				},
 			},
@@ -702,11 +739,14 @@ func TestResolve_ExportAllowlist(t *testing.T) {
 				"pg": {
 					Metadata: manifest.Metadata{Name: "pg", Owner: "team-a"},
 					Spec: manifest.ResourceSpec{
-						Type: "postgres", Version: "16",
-						Env: []manifest.EnvVar{
-							{Name: "POSTGRES_PASSWORD", Generated: true},
-							{Name: "POSTGRES_DB", Value: "app"},
+						ContainerSpec: manifest.ContainerSpec{
+							Env: []manifest.EnvVar{
+								{Name: "POSTGRES_PASSWORD", Generated: true},
+								{Name: "POSTGRES_DB", Value: "app"},
+							},
 						},
+						Type:    "postgres",
+						Version: "16",
 						Outputs: []manifest.Output{{Name: "POSTGRES_DB"}}, // only DB is exported
 					},
 				},
@@ -740,7 +780,7 @@ func TestValidateRegistryImages(t *testing.T) {
 			Applications: map[string]*manifest.ApplicationManifest{
 				"app": {
 					Metadata: manifest.Metadata{Name: "app", Owner: "team"},
-					Spec:     manifest.ApplicationSpec{Image: "nginx:latest", Port: 80},
+					Spec:     manifest.ApplicationSpec{ContainerSpec: manifest.ContainerSpec{Image: "nginx:latest", Port: 80}},
 				},
 			},
 			Resources: map[string]*manifest.ResourceManifest{},
@@ -756,7 +796,7 @@ func TestValidateRegistryImages(t *testing.T) {
 			Applications: map[string]*manifest.ApplicationManifest{
 				"app": {
 					Metadata: manifest.Metadata{Name: "app", Owner: "team"},
-					Spec:     manifest.ApplicationSpec{Image: "reg:myregistry/postgres:15", Port: 80},
+					Spec:     manifest.ApplicationSpec{ContainerSpec: manifest.ContainerSpec{Image: "reg:myregistry/postgres:15", Port: 80}},
 				},
 			},
 			Resources: map[string]*manifest.ResourceManifest{},
@@ -773,7 +813,7 @@ func TestValidateRegistryImages(t *testing.T) {
 			Resources: map[string]*manifest.ResourceManifest{
 				"db": {
 					Metadata: manifest.Metadata{Name: "db", Owner: "team"},
-					Spec:     manifest.ResourceSpec{Image: "reg:myregistry/postgres:15"},
+					Spec:     manifest.ResourceSpec{ContainerSpec: manifest.ContainerSpec{Image: "reg:myregistry/postgres:15"}},
 				},
 			},
 		}
@@ -788,7 +828,7 @@ func TestValidateRegistryImages(t *testing.T) {
 			Applications: map[string]*manifest.ApplicationManifest{
 				"app": {
 					Metadata: manifest.Metadata{Name: "app", Owner: "team"},
-					Spec:     manifest.ApplicationSpec{Image: "reg:unknown/postgres:15", Port: 80},
+					Spec:     manifest.ApplicationSpec{ContainerSpec: manifest.ContainerSpec{Image: "reg:unknown/postgres:15", Port: 80}},
 				},
 			},
 			Resources: map[string]*manifest.ResourceManifest{},
@@ -808,7 +848,7 @@ func TestValidateRegistryImages(t *testing.T) {
 			Resources: map[string]*manifest.ResourceManifest{
 				"db": {
 					Metadata: manifest.Metadata{Name: "db", Owner: "team"},
-					Spec:     manifest.ResourceSpec{Image: "reg:missing/postgres:15"},
+					Spec:     manifest.ResourceSpec{ContainerSpec: manifest.ContainerSpec{Image: "reg:missing/postgres:15"}},
 				},
 			},
 		}
@@ -826,7 +866,7 @@ func TestValidateRegistryImages(t *testing.T) {
 			Applications: map[string]*manifest.ApplicationManifest{
 				"app": {
 					Metadata: manifest.Metadata{Name: "app", Owner: "team"},
-					Spec:     manifest.ApplicationSpec{Image: "reg:/postgres:15", Port: 80},
+					Spec:     manifest.ApplicationSpec{ContainerSpec: manifest.ContainerSpec{Image: "reg:/postgres:15", Port: 80}},
 				},
 			},
 			Resources: map[string]*manifest.ResourceManifest{},

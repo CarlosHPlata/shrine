@@ -175,17 +175,25 @@ func (c *Command) UnmarshalYAML(node *yaml.Node) error {
 	return nil
 }
 
-type ApplicationSpec struct {
-	Image           string        `yaml:"image"`
+// ContainerSpec holds the container properties shared by Applications and
+// Resources. It is embedded inline in both specs, so its keys sit directly
+// under spec: in YAML. Do not give it its own UnmarshalYAML: yaml.v3 does not
+// support inline structs with a custom unmarshaler.
+type ContainerSpec struct {
+	Image           string        `yaml:"image,omitempty"`
 	Port            int           `yaml:"port,omitempty"`
-	Replicas        int           `yaml:"replicas,omitempty"`
-	Routing         Routing       `yaml:"routing,omitempty"`
 	Dependencies    []Dependency  `yaml:"dependencies,omitempty"`
 	Env             []EnvVar      `yaml:"env,omitempty"`
 	Networking      Networking    `yaml:"networking,omitempty"`
 	Volumes         []VolumeMount `yaml:"volumes,omitempty"`
 	Command         Command       `yaml:"command,omitempty"`
 	ImagePullPolicy string        `yaml:"imagePullPolicy,omitempty"`
+}
+
+type ApplicationSpec struct {
+	ContainerSpec `yaml:",inline"`
+	Replicas      int     `yaml:"replicas,omitempty"`
+	Routing       Routing `yaml:"routing,omitempty"`
 }
 
 // Output declares one item in a Resource's export allowlist. Its only valid
@@ -201,17 +209,10 @@ type Output struct {
 }
 
 type ResourceSpec struct {
-	Type            string        `yaml:"type"`
-	Version         string        `yaml:"version"`
-	Port            int           `yaml:"port,omitempty"`
-	Image           string        `yaml:"image,omitempty"`
-	Dependencies    []Dependency  `yaml:"dependencies,omitempty"`
-	Env             []EnvVar      `yaml:"env,omitempty"`
-	Outputs         []Output      `yaml:"outputs,omitempty"`
-	Networking      Networking    `yaml:"networking,omitempty"`
-	Volumes         []VolumeMount `yaml:"volumes,omitempty"`
-	Command         Command       `yaml:"command,omitempty"`
-	ImagePullPolicy string        `yaml:"imagePullPolicy,omitempty"`
+	ContainerSpec `yaml:",inline"`
+	Type          string   `yaml:"type"`
+	Version       string   `yaml:"version"`
+	Outputs       []Output `yaml:"outputs,omitempty"`
 }
 
 type Quotas struct {

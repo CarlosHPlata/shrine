@@ -74,10 +74,12 @@ func TestResolveResource_EnvAndExports(t *testing.T) {
 	res := &manifest.ResourceManifest{
 		Metadata: manifest.Metadata{Name: "pg", Owner: "team-a"},
 		Spec: manifest.ResourceSpec{
-			Port: 5432,
-			Env: []manifest.EnvVar{
-				{Name: "POSTGRES_DB", Value: "app"},
-				{Name: "POSTGRES_PASSWORD", Generated: true},
+			ContainerSpec: manifest.ContainerSpec{
+				Port: 5432,
+				Env: []manifest.EnvVar{
+					{Name: "POSTGRES_DB", Value: "app"},
+					{Name: "POSTGRES_PASSWORD", Generated: true},
+				},
 			},
 			Outputs: []manifest.Output{
 				{Name: "POSTGRES_DB"},
@@ -126,7 +128,9 @@ func TestResolveResource_GeneratedKeyReuse(t *testing.T) {
 	res := &manifest.ResourceManifest{
 		Metadata: manifest.Metadata{Name: "pg", Owner: "team-a"},
 		Spec: manifest.ResourceSpec{
-			Env: []manifest.EnvVar{{Name: "PW", Generated: true}},
+			ContainerSpec: manifest.ContainerSpec{
+				Env: []manifest.EnvVar{{Name: "PW", Generated: true}},
+			},
 		},
 	}
 	r := NewLiveResolver(secrets, nil)
@@ -151,7 +155,9 @@ func TestResolveResource_VaultEnv(t *testing.T) {
 	res := &manifest.ResourceManifest{
 		Metadata: manifest.Metadata{Name: "db", Owner: "team-a"},
 		Spec: manifest.ResourceSpec{
-			Env:     []manifest.EnvVar{{Name: "PASSWORD", ValueFrom: "vault:myproject/prod/DB_PASS"}},
+			ContainerSpec: manifest.ContainerSpec{
+				Env: []manifest.EnvVar{{Name: "PASSWORD", ValueFrom: "vault:myproject/prod/DB_PASS"}},
+			},
 			Outputs: []manifest.Output{{Name: "PASSWORD"}},
 		},
 	}
@@ -173,7 +179,9 @@ func TestResolveResource_VaultEnv_NoPlugin(t *testing.T) {
 	res := &manifest.ResourceManifest{
 		Metadata: manifest.Metadata{Name: "db", Owner: "team-a"},
 		Spec: manifest.ResourceSpec{
-			Env: []manifest.EnvVar{{Name: "PASSWORD", ValueFrom: "vault:proj/prod/PASS"}},
+			ContainerSpec: manifest.ContainerSpec{
+				Env: []manifest.EnvVar{{Name: "PASSWORD", ValueFrom: "vault:proj/prod/PASS"}},
+			},
 		},
 	}
 
@@ -196,7 +204,9 @@ func TestResolveResource_VaultEnv_MissingSecret(t *testing.T) {
 	res := &manifest.ResourceManifest{
 		Metadata: manifest.Metadata{Name: "db", Owner: "team-a"},
 		Spec: manifest.ResourceSpec{
-			Env: []manifest.EnvVar{{Name: "PASSWORD", ValueFrom: "vault:proj/prod/MISSING"}},
+			ContainerSpec: manifest.ContainerSpec{
+				Env: []manifest.EnvVar{{Name: "PASSWORD", ValueFrom: "vault:proj/prod/MISSING"}},
+			},
 		},
 	}
 
@@ -213,10 +223,12 @@ func TestResolveResource_EnvTemplateChain(t *testing.T) {
 	res := &manifest.ResourceManifest{
 		Metadata: manifest.Metadata{Name: "chain", Owner: "team-a"},
 		Spec: manifest.ResourceSpec{
-			Env: []manifest.EnvVar{
-				{Name: "C", Value: "C"},
-				{Name: "B", Template: "{{.C}}+B"},
-				{Name: "A", Template: "{{.B}}+A"},
+			ContainerSpec: manifest.ContainerSpec{
+				Env: []manifest.EnvVar{
+					{Name: "C", Value: "C"},
+					{Name: "B", Template: "{{.C}}+B"},
+					{Name: "A", Template: "{{.B}}+A"},
+				},
 			},
 		},
 	}
@@ -234,9 +246,11 @@ func TestResolveResource_EnvTemplateHostPort(t *testing.T) {
 	res := &manifest.ResourceManifest{
 		Metadata: manifest.Metadata{Name: "cache", Owner: "team-a"},
 		Spec: manifest.ResourceSpec{
-			Port: 6379,
-			Env: []manifest.EnvVar{
-				{Name: "SELF_CONN", Template: "redis://{{.host}}:{{.port}}"},
+			ContainerSpec: manifest.ContainerSpec{
+				Port: 6379,
+				Env: []manifest.EnvVar{
+					{Name: "SELF_CONN", Template: "redis://{{.host}}:{{.port}}"},
+				},
 			},
 		},
 	}
@@ -254,9 +268,11 @@ func TestResolveResource_EnvTemplateCycle(t *testing.T) {
 	res := &manifest.ResourceManifest{
 		Metadata: manifest.Metadata{Name: "cycle", Owner: "team-a"},
 		Spec: manifest.ResourceSpec{
-			Env: []manifest.EnvVar{
-				{Name: "A", Template: "{{.B}}"},
-				{Name: "B", Template: "{{.A}}"},
+			ContainerSpec: manifest.ContainerSpec{
+				Env: []manifest.EnvVar{
+					{Name: "A", Template: "{{.B}}"},
+					{Name: "B", Template: "{{.A}}"},
+				},
 			},
 		},
 	}
@@ -271,7 +287,9 @@ func TestResolveResource_EnvValueFromResource(t *testing.T) {
 	res := &manifest.ResourceManifest{
 		Metadata: manifest.Metadata{Name: "cache", Owner: "team-a"},
 		Spec: manifest.ResourceSpec{
-			Env:     []manifest.EnvVar{{Name: "UPSTREAM_DB_HOST", ValueFrom: "resource.pg.host"}},
+			ContainerSpec: manifest.ContainerSpec{
+				Env: []manifest.EnvVar{{Name: "UPSTREAM_DB_HOST", ValueFrom: "resource.pg.host"}},
+			},
 			Outputs: []manifest.Output{{Name: "UPSTREAM_DB_HOST"}},
 		},
 	}
@@ -316,9 +334,11 @@ func TestResolveApplication_StaticAndValueFrom(t *testing.T) {
 	app := &manifest.ApplicationManifest{
 		Metadata: manifest.Metadata{Name: "api", Owner: "team-a"},
 		Spec: manifest.ApplicationSpec{
-			Env: []manifest.EnvVar{
-				{Name: "NODE_ENV", Value: "production"},
-				{Name: "DATABASE_URL", ValueFrom: "resource.db.url"},
+			ContainerSpec: manifest.ContainerSpec{
+				Env: []manifest.EnvVar{
+					{Name: "NODE_ENV", Value: "production"},
+					{Name: "DATABASE_URL", ValueFrom: "resource.db.url"},
+				},
 			},
 		},
 	}
@@ -344,9 +364,11 @@ func TestResolveApplication_VaultEnv(t *testing.T) {
 	app := &manifest.ApplicationManifest{
 		Metadata: manifest.Metadata{Name: "api", Owner: "team-a"},
 		Spec: manifest.ApplicationSpec{
-			Env: []manifest.EnvVar{
-				{Name: "STATIC", Value: "hello"},
-				{Name: "API_KEY", ValueFrom: "vault:myproject/prod/API_KEY"},
+			ContainerSpec: manifest.ContainerSpec{
+				Env: []manifest.EnvVar{
+					{Name: "STATIC", Value: "hello"},
+					{Name: "API_KEY", ValueFrom: "vault:myproject/prod/API_KEY"},
+				},
 			},
 		},
 	}
@@ -367,8 +389,10 @@ func TestResolveApplication_VaultEnv_NoPlugin(t *testing.T) {
 	app := &manifest.ApplicationManifest{
 		Metadata: manifest.Metadata{Name: "api", Owner: "team-a"},
 		Spec: manifest.ApplicationSpec{
-			Env: []manifest.EnvVar{
-				{Name: "API_KEY", ValueFrom: "vault:proj/prod/KEY"},
+			ContainerSpec: manifest.ContainerSpec{
+				Env: []manifest.EnvVar{
+					{Name: "API_KEY", ValueFrom: "vault:proj/prod/KEY"},
+				},
 			},
 		},
 	}
@@ -384,8 +408,10 @@ func TestResolveApplication_VaultEnv_ErrorContainsPath(t *testing.T) {
 	app := &manifest.ApplicationManifest{
 		Metadata: manifest.Metadata{Name: "api", Owner: "team-a"},
 		Spec: manifest.ApplicationSpec{
-			Env: []manifest.EnvVar{
-				{Name: "API_KEY", ValueFrom: "vault:proj/prod/MISSING"},
+			ContainerSpec: manifest.ContainerSpec{
+				Env: []manifest.EnvVar{
+					{Name: "API_KEY", ValueFrom: "vault:proj/prod/MISSING"},
+				},
 			},
 		},
 	}
@@ -403,8 +429,10 @@ func TestResolveApplication_MissingResource(t *testing.T) {
 	app := &manifest.ApplicationManifest{
 		Metadata: manifest.Metadata{Name: "api", Owner: "team-a"},
 		Spec: manifest.ApplicationSpec{
-			Env: []manifest.EnvVar{
-				{Name: "X", ValueFrom: "resource.missing.url"},
+			ContainerSpec: manifest.ContainerSpec{
+				Env: []manifest.EnvVar{
+					{Name: "X", ValueFrom: "resource.missing.url"},
+				},
 			},
 		},
 	}
@@ -419,9 +447,11 @@ func TestResolveApplication_Templates(t *testing.T) {
 		app := &manifest.ApplicationManifest{
 			Metadata: manifest.Metadata{Name: "api", Owner: "team-a"},
 			Spec: manifest.ApplicationSpec{
-				Env: []manifest.EnvVar{
-					{Name: "FOO", Value: "hello"},
-					{Name: "BAR", Template: "{{.FOO}}/world"},
+				ContainerSpec: manifest.ContainerSpec{
+					Env: []manifest.EnvVar{
+						{Name: "FOO", Value: "hello"},
+						{Name: "BAR", Template: "{{.FOO}}/world"},
+					},
 				},
 			},
 		}
@@ -438,9 +468,11 @@ func TestResolveApplication_Templates(t *testing.T) {
 		app := &manifest.ApplicationManifest{
 			Metadata: manifest.Metadata{Name: "api", Owner: "team-a"},
 			Spec: manifest.ApplicationSpec{
-				Env: []manifest.EnvVar{
-					{Name: "HOST", ValueFrom: "resource.db.host"},
-					{Name: "URL", Template: "http://{{.HOST}}:8080"},
+				ContainerSpec: manifest.ContainerSpec{
+					Env: []manifest.EnvVar{
+						{Name: "HOST", ValueFrom: "resource.db.host"},
+						{Name: "URL", Template: "http://{{.HOST}}:8080"},
+					},
 				},
 			},
 		}
@@ -460,10 +492,12 @@ func TestResolveApplication_Templates(t *testing.T) {
 		app := &manifest.ApplicationManifest{
 			Metadata: manifest.Metadata{Name: "api", Owner: "team-a"},
 			Spec: manifest.ApplicationSpec{
-				Env: []manifest.EnvVar{
-					{Name: "C", Value: "C"},
-					{Name: "B", Template: "{{.C}}+B"},
-					{Name: "A", Template: "{{.B}}+A"},
+				ContainerSpec: manifest.ContainerSpec{
+					Env: []manifest.EnvVar{
+						{Name: "C", Value: "C"},
+						{Name: "B", Template: "{{.C}}+B"},
+						{Name: "A", Template: "{{.B}}+A"},
+					},
 				},
 			},
 		}
@@ -480,9 +514,11 @@ func TestResolveApplication_Templates(t *testing.T) {
 		app := &manifest.ApplicationManifest{
 			Metadata: manifest.Metadata{Name: "api", Owner: "team-a"},
 			Spec: manifest.ApplicationSpec{
-				Env: []manifest.EnvVar{
-					{Name: "A", Template: "{{.B}}"},
-					{Name: "B", Template: "{{.A}}"},
+				ContainerSpec: manifest.ContainerSpec{
+					Env: []manifest.EnvVar{
+						{Name: "A", Template: "{{.B}}"},
+						{Name: "B", Template: "{{.A}}"},
+					},
 				},
 			},
 		}
@@ -496,8 +532,10 @@ func TestResolveApplication_Templates(t *testing.T) {
 		app := &manifest.ApplicationManifest{
 			Metadata: manifest.Metadata{Name: "api", Owner: "team-a"},
 			Spec: manifest.ApplicationSpec{
-				Env: []manifest.EnvVar{
-					{Name: "ID", Template: "{{.team}}.{{.name}}"},
+				ContainerSpec: manifest.ContainerSpec{
+					Env: []manifest.EnvVar{
+						{Name: "ID", Template: "{{.team}}.{{.name}}"},
+					},
 				},
 			},
 		}
@@ -514,8 +552,10 @@ func TestResolveApplication_Templates(t *testing.T) {
 		app := &manifest.ApplicationManifest{
 			Metadata: manifest.Metadata{Name: "consumer", Owner: "team-a"},
 			Spec: manifest.ApplicationSpec{
-				Env: []manifest.EnvVar{
-					{Name: "PRODUCER_HOST", ValueFrom: "application.producer.host"},
+				ContainerSpec: manifest.ContainerSpec{
+					Env: []manifest.EnvVar{
+						{Name: "PRODUCER_HOST", ValueFrom: "application.producer.host"},
+					},
 				},
 			},
 		}
@@ -536,9 +576,11 @@ func TestResolveApplication_AppBuiltins(t *testing.T) {
 	app := &manifest.ApplicationManifest{
 		Metadata: manifest.Metadata{Name: "api", Owner: "team-a"},
 		Spec: manifest.ApplicationSpec{
-			Env: []manifest.EnvVar{
-				{Name: "WORKER_HOST", ValueFrom: "application.worker.host"},
-				{Name: "WORKER_PORT", ValueFrom: "application.worker.port"},
+			ContainerSpec: manifest.ContainerSpec{
+				Env: []manifest.EnvVar{
+					{Name: "WORKER_HOST", ValueFrom: "application.worker.host"},
+					{Name: "WORKER_PORT", ValueFrom: "application.worker.port"},
+				},
 			},
 		},
 	}
@@ -565,8 +607,10 @@ func TestResolveApplication_AppBuiltins(t *testing.T) {
 		badApp := &manifest.ApplicationManifest{
 			Metadata: manifest.Metadata{Name: "api", Owner: "team-a"},
 			Spec: manifest.ApplicationSpec{
-				Env: []manifest.EnvVar{
-					{Name: "URL", ValueFrom: "application.worker.url"},
+				ContainerSpec: manifest.ContainerSpec{
+					Env: []manifest.EnvVar{
+						{Name: "URL", ValueFrom: "application.worker.url"},
+					},
 				},
 			},
 		}
@@ -583,9 +627,11 @@ func TestDryRunResolver_VaultPlaceholder_AppEnv(t *testing.T) {
 	app := &manifest.ApplicationManifest{
 		Metadata: manifest.Metadata{Name: "api", Owner: "team-a"},
 		Spec: manifest.ApplicationSpec{
-			Env: []manifest.EnvVar{
-				{Name: "STATIC", Value: "hello"},
-				{Name: "API_KEY", ValueFrom: "vault:proj/prod/API_KEY"},
+			ContainerSpec: manifest.ContainerSpec{
+				Env: []manifest.EnvVar{
+					{Name: "STATIC", Value: "hello"},
+					{Name: "API_KEY", ValueFrom: "vault:proj/prod/API_KEY"},
+				},
 			},
 		},
 	}
@@ -607,11 +653,13 @@ func TestDryRunResolver_ResourceEnvAndExports(t *testing.T) {
 	res := &manifest.ResourceManifest{
 		Metadata: manifest.Metadata{Name: "db", Owner: "team-a"},
 		Spec: manifest.ResourceSpec{
-			Port: 5432,
-			Env: []manifest.EnvVar{
-				{Name: "PW", Generated: true},
-				{Name: "SECRET", ValueFrom: "vault:a/b/c"},
-				{Name: "DB", Value: "app"},
+			ContainerSpec: manifest.ContainerSpec{
+				Port: 5432,
+				Env: []manifest.EnvVar{
+					{Name: "PW", Generated: true},
+					{Name: "SECRET", ValueFrom: "vault:a/b/c"},
+					{Name: "DB", Value: "app"},
+				},
 			},
 			Outputs: []manifest.Output{
 				{Name: "DB"},
@@ -650,8 +698,10 @@ func TestDryRunResolver_VaultPlaceholder_NoNetworkCall(t *testing.T) {
 	app := &manifest.ApplicationManifest{
 		Metadata: manifest.Metadata{Name: "api", Owner: "team-a"},
 		Spec: manifest.ApplicationSpec{
-			Env: []manifest.EnvVar{
-				{Name: "SECRET", ValueFrom: "vault:a/b/c"},
+			ContainerSpec: manifest.ContainerSpec{
+				Env: []manifest.EnvVar{
+					{Name: "SECRET", ValueFrom: "vault:a/b/c"},
+				},
 			},
 		},
 	}

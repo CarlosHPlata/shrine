@@ -182,7 +182,7 @@ func appWithOwner(owner string) *manifest.ApplicationManifest {
 	return &manifest.ApplicationManifest{
 		TypeMeta: manifest.TypeMeta{Kind: manifest.ApplicationKind, APIVersion: "shrine/v1"},
 		Metadata: manifest.Metadata{Name: "app-" + owner, Owner: owner},
-		Spec:     manifest.ApplicationSpec{Image: "nginx", Port: 80},
+		Spec:     manifest.ApplicationSpec{ContainerSpec: manifest.ContainerSpec{Image: "nginx", Port: 80}},
 	}
 }
 
