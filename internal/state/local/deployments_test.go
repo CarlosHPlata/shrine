@@ -320,3 +320,30 @@ func TestDeploymentStore_TeamIsolation(t *testing.T) {
 		t.Error("team-a records should live in team-a's own file")
 	}
 }
+
+func TestDeploymentStore_ListIsSortedByName(t *testing.T) {
+	files := newFakeDeploymentFiles()
+	files.seed("team-a", `Application web c1
+Resource cache c2
+Application api c3
+Resource db c4
+Application worker c5
+Application admin c6
+`)
+	store := newTestDeploymentStore(files)
+	want := []string{"admin", "api", "cache", "db", "web", "worker"}
+
+	for call := 0; call < 5; call++ {
+		got, err := store.List("team-a")
+		if err != nil {
+			t.Fatalf("List failed: %v", err)
+		}
+		names := make([]string, 0, len(got))
+		for _, d := range got {
+			names = append(names, d.Name)
+		}
+		if strings.Join(names, ",") != strings.Join(want, ",") {
+			t.Fatalf("call %d: got order %v, want %v", call, names, want)
+		}
+	}
+}
