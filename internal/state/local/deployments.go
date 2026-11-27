@@ -71,6 +71,8 @@ func (s *DeploymentStore) Remove(team string, name string) error {
 	return s.saveTeam(team, deployments)
 }
 
+// List returns the team's deployments sorted by name, so every listing built
+// on it shows the same order on every call.
 func (s *DeploymentStore) List(team string) ([]state.Deployment, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -84,6 +86,9 @@ func (s *DeploymentStore) List(team string) ([]state.Deployment, error) {
 	for _, deployment := range deployments {
 		deploymentsSlice = append(deploymentsSlice, deployment)
 	}
+	sort.Slice(deploymentsSlice, func(i, j int) bool {
+		return deploymentsSlice[i].Name < deploymentsSlice[j].Name
+	})
 
 	return deploymentsSlice, nil
 }
