@@ -21,7 +21,7 @@ Accepted as done by the maintainer at about 48% lower; the last 10s to the 50% t
   - Unreachable-registry fixtures use `127.0.0.1:1`; `localhost:1` resolved to `::1` and timed out after 30s.
 - Not done: steps 2, 3 and 4 of the plan (little to gain from step 2 once deploys were cheap; 3 and 4 were not needed). Step 5 was already in place: cleanup force-removes containers.
 - Still open:
-  - `make test-integration` keeps `-timeout 5m` (300s), which is below the local run time.
+  - CI has not been timed. `make test-integration` now uses `-timeout 10m` (it was 5m, below the local run time).
   - `get_test.go` still holds its JSON parsing helpers and loops in the test file.
   - Leaks seen after a full run: `TestTeardownMultiTeam` leaves team B's container and network, and the local-registry tests leave `127.0.0.1:<port>/shrine/whoami` image tags.
   - One registry per pinned suite (about 15-20s) and concurrent container cleanup (untimed) are the next places to look if more speed is wanted.
