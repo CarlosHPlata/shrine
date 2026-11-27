@@ -14,9 +14,11 @@ func TestOrder(t *testing.T) {
 				"app-z": {
 					Metadata: manifest.Metadata{Name: "app-z"},
 					Spec: manifest.ApplicationSpec{
-						Dependencies: []manifest.Dependency{
-							{Kind: manifest.ResourceKind, Name: "res-b"},
-							{Kind: manifest.ApplicationKind, Name: "app-a"},
+						ContainerSpec: manifest.ContainerSpec{
+							Dependencies: []manifest.Dependency{
+								{Kind: manifest.ResourceKind, Name: "res-b"},
+								{Kind: manifest.ApplicationKind, Name: "app-a"},
+							},
 						},
 					},
 				},
@@ -58,16 +60,20 @@ func TestOrder(t *testing.T) {
 				"app-1": {
 					Metadata: manifest.Metadata{Name: "app-1"},
 					Spec: manifest.ApplicationSpec{
-						Dependencies: []manifest.Dependency{
-							{Kind: manifest.ApplicationKind, Name: "app-2"},
+						ContainerSpec: manifest.ContainerSpec{
+							Dependencies: []manifest.Dependency{
+								{Kind: manifest.ApplicationKind, Name: "app-2"},
+							},
 						},
 					},
 				},
 				"app-2": {
 					Metadata: manifest.Metadata{Name: "app-2"},
 					Spec: manifest.ApplicationSpec{
-						Dependencies: []manifest.Dependency{
-							{Kind: manifest.ApplicationKind, Name: "app-1"},
+						ContainerSpec: manifest.ContainerSpec{
+							Dependencies: []manifest.Dependency{
+								{Kind: manifest.ApplicationKind, Name: "app-1"},
+							},
 						},
 					},
 				},
@@ -89,8 +95,10 @@ func TestOrder(t *testing.T) {
 				"cache": {
 					Metadata: manifest.Metadata{Name: "cache"},
 					Spec: manifest.ResourceSpec{
-						Dependencies: []manifest.Dependency{
-							{Kind: manifest.ResourceKind, Name: "pg"},
+						ContainerSpec: manifest.ContainerSpec{
+							Dependencies: []manifest.Dependency{
+								{Kind: manifest.ResourceKind, Name: "pg"},
+							},
 						},
 					},
 				},
@@ -121,11 +129,11 @@ func TestOrder(t *testing.T) {
 			Resources: map[string]*manifest.ResourceManifest{
 				"a": {
 					Metadata: manifest.Metadata{Name: "a"},
-					Spec:     manifest.ResourceSpec{Dependencies: []manifest.Dependency{{Kind: manifest.ResourceKind, Name: "b"}}},
+					Spec:     manifest.ResourceSpec{ContainerSpec: manifest.ContainerSpec{Dependencies: []manifest.Dependency{{Kind: manifest.ResourceKind, Name: "b"}}}},
 				},
 				"b": {
 					Metadata: manifest.Metadata{Name: "b"},
-					Spec:     manifest.ResourceSpec{Dependencies: []manifest.Dependency{{Kind: manifest.ResourceKind, Name: "a"}}},
+					Spec:     manifest.ResourceSpec{ContainerSpec: manifest.ContainerSpec{Dependencies: []manifest.Dependency{{Kind: manifest.ResourceKind, Name: "a"}}}},
 				},
 			},
 		}

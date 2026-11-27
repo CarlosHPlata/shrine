@@ -30,12 +30,12 @@ func twoTeamSet() *ManifestSet {
 	set.Applications["alpha"] = &manifest.ApplicationManifest{
 		TypeMeta: manifest.TypeMeta{Kind: manifest.ApplicationKind, APIVersion: "shrine/v1"},
 		Metadata: manifest.Metadata{Name: "alpha", Owner: "team-a"},
-		Spec:     manifest.ApplicationSpec{Image: "nginx", Port: 80},
+		Spec:     manifest.ApplicationSpec{ContainerSpec: manifest.ContainerSpec{Image: "nginx", Port: 80}},
 	}
 	set.Applications["beta"] = &manifest.ApplicationManifest{
 		TypeMeta: manifest.TypeMeta{Kind: manifest.ApplicationKind, APIVersion: "shrine/v1"},
 		Metadata: manifest.Metadata{Name: "beta", Owner: "team-b"},
-		Spec:     manifest.ApplicationSpec{Image: "nginx", Port: 80},
+		Spec:     manifest.ApplicationSpec{ContainerSpec: manifest.ContainerSpec{Image: "nginx", Port: 80}},
 	}
 	set.Resources["db-a"] = &manifest.ResourceManifest{
 		TypeMeta: manifest.TypeMeta{Kind: manifest.ResourceKind, APIVersion: "shrine/v1"},
@@ -165,8 +165,10 @@ func inferenceSet(t *testing.T) *ManifestSet {
 		TypeMeta: manifest.TypeMeta{Kind: manifest.ApplicationKind, APIVersion: "shrine/v1"},
 		Metadata: manifest.Metadata{Name: "alpha", Owner: "team-a"},
 		Spec: manifest.ApplicationSpec{
-			Image: "nginx",
-			Env:   []manifest.EnvVar{{Name: "DB_URL", ValueFrom: "resource.db.URL"}},
+			ContainerSpec: manifest.ContainerSpec{
+				Image: "nginx",
+				Env:   []manifest.EnvVar{{Name: "DB_URL", ValueFrom: "resource.db.URL"}},
+			},
 		},
 	}
 	return set
@@ -249,12 +251,14 @@ func TestPlan_ByTeam_CrossTeamDepResolution(t *testing.T) {
 		TypeMeta: manifest.TypeMeta{Kind: manifest.ResourceKind, APIVersion: "shrine/v1"},
 		Metadata: manifest.Metadata{Name: "shared-db", Owner: "team-platform", Access: []string{"team-a"}},
 		Spec: manifest.ResourceSpec{
+			ContainerSpec: manifest.ContainerSpec{
+				Networking: manifest.Networking{ExposeToPlatform: true},
+			},
 			Type:    "postgres",
 			Version: "16",
 			Outputs: []manifest.Output{
 				{Name: "host", Value: "shared-db.svc"},
 			},
-			Networking: manifest.Networking{ExposeToPlatform: true},
 		},
 	}
 	// team-a depends on it via valueFrom.
@@ -262,13 +266,15 @@ func TestPlan_ByTeam_CrossTeamDepResolution(t *testing.T) {
 		TypeMeta: manifest.TypeMeta{Kind: manifest.ApplicationKind, APIVersion: "shrine/v1"},
 		Metadata: manifest.Metadata{Name: "alpha", Owner: "team-a"},
 		Spec: manifest.ApplicationSpec{
-			Image: "nginx",
-			Port:  80,
-			Dependencies: []manifest.Dependency{
-				{Kind: manifest.ResourceKind, Name: "shared-db", Owner: "team-platform"},
-			},
-			Env: []manifest.EnvVar{
-				{Name: "DB_HOST", ValueFrom: "resource.shared-db.host"},
+			ContainerSpec: manifest.ContainerSpec{
+				Image: "nginx",
+				Port:  80,
+				Dependencies: []manifest.Dependency{
+					{Kind: manifest.ResourceKind, Name: "shared-db", Owner: "team-platform"},
+				},
+				Env: []manifest.EnvVar{
+					{Name: "DB_HOST", ValueFrom: "resource.shared-db.host"},
+				},
 			},
 		},
 	}
@@ -300,8 +306,10 @@ func routedApp(owner, name, domain string) *manifest.ApplicationManifest {
 		TypeMeta: manifest.TypeMeta{Kind: manifest.ApplicationKind, APIVersion: "shrine/v1"},
 		Metadata: manifest.Metadata{Name: name, Owner: owner},
 		Spec: manifest.ApplicationSpec{
-			Image:   "nginx",
-			Port:    80,
+			ContainerSpec: manifest.ContainerSpec{
+				Image: "nginx",
+				Port:  80,
+			},
 			Routing: manifest.Routing{Domain: domain},
 		},
 	}

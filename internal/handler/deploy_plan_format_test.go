@@ -16,8 +16,10 @@ func TestFormatDeployPlan_RendersHeaderAndOrdinals(t *testing.T) {
 	set.Applications["api"] = &manifest.ApplicationManifest{
 		Metadata: manifest.Metadata{Name: "api", Owner: "team-a"},
 		Spec: manifest.ApplicationSpec{
-			Dependencies: []manifest.Dependency{
-				{Kind: manifest.ResourceKind, Name: "db", Owner: "team-a"},
+			ContainerSpec: manifest.ContainerSpec{
+				Dependencies: []manifest.Dependency{
+					{Kind: manifest.ResourceKind, Name: "db", Owner: "team-a"},
+				},
 			},
 		},
 	}
@@ -52,8 +54,10 @@ func TestFormatDeployPlan_ExplicitDepHasNoTag(t *testing.T) {
 	set.Applications["api"] = &manifest.ApplicationManifest{
 		Metadata: manifest.Metadata{Name: "api", Owner: "team-a"},
 		Spec: manifest.ApplicationSpec{
-			Dependencies: []manifest.Dependency{
-				{Kind: manifest.ResourceKind, Name: "db", Owner: "team-a"},
+			ContainerSpec: manifest.ContainerSpec{
+				Dependencies: []manifest.Dependency{
+					{Kind: manifest.ResourceKind, Name: "db", Owner: "team-a"},
+				},
 			},
 		},
 	}

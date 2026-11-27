@@ -12,9 +12,11 @@ func makePublishingApp(owner, name string, hostPort int) *manifest.ApplicationMa
 	return &manifest.ApplicationManifest{
 		Metadata: manifest.Metadata{Owner: owner, Name: name},
 		Spec: manifest.ApplicationSpec{
-			Image:      "img",
-			Port:       80,
-			Networking: manifest.Networking{Publish: &manifest.Publish{HostPort: hostPort}},
+			ContainerSpec: manifest.ContainerSpec{
+				Image:      "img",
+				Port:       80,
+				Networking: manifest.Networking{Publish: &manifest.Publish{HostPort: hostPort}},
+			},
 		},
 	}
 }

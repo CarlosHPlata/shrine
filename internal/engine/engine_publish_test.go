@@ -34,9 +34,11 @@ func deployAppWithNetworking(t *testing.T, networking manifest.Networking) Creat
 		TypeMeta: manifest.TypeMeta{Kind: manifest.ApplicationKind},
 		Metadata: manifest.Metadata{Name: "svc", Owner: "team-a"},
 		Spec: manifest.ApplicationSpec{
-			Image:      "img",
-			Port:       3000,
-			Networking: networking,
+			ContainerSpec: manifest.ContainerSpec{
+				Image:      "img",
+				Port:       3000,
+				Networking: networking,
+			},
 		},
 	}
 	set := emptyManifestSet()
@@ -106,10 +108,12 @@ func deployAppWithRouting(t *testing.T, networking manifest.Networking) []string
 		TypeMeta: manifest.TypeMeta{Kind: manifest.ApplicationKind},
 		Metadata: manifest.Metadata{Name: "svc", Owner: "team-a"},
 		Spec: manifest.ApplicationSpec{
-			Image:      "img",
-			Port:       3000,
-			Routing:    manifest.Routing{Domain: "svc.example.com"},
-			Networking: networking,
+			ContainerSpec: manifest.ContainerSpec{
+				Image:      "img",
+				Port:       3000,
+				Networking: networking,
+			},
+			Routing: manifest.Routing{Domain: "svc.example.com"},
 		},
 	}
 	set := emptyManifestSet()

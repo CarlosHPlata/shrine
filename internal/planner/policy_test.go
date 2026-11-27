@@ -12,12 +12,12 @@ func policySet(appImage, appPolicy, resType, resVersion, resImage, resPolicy str
 	set.Applications["web"] = &manifest.ApplicationManifest{
 		TypeMeta: manifest.TypeMeta{Kind: manifest.ApplicationKind, APIVersion: "shrine/v1"},
 		Metadata: manifest.Metadata{Name: "web", Owner: "team-a"},
-		Spec:     manifest.ApplicationSpec{Image: appImage, Port: 80, ImagePullPolicy: appPolicy},
+		Spec:     manifest.ApplicationSpec{ContainerSpec: manifest.ContainerSpec{Image: appImage, Port: 80, ImagePullPolicy: appPolicy}},
 	}
 	set.Resources["db"] = &manifest.ResourceManifest{
 		TypeMeta: manifest.TypeMeta{Kind: manifest.ResourceKind, APIVersion: "shrine/v1"},
 		Metadata: manifest.Metadata{Name: "db", Owner: "team-a"},
-		Spec:     manifest.ResourceSpec{Type: resType, Version: resVersion, Image: resImage, ImagePullPolicy: resPolicy},
+		Spec:     manifest.ResourceSpec{ContainerSpec: manifest.ContainerSpec{Image: resImage, ImagePullPolicy: resPolicy}, Type: resType, Version: resVersion},
 	}
 	return set
 }
@@ -168,7 +168,7 @@ func TestApplyEffectivePullPolicy_RecordsWhereThePolicyCameFrom(t *testing.T) {
 	set.Applications["api"] = &manifest.ApplicationManifest{
 		TypeMeta: manifest.TypeMeta{Kind: manifest.ApplicationKind, APIVersion: "shrine/v1"},
 		Metadata: manifest.Metadata{Name: "api", Owner: "team-a"},
-		Spec:     manifest.ApplicationSpec{Image: "api", Port: 80},
+		Spec:     manifest.ApplicationSpec{ContainerSpec: manifest.ContainerSpec{Image: "api", Port: 80}},
 	}
 
 	if set.isPolicyFromDefault("application", "api") {

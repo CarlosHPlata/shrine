@@ -79,13 +79,13 @@ func artifactManifest(kind, name, owner, image, policy string) *manifest.Manifes
 		return &manifest.Manifest{TypeMeta: typeMeta, Resource: &manifest.ResourceManifest{
 			TypeMeta: typeMeta,
 			Metadata: metadata,
-			Spec:     manifest.ResourceSpec{Type: manifest.RepositoryOf(image), Image: image, ImagePullPolicy: policy},
+			Spec:     manifest.ResourceSpec{ContainerSpec: manifest.ContainerSpec{Image: image, ImagePullPolicy: policy}, Type: manifest.RepositoryOf(image)},
 		}}
 	}
 	return &manifest.Manifest{TypeMeta: typeMeta, Application: &manifest.ApplicationManifest{
 		TypeMeta: typeMeta,
 		Metadata: metadata,
-		Spec:     manifest.ApplicationSpec{Image: image, Port: 80, ImagePullPolicy: policy},
+		Spec:     manifest.ApplicationSpec{ContainerSpec: manifest.ContainerSpec{Image: image, Port: 80, ImagePullPolicy: policy}},
 	}}
 }
 

@@ -145,7 +145,7 @@ func TestValidate_ResourceEnvRules(t *testing.T) {
 				TypeMeta: TypeMeta{Kind: ResourceKind, APIVersion: "shrine/v1"},
 				Resource: &ResourceManifest{
 					Metadata: Metadata{Name: "r", Owner: "team-a"},
-					Spec:     ResourceSpec{Type: "postgres", Version: "16", Env: tc.env},
+					Spec:     ResourceSpec{ContainerSpec: ContainerSpec{Env: tc.env}, Type: "postgres", Version: "16"},
 				},
 			}
 			err := Validate(m)
@@ -218,7 +218,7 @@ func TestValidate_ResourceOutputRules(t *testing.T) {
 				TypeMeta: TypeMeta{Kind: ResourceKind, APIVersion: "shrine/v1"},
 				Resource: &ResourceManifest{
 					Metadata: Metadata{Name: "r", Owner: "team-a"},
-					Spec:     ResourceSpec{Type: "postgres", Version: "16", Env: tc.env, Outputs: tc.outputs},
+					Spec:     ResourceSpec{ContainerSpec: ContainerSpec{Env: tc.env}, Type: "postgres", Version: "16", Outputs: tc.outputs},
 				},
 			}
 			err := Validate(m)
@@ -272,7 +272,7 @@ func TestValidate_ApplicationEnvRules(t *testing.T) {
 				TypeMeta: TypeMeta{Kind: ApplicationKind, APIVersion: "shrine/v1"},
 				Application: &ApplicationManifest{
 					Metadata: Metadata{Name: "a", Owner: "team-a"},
-					Spec:     ApplicationSpec{Image: "img", Port: 80, Env: tc.env},
+					Spec:     ApplicationSpec{ContainerSpec: ContainerSpec{Image: "img", Port: 80, Env: tc.env}},
 				},
 			}
 			err := Validate(m)
@@ -297,7 +297,7 @@ func TestValidate_RoutingAliasRules(t *testing.T) {
 			TypeMeta: TypeMeta{Kind: ApplicationKind, APIVersion: "shrine/v1"},
 			Application: &ApplicationManifest{
 				Metadata: Metadata{Name: "a", Owner: "team-a"},
-				Spec:     ApplicationSpec{Image: "img", Port: 80, Routing: routing},
+				Spec:     ApplicationSpec{ContainerSpec: ContainerSpec{Image: "img", Port: 80}, Routing: routing},
 			},
 		}
 	}
@@ -417,7 +417,7 @@ func TestValidateRoutingAliases_TLS_DoesNotAffectCollisionKey(t *testing.T) {
 			TypeMeta: TypeMeta{Kind: ApplicationKind, APIVersion: "shrine/v1"},
 			Application: &ApplicationManifest{
 				Metadata: Metadata{Name: "a", Owner: "team-a"},
-				Spec:     ApplicationSpec{Image: "img", Port: 80, Routing: routing},
+				Spec:     ApplicationSpec{ContainerSpec: ContainerSpec{Image: "img", Port: 80}, Routing: routing},
 			},
 		}
 	}
@@ -534,7 +534,7 @@ func TestValidate_VolumeMountRules(t *testing.T) {
 				TypeMeta: TypeMeta{Kind: ApplicationKind, APIVersion: "shrine/v1"},
 				Application: &ApplicationManifest{
 					Metadata: Metadata{Name: "a", Owner: "team-a"},
-					Spec:     ApplicationSpec{Image: "img", Port: 80, Volumes: tc.mounts},
+					Spec:     ApplicationSpec{ContainerSpec: ContainerSpec{Image: "img", Port: 80, Volumes: tc.mounts}},
 				},
 			}
 			err := Validate(m)
@@ -547,8 +547,8 @@ func TestValidate_VolumeMountRules(t *testing.T) {
 
 func TestValidate_EmptyCommandListIsRejected(t *testing.T) {
 	cases := map[string]*Manifest{
-		"Application": applicationManifest(ApplicationSpec{Image: "img", Port: 80, Command: []string{}}),
-		"Resource":    resourceManifest(ResourceSpec{Type: "postgres", Command: []string{}}),
+		"Application": applicationManifest(ApplicationSpec{ContainerSpec: ContainerSpec{Image: "img", Port: 80, Command: []string{}}}),
+		"Resource":    resourceManifest(ResourceSpec{ContainerSpec: ContainerSpec{Command: []string{}}, Type: "postgres"}),
 	}
 	for kind, m := range cases {
 		t.Run(kind, func(t *testing.T) {
@@ -563,8 +563,8 @@ func TestValidate_EmptyCommandListIsRejected(t *testing.T) {
 
 func TestValidate_EmptyCommandItemIsRejected(t *testing.T) {
 	cases := map[string]*Manifest{
-		"Application": applicationManifest(ApplicationSpec{Image: "img", Port: 80, Command: []string{"npm", ""}}),
-		"Resource":    resourceManifest(ResourceSpec{Type: "postgres", Command: []string{"npm", ""}}),
+		"Application": applicationManifest(ApplicationSpec{ContainerSpec: ContainerSpec{Image: "img", Port: 80, Command: []string{"npm", ""}}}),
+		"Resource":    resourceManifest(ResourceSpec{ContainerSpec: ContainerSpec{Command: []string{"npm", ""}}, Type: "postgres"}),
 	}
 	for kind, m := range cases {
 		t.Run(kind, func(t *testing.T) {
@@ -603,19 +603,19 @@ func TestValidate_ImagePullPolicyEnum(t *testing.T) {
 	const want = "spec.imagePullPolicy must be one of Always, IfNotPresent, Pinned"
 
 	for _, policy := range []string{"", "Always", "IfNotPresent", "Pinned"} {
-		if err := Validate(applicationManifest(ApplicationSpec{Image: "web", Port: 80, ImagePullPolicy: policy})); err != nil {
+		if err := Validate(applicationManifest(ApplicationSpec{ContainerSpec: ContainerSpec{Image: "web", Port: 80, ImagePullPolicy: policy}})); err != nil {
 			t.Errorf("application policy %q must be accepted, got: %v", policy, err)
 		}
-		if err := Validate(resourceManifest(ResourceSpec{Type: "postgres", ImagePullPolicy: policy})); err != nil {
+		if err := Validate(resourceManifest(ResourceSpec{ContainerSpec: ContainerSpec{ImagePullPolicy: policy}, Type: "postgres"})); err != nil {
 			t.Errorf("resource policy %q must be accepted, got: %v", policy, err)
 		}
 	}
 
-	err := Validate(applicationManifest(ApplicationSpec{Image: "web", Port: 80, ImagePullPolicy: "Sometimes"}))
+	err := Validate(applicationManifest(ApplicationSpec{ContainerSpec: ContainerSpec{Image: "web", Port: 80, ImagePullPolicy: "Sometimes"}}))
 	if err == nil || !strings.Contains(err.Error(), want) {
 		t.Errorf("application with an unknown policy: got %v, want %q", err, want)
 	}
-	err = Validate(resourceManifest(ResourceSpec{Type: "postgres", ImagePullPolicy: "Sometimes"}))
+	err = Validate(resourceManifest(ResourceSpec{ContainerSpec: ContainerSpec{ImagePullPolicy: "Sometimes"}, Type: "postgres"}))
 	if err == nil || !strings.Contains(err.Error(), want) {
 		t.Errorf("resource with an unknown policy: got %v, want %q", err, want)
 	}

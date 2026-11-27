@@ -47,7 +47,9 @@ func TestCloneApplicationWithDeps_NoExtraReturnsSamePointer(t *testing.T) {
 	app := &manifest.ApplicationManifest{
 		Metadata: manifest.Metadata{Name: "a"},
 		Spec: manifest.ApplicationSpec{
-			Dependencies: []manifest.Dependency{{Kind: manifest.ResourceKind, Name: "x"}},
+			ContainerSpec: manifest.ContainerSpec{
+				Dependencies: []manifest.Dependency{{Kind: manifest.ResourceKind, Name: "x"}},
+			},
 		},
 	}
 	out := cloneApplicationWithDeps(app, nil)
@@ -60,7 +62,9 @@ func TestCloneApplicationWithDeps_AppendsAndPreservesOriginalSlice(t *testing.T)
 	app := &manifest.ApplicationManifest{
 		Metadata: manifest.Metadata{Name: "a"},
 		Spec: manifest.ApplicationSpec{
-			Dependencies: []manifest.Dependency{{Kind: manifest.ResourceKind, Name: "old"}},
+			ContainerSpec: manifest.ContainerSpec{
+				Dependencies: []manifest.Dependency{{Kind: manifest.ResourceKind, Name: "old"}},
+			},
 		},
 	}
 	extra := []manifest.Dependency{{Kind: manifest.ResourceKind, Name: "new"}}
@@ -266,7 +270,9 @@ func TestApplyEnrichmentRule_CrossTeam_Fails(t *testing.T) {
 		TypeMeta: manifest.TypeMeta{Kind: manifest.ApplicationKind, APIVersion: "shrine/v1"},
 		Metadata: manifest.Metadata{Name: "alpha", Owner: "team-a"},
 		Spec: manifest.ApplicationSpec{
-			Env: []manifest.EnvVar{{Name: "X", ValueFrom: "resource.shared.HOST"}},
+			ContainerSpec: manifest.ContainerSpec{
+				Env: []manifest.EnvVar{{Name: "X", ValueFrom: "resource.shared.HOST"}},
+			},
 		},
 	}
 	set.Resources["shared"] = &manifest.ResourceManifest{
@@ -300,7 +306,9 @@ func TestApplyEnrichmentRule_AbsentTarget_Fails(t *testing.T) {
 	set.Applications["alpha"] = &manifest.ApplicationManifest{
 		Metadata: manifest.Metadata{Name: "alpha", Owner: "team-a"},
 		Spec: manifest.ApplicationSpec{
-			Env: []manifest.EnvVar{{Name: "X", ValueFrom: "resource.absent.HOST"}},
+			ContainerSpec: manifest.ContainerSpec{
+				Env: []manifest.EnvVar{{Name: "X", ValueFrom: "resource.absent.HOST"}},
+			},
 		},
 	}
 	_, _, err := applyEnrichmentRule(set, manifest.ResourceKind, lookupResourceOwner(set), parseResourceRef)
@@ -321,9 +329,11 @@ func TestApplyEnrichmentRule_CrossTeamWithExplicitDep_Succeeds(t *testing.T) {
 	set.Applications["alpha"] = &manifest.ApplicationManifest{
 		Metadata: manifest.Metadata{Name: "alpha", Owner: "team-a"},
 		Spec: manifest.ApplicationSpec{
-			Env: []manifest.EnvVar{{Name: "X", ValueFrom: "resource.shared.HOST"}},
-			Dependencies: []manifest.Dependency{
-				{Kind: manifest.ResourceKind, Name: "shared", Owner: "team-b"},
+			ContainerSpec: manifest.ContainerSpec{
+				Env: []manifest.EnvVar{{Name: "X", ValueFrom: "resource.shared.HOST"}},
+				Dependencies: []manifest.Dependency{
+					{Kind: manifest.ResourceKind, Name: "shared", Owner: "team-b"},
+				},
 			},
 		},
 	}
@@ -346,18 +356,22 @@ func TestApplyEnrichmentRule_DeterministicFirstError(t *testing.T) {
 	set.Applications["beta"] = &manifest.ApplicationManifest{
 		Metadata: manifest.Metadata{Name: "beta", Owner: "team-a"},
 		Spec: manifest.ApplicationSpec{
-			Env: []manifest.EnvVar{
-				{Name: "B1", ValueFrom: "resource.missing-b1.X"},
-				{Name: "B2", ValueFrom: "resource.missing-b2.X"},
+			ContainerSpec: manifest.ContainerSpec{
+				Env: []manifest.EnvVar{
+					{Name: "B1", ValueFrom: "resource.missing-b1.X"},
+					{Name: "B2", ValueFrom: "resource.missing-b2.X"},
+				},
 			},
 		},
 	}
 	set.Applications["alpha"] = &manifest.ApplicationManifest{
 		Metadata: manifest.Metadata{Name: "alpha", Owner: "team-a"},
 		Spec: manifest.ApplicationSpec{
-			Env: []manifest.EnvVar{
-				{Name: "A1", ValueFrom: "resource.missing-a1.X"},
-				{Name: "A2", ValueFrom: "resource.missing-a2.X"},
+			ContainerSpec: manifest.ContainerSpec{
+				Env: []manifest.EnvVar{
+					{Name: "A1", ValueFrom: "resource.missing-a1.X"},
+					{Name: "A2", ValueFrom: "resource.missing-a2.X"},
+				},
 			},
 		},
 	}

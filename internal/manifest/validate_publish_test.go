@@ -12,9 +12,11 @@ func validAppManifest(publish *Publish) *Manifest {
 			TypeMeta: TypeMeta{APIVersion: "shrine/v1", Kind: ApplicationKind},
 			Metadata: Metadata{Name: "web", Owner: "demo"},
 			Spec: ApplicationSpec{
-				Image:      "nginx:alpine",
-				Port:       80,
-				Networking: Networking{Publish: publish},
+				ContainerSpec: ContainerSpec{
+					Image:      "nginx:alpine",
+					Port:       80,
+					Networking: Networking{Publish: publish},
+				},
 			},
 		},
 	}
@@ -83,9 +85,11 @@ func TestValidatePublish_RejectedOnResource(t *testing.T) {
 			TypeMeta: TypeMeta{APIVersion: "shrine/v1", Kind: ResourceKind},
 			Metadata: Metadata{Name: "db", Owner: "demo"},
 			Spec: ResourceSpec{
-				Type:       "postgres",
-				Version:    "16",
-				Networking: Networking{Publish: &Publish{HostPort: 8080}},
+				ContainerSpec: ContainerSpec{
+					Networking: Networking{Publish: &Publish{HostPort: 8080}},
+				},
+				Type:    "postgres",
+				Version: "16",
 			},
 		},
 	}
