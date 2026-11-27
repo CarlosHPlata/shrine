@@ -49,3 +49,17 @@ func SeedDeploymentRecord(tc *TestCase, teamName, line string) {
 		tc.t.Fatalf("writing deployment record for team %q: %v", teamName, err)
 	}
 }
+
+// ForkState gives the test its own copy of the suite's shared state dir, so
+// it can rewrite state records without the other tests seeing the change.
+// The containers are still shared: a test that deploys or tears down needs
+// its own suite instead.
+func (tc *TestCase) ForkState() *TestCase {
+	tc.t.Helper()
+	fork := tc.t.TempDir()
+	if err := os.CopyFS(fork, os.DirFS(tc.StateDir)); err != nil {
+		tc.t.Fatalf("copying state dir %s: %v", tc.StateDir, err)
+	}
+	tc.StateDir = fork
+	return tc
+}

@@ -4,7 +4,7 @@ metadata:
   name: whoami-host-only
   owner: shrine-alias-test
 spec:
-  image: traefik/whoami
+  image: traefik/whoami:v1.10.2
   port: 80
   replicas: 1
   networking:

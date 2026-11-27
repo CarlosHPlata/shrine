@@ -10,7 +10,7 @@ import (
 )
 
 const (
-	unresolvableImageRef = "localhost:1/shrine/unresolvable:1.0.0"
+	unresolvableImageRef = "127.0.0.1:1/shrine/unresolvable:1.0.0"
 	fixedTagImageRef     = "traefik/whoami:v1.10.2"
 )
 

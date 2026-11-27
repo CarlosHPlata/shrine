@@ -11,13 +11,29 @@ import (
 
 type Suite struct {
 	t          *testing.T
+	beforeAll  []func(*TestCase)
+	afterAll   []func(*TestCase)
 	beforeEach []func(*TestCase)
 	afterEach  []func(*TestCase)
+	shared     *TestCase
 }
 
 func NewSuite(t *testing.T) *Suite {
 	t.Helper()
 	return &Suite{t: t}
+}
+
+// BeforeAll registers a step that runs once, before the suite's first test.
+// The state dir, Docker client and team name it leaves on the TestCase are
+// handed to every test, so tests that only read can share one setup.
+func (s *Suite) BeforeAll(fn func(*TestCase)) {
+	s.beforeAll = append(s.beforeAll, fn)
+}
+
+// AfterAll registers a step that runs once, after the suite's last test.
+// Steps run in reverse order of registration.
+func (s *Suite) AfterAll(fn func(*TestCase)) {
+	s.afterAll = append(s.afterAll, fn)
 }
 
 func (s *Suite) BeforeEach(fn func(*TestCase)) {
@@ -30,9 +46,15 @@ func (s *Suite) AfterEach(fn func(*TestCase)) {
 
 func (s *Suite) Test(name string, fn func(*TestCase)) {
 	s.t.Helper()
+	shared := s.sharedSetup()
 	s.t.Run(name, func(t *testing.T) {
 		t.Helper()
 		tc := &TestCase{t: t, tmpDir: t.TempDir()}
+		if shared != nil {
+			tc.StateDir = shared.StateDir
+			tc.DockerClient = shared.DockerClient
+			tc.TeamName = shared.TeamName
+		}
 		for _, before := range s.beforeEach {
 			before(tc)
 		}
@@ -43,6 +65,26 @@ func (s *Suite) Test(name string, fn func(*TestCase)) {
 		})
 		fn(tc)
 	})
+}
+
+// sharedSetup runs the BeforeAll steps the first time a test is declared and
+// returns the TestCase they ran on; it is nil for a suite without them.
+func (s *Suite) sharedSetup() *TestCase {
+	s.t.Helper()
+	if s.shared != nil || (len(s.beforeAll) == 0 && len(s.afterAll) == 0) {
+		return s.shared
+	}
+	shared := &TestCase{t: s.t, tmpDir: s.t.TempDir()}
+	s.shared = shared
+	s.t.Cleanup(func() {
+		for i := len(s.afterAll) - 1; i >= 0; i-- {
+			s.afterAll[i](shared)
+		}
+	})
+	for _, before := range s.beforeAll {
+		before(shared)
+	}
+	return shared
 }
 
 type TestCase struct {

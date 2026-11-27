@@ -1704,7 +1704,7 @@ providers:
 		writeConfig(t, configDir, `plugins:
   gateway:
     traefik:
-      image: localhost:1/shrine-test/unpullable-gateway:0
+      image: 127.0.0.1:1/shrine-test/unpullable-gateway:0
       routing-dir: `+routingDir+`
       port: 8123
 `)

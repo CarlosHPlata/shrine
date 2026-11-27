@@ -43,47 +43,35 @@ func TestStatusNoDocker(t *testing.T) {
 }
 
 func TestStatusDocker(t *testing.T) {
-	s := NewDockerSuite(t, testTeam)
+	s := NewSharedDockerSuite(t, testTeam)
 
-	s.BeforeEach(func(tc *TestCase) {
-		tc.StateDir = tc.TempDir()
-		SeedSubnetState(tc)
-		// Use the dedicated team/ sub-fixture to avoid scanning bad-kind/ and
-		// malformed-yaml/ siblings that cause ScanDir to error.
-		tc.Run("apply", "teams",
-			"--path", fixturesPath("team"),
-			"--state-dir", tc.StateDir,
-		).AssertSuccess()
-		tc.Run("deploy",
-			"--path", fixturesPath("resources"),
-			"--state-dir", tc.StateDir,
-		).AssertSuccess()
+	s.BeforeAll(func(tc *TestCase) {
+		tc.ApplyTeams(fixturesPath("team")).AssertSuccess()
+		tc.Deploy(fixturesPath("resources")).AssertSuccess()
 	})
 
 	s.Test("should show status of a team", func(tc *TestCase) {
-		tc.Run("status", testTeam,
-			"--state-dir", tc.StateDir,
-		).AssertSuccess().AssertOutputContains("running")
+		tc.Status(testTeam).
+			AssertSuccess().
+			AssertOutputContains("running")
 	})
 
 	s.Test("should show status of a deployed app", func(tc *TestCase) {
-		tc.Run("status", "app", "whoami-res",
-			"--team", testTeam,
-			"--state-dir", tc.StateDir,
-		).AssertSuccess().AssertOutputContains("running")
+		tc.Status("app", "whoami-res", "--team", testTeam).
+			AssertSuccess().
+			AssertOutputContains("running")
 	})
 
 	s.Test("should show status of a deployed resource", func(tc *TestCase) {
-		tc.Run("status", "resource", "test-cache",
-			"--team", testTeam,
-			"--state-dir", tc.StateDir,
-		).AssertSuccess().AssertOutputContains("running")
+		tc.Status("resource", "test-cache", "--team", testTeam).
+			AssertSuccess().
+			AssertOutputContains("running")
 	})
 
 	s.Test("should show the IMAGE column beside the running state", func(tc *TestCase) {
-		tc.Run("status", testTeam,
-			"--state-dir", tc.StateDir,
-		).AssertSuccess().AssertOutputLineContains("test-cache", "traefik/whoami")
+		tc.Status(testTeam).
+			AssertSuccess().
+			AssertOutputLineContains("test-cache", "traefik/whoami")
 		assertColumnsInOrder(tc, "NAME", "KIND", "RUNNING", "STATUS", "IMAGE", "IMAGE ID")
 	})
 }

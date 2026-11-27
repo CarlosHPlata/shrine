@@ -41,6 +41,38 @@ func NewDockerSuite(t *testing.T, teamName string) *Suite {
 	return s
 }
 
+// NewSharedDockerSuite is for tests that only read what is deployed. The
+// suite's BeforeAll steps deploy once into a state dir every test shares, and
+// the team's Docker resources are removed before the first test and after
+// the last one. A test that changes containers belongs in NewDockerSuite; a
+// test that only rewrites state records can call ForkState first.
+func NewSharedDockerSuite(t *testing.T, teamName string) *Suite {
+	t.Helper()
+	s := NewSuite(t)
+
+	s.BeforeAll(func(tc *TestCase) {
+		cli, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
+		if err != nil {
+			tc.t.Fatalf("creating docker client: %v", err)
+		}
+		tc.DockerClient = cli
+		tc.TeamName = teamName
+		cleanupDockerResources(tc, teamName)
+		tc.StateDir = tc.TempDir()
+		SeedSubnetState(tc)
+	})
+
+	s.AfterAll(func(tc *TestCase) {
+		if tc.DockerClient == nil {
+			return
+		}
+		cleanupDockerResources(tc, teamName)
+		tc.DockerClient.Close()
+	})
+
+	return s
+}
+
 // SeedSubnetState scans existing Docker networks for 10.100.x.0/24 subnets
 // and pre-populates StateDir/subnets.txt so shrine skips those octets when
 // allocating a subnet for the test team. Call this from BeforeEach after

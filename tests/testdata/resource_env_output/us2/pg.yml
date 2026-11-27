@@ -7,7 +7,7 @@ spec:
   type: postgres
   version: "16"
   port: 5432
-  image: traefik/whoami
+  image: traefik/whoami:v1.10.2
   env:
     - name: POSTGRES_DB
       value: app
