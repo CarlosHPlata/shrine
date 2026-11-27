@@ -6,7 +6,7 @@ metadata:
 spec:
   type: postgres
   version: "16"
-  image: traefik/whoami
+  image: traefik/whoami:v1.10.2
   outputs:
     - name: POSTGRES_PASSWORD
       generated: true

@@ -4,7 +4,7 @@ metadata:
   name: whoami-reserved
   owner: shrine-publish-test
 spec:
-  image: traefik/whoami
+  image: traefik/whoami:v1.10.2
   port: 80
   networking:
     publish:

@@ -4,5 +4,5 @@ metadata:
   name: whoami-plain
   owner: shrine-publish-test
 spec:
-  image: traefik/whoami
+  image: traefik/whoami:v1.10.2
   port: 80

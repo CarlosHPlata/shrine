@@ -4,7 +4,7 @@ metadata:
   name: api
   owner: shrine-reo
 spec:
-  image: traefik/whoami
+  image: traefik/whoami:v1.10.2
   port: 80
   dependencies:
     - kind: Resource

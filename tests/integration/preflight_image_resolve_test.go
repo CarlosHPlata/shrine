@@ -10,7 +10,7 @@ import (
 )
 
 const (
-	unresolvableImageRef = "localhost:1/shrine/unresolvable:1.0.0"
+	unresolvableImageRef = "127.0.0.1:1/shrine/unresolvable:1.0.0"
 	fixedTagImageRef     = "traefik/whoami:v1.10.2"
 )
 
@@ -103,11 +103,11 @@ func TestPreflightImageResolve(t *testing.T) {
 
 	// US4: an untagged image keeps today's Always behaviour.
 	s.Test("an untagged image is pulled on every deploy", func(tc *TestCase) {
-		preflightDeploy(tc, "basic").
+		preflightDeploy(tc, "resources").
 			AssertSuccess().
 			AssertOutputContains("Pulled image traefik/whoami")
 
-		preflightDeploy(tc, "basic").
+		preflightDeploy(tc, "resources").
 			AssertSuccess().
 			AssertOutputContains("Pulled image traefik/whoami")
 	})

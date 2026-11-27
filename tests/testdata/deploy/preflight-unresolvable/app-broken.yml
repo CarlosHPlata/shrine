@@ -4,7 +4,7 @@ metadata:
   name: zz-broken
   owner: shrine-deploy-test
 spec:
-  image: localhost:1/shrine/unresolvable:1.0.0
+  image: 127.0.0.1:1/shrine/unresolvable:1.0.0
   port: 80
   replicas: 1
   dependencies:

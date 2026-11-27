@@ -6,7 +6,7 @@ metadata:
 spec:
   type: redis
   version: "7"
-  image: traefik/whoami
+  image: traefik/whoami:v1.10.2
   env:
     - name: UPSTREAM_DB_HOST
       valueFrom: resource.pg.host

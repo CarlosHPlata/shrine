@@ -214,44 +214,34 @@ func TestGetNoDocker(t *testing.T) {
 }
 
 func TestGetDocker(t *testing.T) {
-	s := NewDockerSuite(t, testTeam)
+	s := NewSharedDockerSuite(t, testTeam)
 
-	s.BeforeEach(func(tc *TestCase) {
-		tc.StateDir = tc.TempDir()
-		SeedSubnetState(tc)
-		// Use the dedicated team/ sub-fixture to avoid scanning bad-kind/ and
-		// malformed-yaml/ siblings that cause ScanDir to error.
-		tc.Run("apply", "teams",
-			"--path", fixturesPath("team"),
-			"--state-dir", tc.StateDir,
-		).AssertSuccess()
-		tc.Run("deploy",
-			"--path", fixturesPath("resources"),
-			"--state-dir", tc.StateDir,
-		).AssertSuccess()
+	s.BeforeAll(func(tc *TestCase) {
+		tc.ApplyTeams(fixturesPath("team")).AssertSuccess()
+		tc.Deploy(fixturesPath("resources")).AssertSuccess()
 	})
 
 	s.Test("should list deployed apps", func(tc *TestCase) {
-		tc.Run("get", "apps", "--state-dir", tc.StateDir).
+		tc.Get("apps").
 			AssertSuccess().
 			AssertOutputContains("whoami-res")
 	})
 
 	s.Test("should list deployed resources", func(tc *TestCase) {
-		tc.Run("get", "resources", "--state-dir", tc.StateDir).
+		tc.Get("resources").
 			AssertSuccess().
 			AssertOutputContains("test-cache")
 	})
 
 	s.Test("should list all deployed items", func(tc *TestCase) {
-		tc.Run("get", "deployed", "--state-dir", tc.StateDir).
+		tc.Get("deployed").
 			AssertSuccess().
 			AssertOutputContains("whoami-res").
 			AssertOutputContains("test-cache")
 	})
 
 	s.Test("should show the manifest image reference in a VERSION column after KIND", func(tc *TestCase) {
-		tc.Run("get", "deployed", "--state-dir", tc.StateDir).
+		tc.Get("deployed").
 			AssertSuccess().
 			AssertOutputLineContains("whoami-res", "traefik/whoami").
 			AssertOutputLineContains("test-cache", "traefik/whoami")
@@ -259,7 +249,7 @@ func TestGetDocker(t *testing.T) {
 	})
 
 	s.Test("should show the VERSION column when filtered by team", func(tc *TestCase) {
-		tc.Run("get", "deployed", "--team", testTeam, "--state-dir", tc.StateDir).
+		tc.Get("deployed", "--team", testTeam).
 			AssertSuccess().
 			AssertOutputLineContains("whoami-res", "traefik/whoami").
 			AssertOutputLineContains("test-cache", "traefik/whoami")
@@ -267,44 +257,24 @@ func TestGetDocker(t *testing.T) {
 	})
 
 	s.Test("should show the VERSION column for applications and for resources", func(tc *TestCase) {
-		tc.Run("get", "apps", "--state-dir", tc.StateDir).
+		tc.Get("apps").
 			AssertSuccess().
 			AssertOutputLineContains("whoami-res", "traefik/whoami")
 		assertColumnsInOrder(tc, "TEAM", "NAME", "KIND", "VERSION", "CONTAINER ID")
 
-		tc.Run("get", "resources", "--state-dir", tc.StateDir).
+		tc.Get("resources").
 			AssertSuccess().
 			AssertOutputLineContains("test-cache", "traefik/whoami")
 		assertColumnsInOrder(tc, "TEAM", "NAME", "KIND", "VERSION", "CONTAINER ID")
-	})
-
-	s.Test("should list records from a previous release with an unknown version and fill it on the next deploy", func(tc *TestCase) {
-		SeedLegacyDeploymentRecords(tc, testTeam)
-
-		tc.Run("get", "deployed", "--state-dir", tc.StateDir).
-			AssertSuccess().
-			AssertOutputLineContains("whoami-res", " - ").
-			AssertOutputLineContains("test-cache", " - ").
-			AssertOutputNotContains("traefik/whoami")
-
-		tc.Run("deploy",
-			"--path", fixturesPath("resources"),
-			"--state-dir", tc.StateDir,
-		).AssertSuccess()
-
-		tc.Run("get", "deployed", "--state-dir", tc.StateDir).
-			AssertSuccess().
-			AssertOutputLineContains("whoami-res", "traefik/whoami").
-			AssertOutputLineContains("test-cache", "traefik/whoami")
 	})
 
 	// US1, FR-003, FR-005, SC-002: one entry per table row, in the table's
 	// order, with the live running image and the full container ID and hash.
 	s.Test("get deployed --json matches the table row for row", func(tc *TestCase) {
-		tc.Run("get", "deployed", "--state-dir", tc.StateDir).AssertSuccess()
+		tc.Get("deployed").AssertSuccess()
 		want := tableNames(tc)
 
-		tc.Run("get", "deployed", "--json", "--state-dir", tc.StateDir).AssertSuccess()
+		tc.Get("deployed", "--json").AssertSuccess()
 		entries := decodeListing(tc)
 		assertSameNames(tc, namesOf(entries), want)
 		for _, entry := range entries {
@@ -329,12 +299,12 @@ func TestGetDocker(t *testing.T) {
 
 	// US1, FR-006: --team filters the JSON exactly as it filters the table.
 	s.Test("get deployed --json honours --team", func(tc *TestCase) {
-		tc.Run("get", "deployed", "--json", "--team", testTeam, "--state-dir", tc.StateDir).AssertSuccess()
+		tc.Get("deployed", "--json", "--team", testTeam).AssertSuccess()
 		entries := decodeListing(tc)
 		entryNamed(tc, entries, "whoami-res")
 		entryNamed(tc, entries, "test-cache")
 
-		tc.Run("get", "deployed", "--json", "--team", "nobody", "--state-dir", tc.StateDir).AssertSuccess()
+		tc.Get("deployed", "--json", "--team", "nobody").AssertSuccess()
 		if entries := decodeListing(tc); len(entries) != 0 {
 			tc.Fatalf("expected no entries for an unknown team, got %v", entries)
 		}
@@ -353,11 +323,10 @@ func TestGetDocker(t *testing.T) {
 			{[]string{"res"}, "Resource", "test-cache"},
 		}
 		for _, listing := range listings {
-			tableArgs := append(append([]string{"get"}, listing.args...), "--state-dir", tc.StateDir)
-			tc.Run(tableArgs...).AssertSuccess()
+			tc.Get(listing.args...).AssertSuccess()
 			want := tableNames(tc)
 
-			tc.Run(append(tableArgs, "--json")...).AssertSuccess()
+			tc.Get(append(listing.args, "--json")...).AssertSuccess()
 			entries := decodeListing(tc)
 			assertSameNames(tc, namesOf(entries), want)
 			assertSameNames(tc, namesOf(entries), []string{listing.name})
@@ -365,5 +334,35 @@ func TestGetDocker(t *testing.T) {
 				assertField(tc, entry, "kind", listing.kind)
 			}
 		}
+	})
+}
+
+// A redeploy changes the containers, so this suite deploys for itself instead
+// of sharing TestGetDocker's deployment.
+func TestGetDockerAfterRedeploy(t *testing.T) {
+	s := NewDockerSuite(t, testTeam)
+
+	s.BeforeEach(func(tc *TestCase) {
+		tc.StateDir = tc.TempDir()
+		SeedSubnetState(tc)
+		tc.ApplyTeams(fixturesPath("team")).AssertSuccess()
+		tc.Deploy(fixturesPath("resources")).AssertSuccess()
+	})
+
+	s.Test("should list records from a previous release with an unknown version and fill it on the next deploy", func(tc *TestCase) {
+		SeedLegacyDeploymentRecords(tc, testTeam)
+
+		tc.Get("deployed").
+			AssertSuccess().
+			AssertOutputLineContains("whoami-res", " - ").
+			AssertOutputLineContains("test-cache", " - ").
+			AssertOutputNotContains("traefik/whoami")
+
+		tc.Deploy(fixturesPath("resources")).AssertSuccess()
+
+		tc.Get("deployed").
+			AssertSuccess().
+			AssertOutputLineContains("whoami-res", "traefik/whoami").
+			AssertOutputLineContains("test-cache", "traefik/whoami")
 	})
 }

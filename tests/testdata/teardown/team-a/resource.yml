@@ -9,7 +9,7 @@ spec:
   type: cache
   version: "1"
   port: 80
-  image: traefik/whoami
+  image: traefik/whoami:v1.10.2
   networking:
     exposeToPlatform: true
   outputs:

@@ -58,63 +58,50 @@ func TestDescribeNoDocker(t *testing.T) {
 }
 
 func TestDescribeDocker(t *testing.T) {
-	s := NewDockerSuite(t, testTeam)
+	s := NewSharedDockerSuite(t, testTeam)
 
-	s.BeforeEach(func(tc *TestCase) {
-		tc.StateDir = tc.TempDir()
-		SeedSubnetState(tc)
-		// Use the dedicated team/ sub-fixture to avoid scanning bad-kind/ and
-		// malformed-yaml/ siblings that cause ScanDir to error.
-		tc.Run("apply", "teams",
-			"--path", fixturesPath("team"),
-			"--state-dir", tc.StateDir,
-		).AssertSuccess()
-		tc.Run("deploy",
-			"--path", fixturesPath("basic"),
-			"--state-dir", tc.StateDir,
-		).AssertSuccess()
+	s.BeforeAll(func(tc *TestCase) {
+		tc.ApplyTeams(fixturesPath("team")).AssertSuccess()
+		tc.Deploy(fixturesPath("basic")).AssertSuccess()
+		tc.Deploy(fixturesPath("resources")).AssertSuccess()
 	})
 
 	s.Test("should describe a deployed app", func(tc *TestCase) {
-		tc.Run("describe", "app", "whoami", "--team", testTeam, "--state-dir", tc.StateDir).
+		tc.Describe("app", "whoami", "--team", testTeam).
 			AssertSuccess().
 			AssertOutputContains("whoami")
 	})
 
 	s.Test("should describe a deployed app by name without --team when unambiguous", func(tc *TestCase) {
-		tc.Run("describe", "app", "whoami", "--state-dir", tc.StateDir).
+		tc.Describe("app", "whoami").
 			AssertSuccess().
 			AssertOutputContains("whoami")
 	})
 
 	s.Test("should show the image reference and the pull policy of a deployed app", func(tc *TestCase) {
-		tc.Run("describe", "app", "whoami", "--team", testTeam, "--state-dir", tc.StateDir).
+		tc.Describe("app", "whoami", "--team", testTeam).
 			AssertSuccess().
 			AssertOutputLineContains("Image:", "traefik/whoami").
-			AssertOutputLineContains("Pull policy:", "Always")
+			AssertOutputLineContains("Pull policy:", "IfNotPresent")
 
-		tc.Run("describe", "app", "whoami", "--state-dir", tc.StateDir).
+		tc.Describe("app", "whoami").
 			AssertSuccess().
 			AssertOutputLineContains("Image:", "traefik/whoami").
-			AssertOutputLineContains("Pull policy:", "Always")
+			AssertOutputLineContains("Pull policy:", "IfNotPresent")
 	})
 
 	s.Test("should show the image reference and the pull policy of a deployed resource", func(tc *TestCase) {
-		tc.Run("deploy",
-			"--path", fixturesPath("resources"),
-			"--state-dir", tc.StateDir,
-		).AssertSuccess()
-
-		tc.Run("describe", "resource", "test-cache", "--state-dir", tc.StateDir).
+		tc.Describe("resource", "test-cache").
 			AssertSuccess().
 			AssertOutputLineContains("Image:", "traefik/whoami").
 			AssertOutputLineContains("Pull policy:", "Always")
 	})
 
 	s.Test("should describe a record from a previous release with an unknown image and policy", func(tc *TestCase) {
+		tc.ForkState()
 		SeedLegacyDeploymentRecords(tc, testTeam)
 
-		tc.Run("describe", "app", "whoami", "--team", testTeam, "--state-dir", tc.StateDir).
+		tc.Describe("app", "whoami", "--team", testTeam).
 			AssertSuccess().
 			AssertOutputLineContains("Image:", "-").
 			AssertOutputLineContains("Pull policy:", "-").
@@ -128,7 +115,7 @@ func TestDescribeDocker(t *testing.T) {
 	})
 
 	s.Test("should show the image the running container was started from for a manifest-owned app", func(tc *TestCase) {
-		tc.Run("describe", "app", "whoami", "--team", testTeam, "--state-dir", tc.StateDir).
+		tc.Describe("app", "whoami", "--team", testTeam).
 			AssertSuccess().
 			AssertOutputLineContains("Running image:", "traefik/whoami").
 			AssertOutputNotContains("Pinned:")
