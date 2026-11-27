@@ -82,43 +82,6 @@ func TestDeploy(t *testing.T) {
 		tc.AssertContainerInNetwork(testTeam+".whoami-platform", "shrine.platform")
 	})
 
-	s.Test("should persist generated secret to secrets.env after deploy", func(tc *TestCase) {
-		tc.Run("deploy",
-			"--path", fixturesPath("secrets"),
-			"--state-dir", tc.StateDir,
-		).AssertSuccess()
-
-		tc.AssertSecretInState(testTeam, "secret-store", "password")
-	})
-
-	s.Test("should resolve host and port built-ins and inject into container", func(tc *TestCase) {
-		tc.Run("deploy",
-			"--path", fixturesPath("secrets"),
-			"--state-dir", tc.StateDir,
-		).AssertSuccess()
-
-		tc.AssertContainerEnvVar(testTeam+".whoami-secrets", "SECRET_HOST", testTeam+".secret-store")
-		tc.AssertContainerEnvVar(testTeam+".whoami-secrets", "SECRET_PORT", "6379")
-	})
-
-	s.Test("should resolve template output and inject into container", func(tc *TestCase) {
-		tc.Run("deploy",
-			"--path", fixturesPath("secrets"),
-			"--state-dir", tc.StateDir,
-		).AssertSuccess()
-
-		tc.AssertContainerEnvVar(testTeam+".whoami-secrets", "SECRET_CONNECTION", "redis://"+testTeam+".secret-store:6379")
-	})
-
-	s.Test("should inject generated secret value into container env var", func(tc *TestCase) {
-		tc.Run("deploy",
-			"--path", fixturesPath("secrets"),
-			"--state-dir", tc.StateDir,
-		).AssertSuccess()
-
-		tc.AssertContainerEnvVarNotEmpty(testTeam+".whoami-secrets", "SECRET_PASSWORD")
-	})
-
 	s.Test("should reuse same generated secret on re-deploy", func(tc *TestCase) {
 		tc.Run("deploy",
 			"--path", fixturesPath("secrets"),
@@ -312,5 +275,33 @@ func TestDeploy_VaultSecrets(t *testing.T) {
 		tc.AssertContainerRunning("vault-team.test-app")
 		tc.AssertContainerEnvVarNotEmpty("vault-team.test-app", "DB_PASSWORD")
 		tc.AssertContainerEnvVarNotEmpty("vault-team.test-app", "API_KEY")
+	})
+}
+
+// TestDeploySecrets holds the checks that only read the result of deploying
+// the secrets fixture once, so they share that deploy.
+func TestDeploySecrets(t *testing.T) {
+	s := NewSharedDockerSuite(t, testTeam)
+
+	s.BeforeAll(func(tc *TestCase) {
+		tc.ApplyTeams(fixturesPath("team")).AssertSuccess()
+		tc.Deploy(fixturesPath("secrets")).AssertSuccess()
+	})
+
+	s.Test("should persist generated secret to secrets.env after deploy", func(tc *TestCase) {
+		tc.AssertSecretInState(testTeam, "secret-store", "password")
+	})
+
+	s.Test("should resolve host and port built-ins and inject into container", func(tc *TestCase) {
+		tc.AssertContainerEnvVar(testTeam+".whoami-secrets", "SECRET_HOST", testTeam+".secret-store")
+		tc.AssertContainerEnvVar(testTeam+".whoami-secrets", "SECRET_PORT", "6379")
+	})
+
+	s.Test("should resolve template output and inject into container", func(tc *TestCase) {
+		tc.AssertContainerEnvVar(testTeam+".whoami-secrets", "SECRET_CONNECTION", "redis://"+testTeam+".secret-store:6379")
+	})
+
+	s.Test("should inject generated secret value into container env var", func(tc *TestCase) {
+		tc.AssertContainerEnvVarNotEmpty(testTeam+".whoami-secrets", "SECRET_PASSWORD")
 	})
 }

@@ -9,6 +9,23 @@ As a shrine maintainer, I want the integration suite to run much faster, so that
 - [ ] Given the suite run several times in a row, when tests share setup or run in parallel, then results are the same on every run (no new flakiness).
 - [ ] Given any test touched by this work, when it is read, then its body is still a short list of recipe-style steps and assertions; shared setup, cleanup, locking and parallelism live in `tests/integration/testutils`, not in the test files.
 
+## Result (2026-11-27)
+Accepted as done by the maintainer at about 48% lower; the last 10s to the 50% target was not worth chasing.
+
+- Full suite: **632s** re-measured before the work, **354s** measured after the first round (244 subtests passed, 1 skipped). Two later rounds saved about 28s more on the suites they touched, so the expected full run is about **326s**; that last figure is summed from per-suite runs, not a full run.
+- What was done:
+  - Deployment listings are sorted by name (the flaky-test fix, its own commit).
+  - `testutils` gained `BeforeAll`/`AfterAll`, `NewSharedDockerSuite`, `ForkState` and the `ApplyTeams`/`Get`/`Describe`/`Status` steps; `Deploy` takes extra flags.
+  - Read-only tests share one deployment in `get`, `describe`, `status`, `TestDeploySecrets`, `TestTraefikPluginDefaultDeploy` and `TestTraefikPluginPrefixAlias`.
+  - Fixtures that do not test pull policy pin `traefik/whoami:v1.10.2`. An untagged image means policy `Always`, and each deploy then spent about 1.2s per artifact checking Docker Hub; this was the largest saving. `deploy/resources`, `pinned/*` and `pull-policy-default/*` stay untagged to keep the pull path covered.
+  - Unreachable-registry fixtures use `127.0.0.1:1`; `localhost:1` resolved to `::1` and timed out after 30s.
+- Not done: steps 2, 3 and 4 of the plan (little to gain from step 2 once deploys were cheap; 3 and 4 were not needed). Step 5 was already in place: cleanup force-removes containers.
+- Still open:
+  - `make test-integration` keeps `-timeout 5m` (300s), which is below the local run time.
+  - `get_test.go` still holds its JSON parsing helpers and loops in the test file.
+  - Leaks seen after a full run: `TestTeardownMultiTeam` leaves team B's container and network, and the local-registry tests leave `127.0.0.1:<port>/shrine/whoami` image tags.
+  - One registry per pinned suite (about 15-20s) and concurrent container cleanup (untimed) are the next places to look if more speed is wanted.
+
 ## Baseline (measured 2026-11-26)
 - Full suite: **657s** (about 11 minutes) on the dev machine (WSL2, Docker). About 250 subtests across 22 files, all run one after another.
 - CI runs the same suite through `make test-integration`, which sets `-timeout 5m`. CI has not been timed; if a runner were as slow as the dev machine, the run would time out.

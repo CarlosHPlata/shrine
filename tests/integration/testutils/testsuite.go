@@ -25,7 +25,9 @@ func NewSuite(t *testing.T) *Suite {
 
 // BeforeAll registers a step that runs once, before the suite's first test.
 // The state dir, Docker client and team name it leaves on the TestCase are
-// handed to every test, so tests that only read can share one setup.
+// handed to every test, so tests that only read can share one setup. Each
+// test also starts with the result of the last command the steps ran, so it
+// can assert on that command's output.
 func (s *Suite) BeforeAll(fn func(*TestCase)) {
 	s.beforeAll = append(s.beforeAll, fn)
 }
@@ -54,6 +56,7 @@ func (s *Suite) Test(name string, fn func(*TestCase)) {
 			tc.StateDir = shared.StateDir
 			tc.DockerClient = shared.DockerClient
 			tc.TeamName = shared.TeamName
+			tc.result = shared.result
 		}
 		for _, before := range s.beforeEach {
 			before(tc)

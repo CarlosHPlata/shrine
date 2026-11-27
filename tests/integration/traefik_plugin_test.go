@@ -161,28 +161,6 @@ func TestTraefikPlugin(t *testing.T) {
 		CleanupTeam(tc, aliasTestTeam)
 	})
 
-	s.Test("should deploy traefik container when plugin block is populated", func(tc *TestCase) {
-		configDir := tc.Path("config")
-		routingDir := tc.Path("traefik")
-		writeConfig(t, configDir, `plugins:
-  gateway:
-    traefik:
-      routing-dir: `+routingDir+`
-      port: 8081
-`)
-
-		tc.Run("deploy",
-			"--config-dir", configDir,
-			"--state-dir", tc.StateDir,
-			"--path", traefikFixturePath(),
-		).AssertSuccess()
-
-		tc.AssertContainerRunning(traefikContainerName)
-		tc.AssertContainerInNetwork(traefikContainerName, "shrine.platform")
-		tc.AssertFileExists(filepath.Join(routingDir, "traefik.yml"))
-		tc.AssertOutputContains("Generated default traefik.yml")
-	})
-
 	s.Test("should not deploy traefik when plugin block is absent", func(tc *TestCase) {
 		configDir := tc.Path("config")
 		writeConfig(t, configDir, "")
@@ -220,29 +198,6 @@ func TestTraefikPlugin(t *testing.T) {
 		tc.AssertFileExists(routingDir)
 		tc.AssertFileExists(filepath.Join(routingDir, "traefik.yml"))
 		tc.AssertContainerHasBindMount(traefikContainerName, routingDir, "/etc/traefik")
-	})
-
-	s.Test("should write dynamic route file only for apps with domain + ExposeToPlatform", func(tc *TestCase) {
-		configDir := tc.Path("config")
-		routingDir := tc.Path("traefik")
-		writeConfig(t, configDir, `plugins:
-  gateway:
-    traefik:
-      routing-dir: `+routingDir+`
-      port: 8084
-`)
-
-		tc.Run("deploy",
-			"--config-dir", configDir,
-			"--state-dir", tc.StateDir,
-			"--path", traefikFixturePath(),
-		).AssertSuccess()
-
-		eligiblePath := filepath.Join(routingDir, "dynamic", traefikTestTeam+"-hello-eligible.yml")
-		tc.AssertFileExists(eligiblePath)
-		tc.AssertFileContains(eligiblePath, "hello-eligible.shrine.lab")
-
-		tc.AssertFileNotExists(filepath.Join(routingDir, "dynamic", traefikTestTeam+"-hello-internal.yml"))
 	})
 
 	s.Test("should preserve operator-added files in the dynamic directory", func(tc *TestCase) {
@@ -607,38 +562,6 @@ func TestTraefikPlugin(t *testing.T) {
 		}
 	})
 
-	// T010: path-prefixed alias with default strip produces a strip middleware.
-	s.Test("should publish alias router with default-strip middleware for path-prefixed alias", func(tc *TestCase) {
-		tc.Run("apply", "teams",
-			"--path", aliasFixturePath("prefix"),
-			"--state-dir", tc.StateDir,
-		).AssertSuccess()
-
-		configDir := tc.Path("config")
-		routingDir := tc.Path("traefik")
-		writeConfig(t, configDir, `plugins:
-  gateway:
-    traefik:
-      routing-dir: `+routingDir+`
-      port: 8096
-`)
-
-		tc.Run("deploy",
-			"--config-dir", configDir,
-			"--state-dir", tc.StateDir,
-			"--path", aliasFixturePath("prefix"),
-		).AssertSuccess()
-
-		dynamicFile := filepath.Join(routingDir, "dynamic", "shrine-alias-test-whoami-prefix.yml")
-		tc.AssertFileExists(dynamicFile)
-		tc.AssertFileContains(dynamicFile, "Host(`alias.shrine.lab`) && PathPrefix(`/finances`)")
-		tc.AssertFileContains(dynamicFile, "shrine-alias-test-whoami-prefix-strip-0:")
-		tc.AssertFileContains(dynamicFile, "prefixes:")
-		tc.AssertFileContains(dynamicFile, "/finances")
-		// The alias router must reference the strip middleware.
-		tc.AssertFileContains(dynamicFile, "shrine-alias-test-whoami-prefix-strip-0")
-	})
-
 	// T011: three aliases with mixed strip settings emit exactly one strip middleware at index 1.
 	s.Test("should publish multiple alias routers with sparse strip indexing", func(tc *TestCase) {
 		tc.Run("apply", "teams",
@@ -711,65 +634,6 @@ func TestTraefikPlugin(t *testing.T) {
 		// No dynamic config must have been written for either colliding app.
 		tc.AssertFileNotExists(filepath.Join(routingDir, "dynamic", "shrine-alias-test-app-a.yml"))
 		tc.AssertFileNotExists(filepath.Join(routingDir, "dynamic", "shrine-alias-test-app-b.yml"))
-	})
-
-	// T013: both primary and alias routers reference the same backend service.
-	// NOTE: The harness has no docker-exec primitive (assert_docker.go contains no
-	// ContainerExec helper), so end-to-end curl verification (SC-002) is out of scope
-	// for this test run. Instead we assert the config-level guarantee: both the primary
-	// router and all alias routers name the same service key — which is what routes
-	// traffic to the same backend. FR-006 live curl coverage belongs to quickstart.md.
-	s.Test("should reach backend through both primary and alias addresses", func(tc *TestCase) {
-		tc.Run("apply", "teams",
-			"--path", aliasFixturePath("prefix"),
-			"--state-dir", tc.StateDir,
-		).AssertSuccess()
-
-		configDir := tc.Path("config")
-		routingDir := tc.Path("traefik")
-		writeConfig(t, configDir, `plugins:
-  gateway:
-    traefik:
-      routing-dir: `+routingDir+`
-      port: 8099
-`)
-
-		tc.Run("deploy",
-			"--config-dir", configDir,
-			"--state-dir", tc.StateDir,
-			"--path", aliasFixturePath("prefix"),
-		).AssertSuccess()
-
-		dynamicFile := filepath.Join(routingDir, "dynamic", "shrine-alias-test-whoami-prefix.yml")
-		tc.AssertFileExists(dynamicFile)
-		// Both the primary router and the alias router must point at the same service.
-		tc.AssertFileContains(dynamicFile, "service: shrine-alias-test-whoami-prefix")
-	})
-
-	// T014: the routing.configure log line must include an aliases= field.
-	s.Test("should include aliases field in routing.configure log signal", func(tc *TestCase) {
-		tc.Run("apply", "teams",
-			"--path", aliasFixturePath("prefix"),
-			"--state-dir", tc.StateDir,
-		).AssertSuccess()
-
-		configDir := tc.Path("config")
-		routingDir := tc.Path("traefik")
-		writeConfig(t, configDir, `plugins:
-  gateway:
-    traefik:
-      routing-dir: `+routingDir+`
-      port: 8100
-`)
-
-		tc.Run("deploy",
-			"--config-dir", configDir,
-			"--state-dir", tc.StateDir,
-			"--path", aliasFixturePath("prefix"),
-		).AssertSuccess()
-
-		tc.AssertOutputContains("Configuring routing:")
-		tc.AssertOutputContains("Aliases: alias.shrine.lab+/finances")
 	})
 
 	// T014a: re-deploying without aliases must drop alias routers and strip middlewares,
@@ -1056,60 +920,6 @@ func TestTraefikPlugin(t *testing.T) {
 		tc.AssertContainerPublishesPort(traefikContainerName, "9443", "443", "tcp")
 	})
 
-	// T020 (spec 011 US2): no tlsPort → container must not publish 443/tcp and
-	// generated traefik.yml must not contain a websecure entrypoint.
-	s.Test("should not publish 443 nor add websecure entrypoint when tlsPort is unset", func(tc *TestCase) {
-		configDir := tc.Path("config")
-		routingDir := tc.Path("traefik")
-		writeConfig(t, configDir, `plugins:
-  gateway:
-    traefik:
-      routing-dir: `+routingDir+`
-      port: 8112
-`)
-
-		tc.Run("deploy",
-			"--config-dir", configDir,
-			"--state-dir", tc.StateDir,
-			"--path", traefikFixturePath(),
-		).AssertSuccess()
-
-		// Assert container does not publish 443/tcp.
-		info, err := tc.DockerClient.ContainerInspect(context.Background(), traefikContainerName)
-		if err != nil {
-			t.Fatalf("inspect container: %v", err)
-		}
-		if _, has443 := info.HostConfig.PortBindings[nat.Port("443/tcp")]; has443 {
-			var keys []string
-			for k := range info.HostConfig.PortBindings {
-				keys = append(keys, string(k))
-			}
-			t.Fatalf("container must not publish 443/tcp when tlsPort is unset; actual bindings: %v", keys)
-		}
-
-		// Assert traefik.yml has no websecure entrypoint.
-		traefikYML := filepath.Join(routingDir, "traefik.yml")
-		staticBytes, err := os.ReadFile(traefikYML)
-		if err != nil {
-			t.Fatalf("read traefik.yml: %v", err)
-		}
-		var staticDoc map[string]any
-		if err := yaml.Unmarshal(staticBytes, &staticDoc); err != nil {
-			t.Fatalf("parse traefik.yml: %v\ncontent: %s", err, staticBytes)
-		}
-		entryPointsRaw, ok := staticDoc["entryPoints"]
-		if !ok {
-			t.Fatalf("traefik.yml missing entryPoints key\ncontent: %s", staticBytes)
-		}
-		entryPoints, ok := entryPointsRaw.(map[string]any)
-		if !ok {
-			t.Fatalf("entryPoints is not map[string]any\ncontent: %s", staticBytes)
-		}
-		if _, hasWebsecure := entryPoints["websecure"]; hasWebsecure {
-			t.Fatalf("entryPoints.websecure must not exist when tlsPort is unset\ncontent: %s", staticBytes)
-		}
-	})
-
 	// T021 (spec 011 US2): no-op redeploy must not recreate the traefik container.
 	// This is the regression guard for ConfigHash stability: if the hash feeds
 	// unstable input (e.g., random iteration over PortBindings), the container ID
@@ -1201,25 +1011,6 @@ func TestTraefikPlugin(t *testing.T) {
 		if _, ok := staticDoc["api"]; !ok {
 			t.Fatalf("traefik.yml missing api: key (dashboard requires api.dashboard=true)\ncontent: %s", staticBytes)
 		}
-	})
-
-	s.Test("should not generate dashboard dynamic file when no dashboard configured", func(tc *TestCase) {
-		configDir := tc.Path("config")
-		routingDir := tc.Path("traefik")
-		writeConfig(t, configDir, `plugins:
-  gateway:
-    traefik:
-      routing-dir: `+routingDir+`
-      port: 8103
-`)
-
-		tc.Run("deploy",
-			"--config-dir", configDir,
-			"--state-dir", tc.StateDir,
-			"--path", traefikFixturePath(),
-		).AssertSuccess()
-
-		tc.AssertFileNotExists(filepath.Join(routingDir, "dynamic", "__shrine-dashboard.yml"))
 	})
 
 	s.Test("should warn but not modify pre-existing traefik.yml containing http block", func(tc *TestCase) {
@@ -1754,27 +1545,143 @@ providers:
 		tc.AssertFileNotExists(filepath.Join(routingDir, "dynamic"))
 	})
 
-	// Spec 029 S7 (018 T014/T019, SC-003): the gateway is published through the engine's finalize phase.
-	s.Test("should leave static config and gateway container in place after the finalize phase", func(tc *TestCase) {
-		configDir := tc.Path("config")
-		routingDir := tc.Path("traefik")
-		writeConfig(t, configDir, `plugins:
+}
+
+// TestTraefikPluginDefaultDeploy holds the checks that only read the result
+// of one plain deploy with the gateway enabled, so they share that deploy.
+func TestTraefikPluginDefaultDeploy(t *testing.T) {
+	s := NewSharedDockerSuite(t, traefikTestTeam)
+	var routingDir string
+
+	s.BeforeAll(func(tc *TestCase) {
+		cleanupTraefikContainer(tc)
+		routingDir = tc.Path("traefik")
+		writeConfig(t, tc.Path("config"), `plugins:
   gateway:
     traefik:
       routing-dir: `+routingDir+`
-      port: 8125
+      port: 8081
 `)
+		tc.ApplyTeams(traefikFixturePath()).AssertSuccess()
+		tc.Deploy(traefikFixturePath(), "--config-dir", tc.Path("config")).AssertSuccess()
+	})
+	s.AfterAll(cleanupTraefikContainer)
 
-		tc.Run("deploy",
-			"--config-dir", configDir,
-			"--state-dir", tc.StateDir,
-			"--path", traefikFixturePath(),
-		).AssertSuccess()
+	s.Test("should deploy traefik container when plugin block is populated", func(tc *TestCase) {
+		tc.AssertOutputContains("Generated default traefik.yml")
+		tc.AssertContainerRunning(traefikContainerName)
+		tc.AssertContainerInNetwork(traefikContainerName, "shrine.platform")
+		tc.AssertFileExists(filepath.Join(routingDir, "traefik.yml"))
+	})
 
+	s.Test("should write dynamic route file only for apps with domain + ExposeToPlatform", func(tc *TestCase) {
+		eligiblePath := filepath.Join(routingDir, "dynamic", traefikTestTeam+"-hello-eligible.yml")
+		tc.AssertFileExists(eligiblePath)
+		tc.AssertFileContains(eligiblePath, "hello-eligible.shrine.lab")
+
+		tc.AssertFileNotExists(filepath.Join(routingDir, "dynamic", traefikTestTeam+"-hello-internal.yml"))
+	})
+
+	// T020 (spec 011 US2): no tlsPort → container must not publish 443/tcp and
+	// generated traefik.yml must not contain a websecure entrypoint.
+	s.Test("should not publish 443 nor add websecure entrypoint when tlsPort is unset", func(tc *TestCase) {
+		// Assert container does not publish 443/tcp.
+		info, err := tc.DockerClient.ContainerInspect(context.Background(), traefikContainerName)
+		if err != nil {
+			t.Fatalf("inspect container: %v", err)
+		}
+		if _, has443 := info.HostConfig.PortBindings[nat.Port("443/tcp")]; has443 {
+			var keys []string
+			for k := range info.HostConfig.PortBindings {
+				keys = append(keys, string(k))
+			}
+			t.Fatalf("container must not publish 443/tcp when tlsPort is unset; actual bindings: %v", keys)
+		}
+
+		// Assert traefik.yml has no websecure entrypoint.
+		traefikYML := filepath.Join(routingDir, "traefik.yml")
+		staticBytes, err := os.ReadFile(traefikYML)
+		if err != nil {
+			t.Fatalf("read traefik.yml: %v", err)
+		}
+		var staticDoc map[string]any
+		if err := yaml.Unmarshal(staticBytes, &staticDoc); err != nil {
+			t.Fatalf("parse traefik.yml: %v\ncontent: %s", err, staticBytes)
+		}
+		entryPointsRaw, ok := staticDoc["entryPoints"]
+		if !ok {
+			t.Fatalf("traefik.yml missing entryPoints key\ncontent: %s", staticBytes)
+		}
+		entryPoints, ok := entryPointsRaw.(map[string]any)
+		if !ok {
+			t.Fatalf("entryPoints is not map[string]any\ncontent: %s", staticBytes)
+		}
+		if _, hasWebsecure := entryPoints["websecure"]; hasWebsecure {
+			t.Fatalf("entryPoints.websecure must not exist when tlsPort is unset\ncontent: %s", staticBytes)
+		}
+	})
+
+	s.Test("should not generate dashboard dynamic file when no dashboard configured", func(tc *TestCase) {
+		tc.AssertFileNotExists(filepath.Join(routingDir, "dynamic", "__shrine-dashboard.yml"))
+	})
+
+	// Spec 029 S7 (018 T014/T019, SC-003): the gateway is published through the engine's finalize phase.
+	s.Test("should leave static config and gateway container in place after the finalize phase", func(tc *TestCase) {
 		tc.AssertFileExists(filepath.Join(routingDir, "traefik.yml"))
 		tc.AssertContainerRunning(traefikContainerName)
 		logFile := filepath.Join(tc.StateDir, "logs", "shrine.log")
 		tc.AssertFileContains(logFile, "[started] routing.finalize")
 		tc.AssertFileContains(logFile, "[info] routing.finalize")
+	})
+}
+
+// TestTraefikPluginPrefixAlias holds the checks that only read the result of
+// one deploy of the path-prefixed alias fixture, so they share that deploy.
+func TestTraefikPluginPrefixAlias(t *testing.T) {
+	s := NewSharedDockerSuite(t, aliasTestTeam)
+	var dynamicFile string
+
+	s.BeforeAll(func(tc *TestCase) {
+		cleanupTraefikContainer(tc)
+		routingDir := tc.Path("traefik")
+		dynamicFile = filepath.Join(routingDir, "dynamic", "shrine-alias-test-whoami-prefix.yml")
+		writeConfig(t, tc.Path("config"), `plugins:
+  gateway:
+    traefik:
+      routing-dir: `+routingDir+`
+      port: 8096
+`)
+		tc.ApplyTeams(aliasFixturePath("prefix")).AssertSuccess()
+		tc.Deploy(aliasFixturePath("prefix"), "--config-dir", tc.Path("config")).AssertSuccess()
+	})
+	s.AfterAll(cleanupTraefikContainer)
+
+	// T010: path-prefixed alias with default strip produces a strip middleware.
+	s.Test("should publish alias router with default-strip middleware for path-prefixed alias", func(tc *TestCase) {
+		tc.AssertFileExists(dynamicFile)
+		tc.AssertFileContains(dynamicFile, "Host(`alias.shrine.lab`) && PathPrefix(`/finances`)")
+		tc.AssertFileContains(dynamicFile, "shrine-alias-test-whoami-prefix-strip-0:")
+		tc.AssertFileContains(dynamicFile, "prefixes:")
+		tc.AssertFileContains(dynamicFile, "/finances")
+		// The alias router must reference the strip middleware.
+		tc.AssertFileContains(dynamicFile, "shrine-alias-test-whoami-prefix-strip-0")
+	})
+
+	// T013: both primary and alias routers reference the same backend service.
+	// NOTE: The harness has no docker-exec primitive (assert_docker.go contains no
+	// ContainerExec helper), so end-to-end curl verification (SC-002) is out of scope
+	// for this test run. Instead we assert the config-level guarantee: both the primary
+	// router and all alias routers name the same service key — which is what routes
+	// traffic to the same backend. FR-006 live curl coverage belongs to quickstart.md.
+	s.Test("should reach backend through both primary and alias addresses", func(tc *TestCase) {
+		tc.AssertFileExists(dynamicFile)
+		// Both the primary router and the alias router must point at the same service.
+		tc.AssertFileContains(dynamicFile, "service: shrine-alias-test-whoami-prefix")
+	})
+
+	// T014: the routing.configure log line must include an aliases= field.
+	s.Test("should include aliases field in routing.configure log signal", func(tc *TestCase) {
+		tc.AssertOutputContains("Configuring routing:")
+		tc.AssertOutputContains("Aliases: alias.shrine.lab+/finances")
 	})
 }

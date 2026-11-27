@@ -3,10 +3,12 @@
 package testutils
 
 // Deploy runs `shrine deploy` on the manifests in dir against the test's
-// state dir, so a test reads as tc.Deploy(dir).AssertSuccess().
-func (tc *TestCase) Deploy(dir string) *TestCase {
+// state dir, so a test reads as tc.Deploy(dir).AssertSuccess(). Extra flags
+// such as "--config-dir", dir or "--dry-run" go after the directory.
+func (tc *TestCase) Deploy(dir string, flags ...string) *TestCase {
 	tc.t.Helper()
-	return tc.Run("deploy", "--path", dir, "--state-dir", tc.StateDir)
+	args := append([]string{"deploy", "--path", dir, "--state-dir", tc.StateDir}, flags...)
+	return tc.Run(args...)
 }
 
 // ApplyTeams runs `shrine apply teams` on the team manifests in dir.
